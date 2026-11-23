@@ -1776,6 +1776,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
         let script = match route {
             "/ppmixed" | "/ppcap" => format!("{merge} merge('{prior}');merge(location.search);merge(location.hash);document.write('<p>{prior}</p>');document.write('<p>{prior}</p>');"),
             "/ppstored" => format!("{merge} merge('{prior}');document.write('<p>{prior}</p>');"),
+            "/ppmixedtoken" => format!("var m=/__proto__\\[([^\\]]+)\\]/.exec(location.search);if(m)Object.prototype[m[1]]='{prior}';document.write('<p>{prior}</p>');"),
             "/ppreflect" => "document.write('<p>'+location.hash+'</p>');".into(),
             _ => "void 0".into(),
         };
@@ -1792,6 +1793,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
     for route in [
         "/ppmixed",
         "/ppstored",
+        "/ppmixedtoken",
         "/ppreflect",
         "/ppunchanged",
         "/ppcap",
@@ -1882,7 +1884,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
                 assert_eq!(stored.len(), 1, "stored XSS dedup: {summary:?}");
                 assert_eq!(issues.len(), 3, "no extra variants: {summary:?}");
             }
-            "/ppstored" => {
+            "/ppstored" | "/ppmixedtoken" => {
                 assert!(
                     pollution.is_empty(),
                     "stored pollution must not be reported: {summary:?}"
