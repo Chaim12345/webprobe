@@ -175,6 +175,32 @@ impl PairCtx {
         out
     }
 
+    /// Temporary evidence copy admission precedes the bounded Arc copies.
+    /// Retained proven issue accounting is separate, at report time.
+    pub(crate) fn record_exchange(
+        &self,
+        request: &[u8],
+        response: Option<&[u8]>,
+    ) -> Option<ScanEvidence> {
+        #[cfg(test)]
+        if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) =
+            crate::scan_lifecycle::captured()
+        {
+            let cap = webprobe_support::issues::EVIDENCE_MAX_BYTES;
+            let bytes = std::mem::size_of::<ScanEvidence>()
+                .checked_add(request.len().min(cap))?
+                .checked_add(response.map_or(0, |r| r.len().min(cap)))?;
+            if p.ledger()
+                .reserve(&[(crate::scan_budget::Resource::Input, bytes as u64)])
+                .is_err()
+            {
+                self.incomplete.set(true);
+                return None;
+            }
+        }
+        Some(ScanEvidence::new(request, response))
+    }
+
     pub(crate) fn report(&self, mut issues: Vec<ScanIssue>) {
         if !self.shared.extra_checks.load(Ordering::SeqCst) {
             issues.retain(|i| is_burp_issue(&i.name));
@@ -183,6 +209,38 @@ impl PairCtx {
             let cfg_slot = crate::scan_config::shared_config(&self.shared);
             let config = cfg_slot.lock().unwrap();
             issues.retain(|i| config.issue_allowed(&i.name, true));
+        }
+        #[cfg(test)]
+        if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) =
+            crate::scan_lifecycle::captured()
+        {
+            issues.retain(|issue| {
+                let bytes = [
+                    issue.sev.len(),
+                    issue.name.len(),
+                    issue.host.len(),
+                    issue.path.len(),
+                    issue.detail.len(),
+                    issue.confidence.len(),
+                    issue.ident.len(),
+                ]
+                .into_iter()
+                .try_fold(std::mem::size_of::<ScanIssue>(), usize::checked_add)
+                .and_then(|n| {
+                    issue.evidence.iter().try_fold(n, |n, e| {
+                        n.checked_add(std::mem::size_of::<ScanEvidence>())?
+                            .checked_add(e.request.len())?
+                            .checked_add(e.response.as_ref().map_or(0, |r| r.len()))
+                    })
+                });
+                match bytes {
+                    Some(n) => p.ledger().retain_proven(n as u64).is_ok(),
+                    None => {
+                        p.mark_incomplete();
+                        false
+                    }
+                }
+            });
         }
         add_issues(&self.shared, issues);
     }

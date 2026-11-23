@@ -406,8 +406,12 @@ mod tests {
             })
             .is_err());
         assert!(!admitted.get());
+        let valid = InsertionPoint::new(webprobe_support::insertion::IpKind::Query, "y", "");
+        let next = s.token(injection, &valid);
+        s.observe(retrieval, b"GET /retrieve", next.as_bytes());
         assert!(s.has_pair(0));
-        assert!(!s.has_pair(1));
+        assert!(s.pair_bounded(1, 1024 * 1024, |_| true).unwrap().is_some());
+        assert!(!s.has_pair(2));
     }
     #[test]
     fn tokens_pair_once_and_never_with_their_own_request() {

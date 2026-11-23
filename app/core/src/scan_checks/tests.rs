@@ -1343,13 +1343,24 @@ fn real_a4_failed_send_is_incomplete_not_negative() {
 fn real_a4_paused_caller_expires_without_net_entry() {
     real_a4_case(3);
 }
+#[test]
+fn real_a4_oversize_json_continues_to_valid_finding() {
+    real_a4_case(4);
+}
+#[test]
+fn real_a4_retention_exhaustion_never_claims_complete() {
+    real_a4_case(5);
+}
 fn real_a4_case(mode: u8) {
     use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
     let remembered = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let saved = remembered.clone();
+    let wire = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = wire.clone();
     let port = lab_serve(
         std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
         move |_, path, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
             if path.starts_with("/inject?") {
                 let value = path
                     .split_once("?x=")
@@ -1386,7 +1397,7 @@ fn real_a4_case(mode: u8) {
         response: 65536,
         decompressed: 65536,
         inputs: 65536,
-        evidence: 65536,
+        evidence: if mode == 5 { 1 } else { 65536 },
         evidence_records: 100,
         records: 100,
     };
@@ -1414,6 +1425,13 @@ fn real_a4_case(mode: u8) {
         .note_injection(&token, b"injected", Some(b"saved"));
     let (a, _, retrieval) = c.admit(make("/retrieve")).unwrap();
     assert!(matches!(a.complete(), Ok(Handoff::Joined)));
+    if mode == 4 {
+        let oversized = InsertionPoint::new(IpKind::Json(vec![String::new(); 10000]), "x", "old");
+        let huge = shared.stored.token(injection, &oversized);
+        shared
+            .stored
+            .observe(retrieval, b"GET /retrieve", huge.as_bytes());
+    }
     assert_eq!(
         shared
             .stored
@@ -1424,19 +1442,32 @@ fn real_a4_case(mode: u8) {
     let Handoff::Finalize(f) = batch.finish().unwrap() else {
         panic!("finalizer")
     };
-    let began = std::time::Instant::now();
-    let outcome = f.run(|permit| {
-        let result =
-            run_stored_stage_budgeted(&shared, permit, 1, if mode == 1 { 1 } else { 8192 });
-        assert_eq!(
-            permit.ledger().used(crate::scan_budget::Resource::Record),
-            1
-        );
-        if mode == 1 {
-            assert_eq!(permit.ledger().used(crate::scan_budget::Resource::Input), 0);
-        }
-        result
+    let thread_shared = shared.clone();
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let mut counts = (0, 0, 0, 0);
+        let outcome = f.run(|permit| {
+            let result = run_stored_stage_budgeted(
+                &thread_shared,
+                permit,
+                if mode == 4 { 2 } else { 1 },
+                if mode == 1 { 1 } else { 8192 },
+            );
+            use crate::scan_budget::Resource;
+            counts = (
+                permit.ledger().used(Resource::Record),
+                permit.ledger().used(Resource::Input),
+                permit.ledger().used(Resource::ConnectionAttempt),
+                permit.ledger().used(Resource::EvidenceRecord),
+            );
+            result
+        });
+        tx.send((outcome, counts)).unwrap();
     });
+    let (outcome, counts) = rx
+        .recv_timeout(std::time::Duration::from_secs(3))
+        .expect("A4 completion watchdog");
+    worker.join().unwrap();
     assert_eq!(
         outcome,
         if mode == 0 {
@@ -1445,11 +1476,22 @@ fn real_a4_case(mode: u8) {
             Finish::Incomplete
         }
     );
+    assert_eq!(counts.0, if mode == 4 { 2 } else { 1 });
+    if mode == 1 {
+        assert_eq!(counts.1, 0);
+    }
     if mode == 3 {
-        assert!(began.elapsed() < std::time::Duration::from_secs(2));
+        assert_eq!(counts.2, 0);
+        assert_eq!(wire.load(Ordering::SeqCst), 0);
+    }
+    if mode == 0 || mode == 4 {
+        assert!(counts.3 > 0);
+    }
+    if mode == 5 {
+        assert_eq!(counts.3, 0);
     }
     assert_eq!(
-        mode == 0,
+        mode == 0 || mode == 4,
         shared
             .issues
             .lock()

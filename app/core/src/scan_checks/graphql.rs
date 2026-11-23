@@ -1445,7 +1445,7 @@ impl StoredCheck for StoredXss {
             let (req, resp) = chain.into_iter().last()?;
             log.borrow_mut().push((
                 key.to_string(),
-                ScanEvidence::new(req.as_bytes(), resp.as_deref()),
+                cx.record_exchange(req.as_bytes(), resp.as_deref())?,
             ));
             resp
         };
@@ -1548,7 +1548,7 @@ macro_rules! g11_stored_check {
                     }
                     let chain = cx.send_following(&pair.item, &inject_payload(&pair.item.req, ip, payload));
                     let (req, resp) = chain.into_iter().last()?;
-                    log.borrow_mut().push(ScanEvidence::new(req.as_bytes(), resp.as_deref()));
+                    log.borrow_mut().push(cx.record_exchange(req.as_bytes(), resp.as_deref())?);
                     resp
                 };
                 let retrieve = || -> Option<Vec<u8>> {
@@ -1557,7 +1557,7 @@ macro_rules! g11_stored_check {
                     }
                     let chain = cx.send_following(&pair.retrieval, &pair.retrieval.req);
                     let (req, resp) = chain.into_iter().last()?;
-                    log.borrow_mut().push(ScanEvidence::new(req.as_bytes(), resp.as_deref()));
+                    log.borrow_mut().push(cx.record_exchange(req.as_bytes(), resp.as_deref())?);
                     resp
                 };
                 if let Some((probe, what)) = crate::scan::run_g11_stored(&$probes, send, retrieve, $hit) {
