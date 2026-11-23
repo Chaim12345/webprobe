@@ -75,7 +75,7 @@ fn listener_notes(ui: &mut Ui, protocol: &str) {
 /// server location", the interactions table and Description / Request to
 /// Collaborator / Response from Collaborator. Server and listener settings
 /// sit behind the gear.
-pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
+pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui, shared: &webprobe_core::net::Shared) {
     poll_registration(state, ui);
     if !state.ui_started {
         ui.add_space(ui.available_height() * 0.25);
@@ -153,7 +153,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             .stroke(egui::Stroke::new(1.0, theme::line()))
             .inner_margin(egui::Margin::same(8))
             .show(ui, |ui| {
-                settings_panel(state, ui);
+                settings_panel(state, ui, shared);
             });
         ui.add_space(6.0);
     }
@@ -250,7 +250,11 @@ fn poll_registration(state: &mut CollaboratorState, ui: &egui::Ui) {
     }
 }
 
-pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
+pub(crate) fn settings_panel(
+    state: &mut CollaboratorState,
+    ui: &mut egui::Ui,
+    shared: &webprobe_core::net::Shared,
+) {
     poll_registration(state, ui);
     hint(
         ui,
@@ -286,7 +290,13 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                 }
             } else if ui.button("Use server").clicked() {
                 let choice = state.remote_choice.clone();
-                state.start_remote_in_background(&choice);
+                // The effective upstream route for the server's host: the
+                // OOB control connection honors the configured proxies
+                // (a custom server is a distinct destination, not exempt).
+                let route = crate::interactsh::parse_server(&choice)
+                    .map(|(host, _)| shared.upstream_for(&host))
+                    .unwrap_or_default();
+                state.start_remote_in_background(&choice, route);
             }
         });
         ui.horizontal(|ui| {

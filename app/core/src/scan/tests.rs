@@ -1195,7 +1195,10 @@ fn live_smtp_injection_end_to_end() {
     use std::io::{Read, Write};
     let mut collab = crate::collaborator::CollaboratorState::new();
     let server = collab
-        .start_remote(crate::interactsh::DEFAULT_SERVERS[0])
+        .start_remote(
+            crate::interactsh::DEFAULT_SERVERS[0],
+            &crate::upstream::UpstreamConfig::default(),
+        )
         .expect("register");
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
