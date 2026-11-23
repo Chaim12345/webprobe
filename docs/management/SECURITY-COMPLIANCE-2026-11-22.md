@@ -52,7 +52,7 @@ Method: high-signal pattern scan (GitHub/GitLab/AWS/Slack/NVIDIA/Google key form
 
 ## 5. Third-party IP inside the webprobe repo
 
-`re/mapping/` (classMap/methodMap/hierarchy/string-evidence TSVs), `graphify-out/`, `investigation.cany/`, `strings/map_merged.tsv` and `craft.json` contain deobfuscation maps and string extracts derived from PortSwigger's proprietary `burpsuite.jar` (build 52685), produced by the Craft Anything / graphify tooling.
+`re/mapping/` (classMap/methodMap/hierarchy/string-evidence TSVs), `graphify-out/`, `investigation.cany/` and `craft.json` contain deobfuscation maps and string extracts derived from PortSwigger's proprietary `burpsuite.jar` (build 52685), produced by the Craft Anything / graphify tooling.
 
 - Both repos are **private** (verified via API 2026-11-22), so current exposure is limited to people with repo access.
 - Risk: Burp Suite's license restricts reverse engineering; these artifacts must never be published or distributed. **Do not flip either repo to public** without a dedicated review of this content. Keep RE data out of release builds and docs that could be shared.
@@ -71,3 +71,5 @@ Current CI (verified `.github/workflows/ci.yml` + root `ci.yml`): clippy is the 
 ## 7. Scope and limits
 
 No Rust toolchain in this environment: nothing was compiled and `cargo audit` proper was not run; OSV querybatch was used as the advisory source. crates.io metadata reflects registry state on 2026-11-22. GitGuardian green-status claim is second-hand. This audit does not authorize license changes or distribution decisions; it feeds the CEO position in AGPL-POSITION-2026-11-22.md.
+
+Assembly correction (2026-11-23): strings/map_merged.tsv is absent from the inspected source bases and parity b18fa298; it is not part of the confirmed current-tree inventory. This corrects the path inventory only and grants no removal, history-rewrite, licensing or publication authority.
