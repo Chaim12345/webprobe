@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-23T09:41:00+02:00",
-  "open_pr_count": 93,
+  "as_of": "2026-11-23T10:11:00+02:00",
+  "open_pr_count": 92,
   "parity": "b18fa29893a21597f7f1ae69a140c1821d9bccb0",
   "candidate": "3384d3c4abf364b427d9e6c45e45fc0c05dea813",
   "work_items": [
@@ -18,7 +18,7 @@
       "owner": "CTO / reviewer",
       "gate": "Accepted exact3384d3c",
       "detail": "171/172 gates satisfied. No independent CTO rerun; relies on exact reviewer/QA.",
-      "next": "Post-landing smoke required."
+      "next": "Post-landing smoke69/69 passed."
     },
     {
       "column": "verified",
@@ -26,15 +26,15 @@
       "owner": "Triage / PM",
       "gate": "125 then155 landed",
       "detail": "Parityb18fa29; accepted treec99a1f8 matched readback per triage. API confirms merged.",
-      "next": "Finish agreed smoke."
+      "next": "Batch closeout complete."
     },
     {
       "column": "active",
       "title": "Post-landing smoke",
       "owner": "Triage",
-      "gate": "Running, not complete",
+      "gate": "Automated69/69 PASS",
       "detail": "Terminal-close, incomplete evidence, preview and Intruder baseline/no replay.",
-      "next": "Report exact landed-tree checks."
+      "next": "Distinct from pre-landing1190/0 andUI12/12."
     },
     {
       "column": "active",
@@ -42,23 +42,23 @@
       "owner": "QA / focused author",
       "gate": "1001/1 first-run retained",
       "detail": "Intruder bound failure; standalone3/3 and rerun1190/0 do not erase it.",
-      "next": "Investigate under load; no flake-free claim."
+      "next": "Track issue173; no flake-free claim."
     },
     {
       "column": "active",
       "title": "PM board + inventory",
       "owner": "PM / Git expert",
-      "gate": "93 open PRs mapped",
+      "gate": "92 open PRs mapped",
       "detail": "20 API-confirmed merged, not20 manual cleanup closures. No blanket closes.",
       "next": "Keep retained-source accounting current."
     },
     {
       "column": "review",
-      "title": "#148 supersession proof",
+      "title": "#148 source reconciliation",
       "owner": "Triage / Git expert",
-      "gate": "Still open, conditional",
-      "detail": "CTO permits close only after landing verification and full retained-source proof.",
-      "next": "Wait smoke; compare all own+inherited code."
+      "gate": "Closed after whole-source proof",
+      "detail": "Six files plus inherited base reconciled; APIclosed/unmerged.110auto-merged via125.",
+      "next": "Keep linked proof; no blanket closures."
     },
     {
       "column": "review",
@@ -104,7 +104,7 @@
       "column": "queued",
       "title": "Carrier/remainder audit",
       "owner": "Triage / Git expert",
-      "gate": "After post-landing smoke",
+      "gate": "Separate follow-up queue",
       "detail": "20 sources API-merged. Preserve non-code, refactors and inherited safety content.",
       "next": "Build only proven missing remainder."
     },
@@ -1099,22 +1099,10 @@
       "evidence": "Code/docs read only; execution gates remain separate; see REVIEW-LEDGER.md; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
     },
     {
-      "number": 148,
-      "title": "Request reader: one framed message + owned leftovers (CTO #146 item 2)",
-      "url": "https://github.com/Chaim12345/webprobe/pull/148",
-      "head": "f19e8b92d4e0345cf285bc0862e11fbf33fd88ca",
-      "owner": "Lane15 + CTO + integration",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Triage verifies smoke and whole-source retained content before closure",
-      "blocker": "125155 landed; no automatic closure",
-      "evidence": "CTO source acceptance for #155 73ff441 is conditional on exact resolved-tree review/QA; not closure permission by itself; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
       "number": 160,
       "title": "Refresh program board after safety landings",
       "url": "https://github.com/Chaim12345/webprobe/pull/160",
-      "head": "bb840f46000fb3129a1de0dc71aa894f6541ed32",
+      "head": "8c16d1dc739652fc5f5ce319d2ab89aa7541f507",
       "owner": "Program Manager",
       "column": "active",
       "gate": "New visual board needs docs review",

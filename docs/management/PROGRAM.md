@@ -1,6 +1,15 @@
 # WebProbe program board
 
-## Accepted and landed, Nov23 09:41
+## Batch closeout complete, Nov23 10:11
+
+Triage09:44 reports post-landing automated smoke on b18fa29 passed69/69: pipeline7, message-pane10, Intruder baseline4, no-legacy-retry1, effectful replay7, reader/guard/CONNECT/WS/MITM29, framing/keepalive11. This is automated post-landing smoke, distinct from QA pre-landing1190/0 and manualUI12/12. Parity remainsb18fa29893a21597f7f1ae69a140c1821d9bccb0 and matched accepted treec99a1f8. Master untouched.
+
+Live API10:11 confirms92 openPRs, #148 closed/unmerged after whole-source proof, and focused concurrency investigation [#173](https://github.com/Chaim12345/webprobe/issues/173) open. #148 six-file/inherited-source reconciliation: https://github.com/Chaim12345/webprobe/pull/148#issuecomment-7094636963 . #110 automatically merged through125, not manually closed; ancestry/reconciliation proof: https://github.com/Chaim12345/webprobe/pull/110#issuecomment-7094646391 . Triage refreshed125155 descriptions with exact source/landing evidence, known failure/#173 and Logger caveats. No blanket closures or history/branch deletion.
+
+Canonical125155 acceptance and landing monitoring is complete. Bounded remaining work: current management snapshot review, #173 load investigation, Logger product expectations, and existing source-accounting/wiring/partialDOM/#46 queues. These are separate outcomes, not reasons to keep final-batch QA marked pending. PublicActions repository request remains with its assigned owner, not this board's execution scope.
+
+
+## Accepted and landed09:41, smoke now completed above
 
 CTO09:38 accepted exact #155 head3384d3c4abf364b427d9e6c45e45fc0c05dea813 for parity-only landing. QA09:37 reports clean full suite19 targets1190/0; workflow-local jobs1-5 passed, JDK25 extras and EINTR fixture passed, complete manual Xvfb UI12/12. #125 landed986fead1ca88175a6283660c8160f4b0085008f6 then #155 landed final parityb18fa29893a21597f7f1ae69a140c1821d9bccb0. Triage reports readback tracked treec99a1f8eb1331e094ece18662735cf1d00ff4dbc identical to accepted3384d3c, no conflict/content changes; master untouched. Live API confirms both merged, parity and93 open PRs. Post-landing smoke is running, not yet complete at this snapshot.
 
@@ -70,7 +79,7 @@ The d405f33 workspace run failed: 1029 passed / 1 failed, then remaining targets
 QA d405f33 scoped results01:13-01:26: fmt/clippy clean; standalone pipeline7/7 twice; JDK25 ext_host15/15, Montoya4/4, Bambda13/13. Aborted targets separately passed session25/support115/report12. No clean full workspace run yet. Actual final-head UI PASS reports: incomplete marker/strict-framing wording, real project save/reopen with notes and wire bytes, streaming store ON/OFF plus256MiB size cap, Organizer full cycle/delete-to-Inbox, Sequencer constant-token, live Logger-to-Repeater and Repeater extension hooks. Drop/pipelining, Intruder, Decoder and large-entry select/switch/save-reload remain uncompleted at this snapshot. These mechanics results do not certify a future refreshed tree. PM records attributed QA reports, not independently inspected QA screenshots.
 
 
-Snapshot: 2026-11-23 09:41 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-23 10:11 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
