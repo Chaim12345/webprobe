@@ -1246,3 +1246,7 @@ mod tests {
         assert!(text.contains(&format!("Content-Length: {}", payload.len())));
     }
 }
+
+#[cfg(test)]
+#[path = "codec_coverage_tests.rs"]
+mod coverage_tests;

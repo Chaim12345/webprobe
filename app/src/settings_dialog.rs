@@ -163,7 +163,7 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
         }
         SettingsPane::Collaborator => {
             title(ui, "Collaborator");
-            crate::collaborator_ui::settings_panel(&mut app.collab_state, ui);
+            crate::collaborator_ui::settings_panel(&mut app.collab_state, ui, &app.shared);
         }
         SettingsPane::Tasks => {
             title(ui, "Tasks");
@@ -577,7 +577,14 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                 }
                 ui.add_space(16.0);
                 // Burp's settings menu: save, load and restore defaults.
-                ui.menu_button("Manage settings", |ui| manage_menu(app, ui));
+                // Editing the path is not a menu selection. The default
+                // close-on-any-click behavior dismisses the menu on focus.
+                egui::containers::menu::MenuButton::new("Manage settings")
+                    .config(
+                        egui::containers::menu::MenuConfig::new()
+                            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                    )
+                    .ui(ui, |ui| manage_menu(app, ui));
             });
             ui.separator();
             let pages = visible_pages(&query, pill);
@@ -639,8 +646,12 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                             .color(theme::ink_faint()),
                         );
                         let pane = def.pane;
-                        egui::ScrollArea::vertical()
+                        // Both axes scroll and the area keeps the dialog's size,
+                        // so a wide page (Tasks) no longer stretches the window
+                        // over the whole app and pushes the page list off screen.
+                        egui::ScrollArea::both()
                             .id_salt("settings_page")
+                            .auto_shrink([false, false])
                             .show(ui, |ui| page(app, ui, pane));
                     }
                 });

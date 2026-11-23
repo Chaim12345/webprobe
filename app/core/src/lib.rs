@@ -39,6 +39,8 @@ pub use webprobe_support::{
     mime, notice, organizer, paths, rules, seq_bits, streaming, sync, tls, util, variations, xss,
 };
 
+#[cfg(test)]
+mod intruder_run_edge_tests;
 pub mod macros;
 pub mod net;
 pub mod oob;

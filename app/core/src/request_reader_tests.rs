@@ -945,8 +945,23 @@ fn mixed_line_endings_get_400_and_close_in_one_read_and_split_reads() {
                 .replace("/x", &format!("http://127.0.0.1:{up_port}/x"))
                 .into_bytes();
             for piece in bytes.chunks(step) {
-                c.write_all(piece).unwrap();
-                c.flush().unwrap();
+                // The proxy can refuse the head and close before the last
+                // fragments leave: writes that race the 400 and FIN report
+                // EPIPE/ECONNRESET. Only those two are tolerated; anything
+                // else fails. The assertions below still require the 400,
+                // the terminal close, zero upstream requests and the
+                // verbatim captured prefix, so a wrong rejection cannot
+                // hide behind this tolerance.
+                if let Err(e) = c.write_all(piece).and_then(|()| c.flush()) {
+                    assert!(
+                        matches!(
+                            e.kind(),
+                            std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                        ),
+                        "{wire:?} step {step}: unexpected write error: {e}"
+                    );
+                    break;
+                }
                 if step < 16_384 {
                     std::thread::sleep(Duration::from_millis(1));
                 }
@@ -967,10 +982,62 @@ fn mixed_line_endings_get_400_and_close_in_one_read_and_split_reads() {
             let h = shared.history.last().expect("captured");
             let captured = h.req_raw.to_vec();
             assert!(
+                !captured.is_empty(),
+                "{wire:?} step {step}: the rejection captured something"
+            );
+            // Socket-received bytes are not independently instrumented here:
+            // the invariant is that the capture is a verbatim prefix of the
+            // attempted wire, never a reassembly or a superset.
+            assert!(
                 bytes.starts_with(&captured),
-                "{wire:?} step {step}: captured bytes are a verbatim prefix of what was sent"
+                "{wire:?} step {step}: captured bytes are a verbatim prefix of the attempted wire"
+            );
+            let note = h.note.as_deref().unwrap_or("");
+            assert!(
+                note.starts_with("Rejected before forwarding"),
+                "{wire:?} step {step}: rejection note, got {note:?}"
+            );
+            assert!(
+                note.contains("BareLineEnding"),
+                "{wire:?} step {step}: classified BareLineEnding, got {note:?}"
             );
         }
+    }
+}
+
+#[test]
+fn fragmented_writes_to_an_accepted_request_never_reset() {
+    // Negative control for mixed_line_endings_get_400_and_close_*: the same
+    // fragmented sender against a well-formed request must complete every
+    // write. A reset here means the early-close tolerance would be masking
+    // a healthy-path failure.
+    for step in [1, 3, 7, 16_384] {
+        let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(400));
+        let (port, pt) = spawn_proxy(Shared::new());
+        let mut c = client(port);
+        let bytes = format!(
+            "POST http://127.0.0.1:{up_port}/ok HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\nContent-Length: 5\r\nConnection: close\r\n\r\nabcde"
+        )
+        .into_bytes();
+        for piece in bytes.chunks(step) {
+            c.write_all(piece).unwrap();
+            c.flush().unwrap();
+            if step < 16_384 {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        let mut got = Vec::new();
+        c.read_to_end(&mut got).unwrap();
+        pt.join().unwrap();
+        assert!(
+            String::from_utf8_lossy(&got).starts_with("HTTP/1.1 200"),
+            "step {step}: accepted request is served"
+        );
+        assert_eq!(
+            up.join().unwrap().len(),
+            1,
+            "step {step}: exactly one request reached upstream"
+        );
     }
 }
 

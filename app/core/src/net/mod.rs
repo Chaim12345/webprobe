@@ -78,6 +78,7 @@ pub use tool_log::*;
 mod tool_state;
 pub use tool_state::*;
 
+mod accept_wait;
 mod engine;
 pub use engine::*;
 mod ext_source;
@@ -126,3 +127,12 @@ mod wake_tests;
 
 #[cfg(test)]
 mod replay_safety_tests;
+
+#[cfg(test)]
+mod url_scope_tests;
+
+#[cfg(test)]
+mod hist_tests;
+
+#[cfg(test)]
+mod tool_state_tests;

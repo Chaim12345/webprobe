@@ -75,7 +75,7 @@ impl Toasts {
         }
         let mut dismiss = None;
         egui::Area::new(egui::Id::unique("toasts"))
-            .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -16.0))
+            .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -44.0))
             .interactable(true)
             .show(ctx, |ui| {
                 for (i, t) in self.items.iter().enumerate() {

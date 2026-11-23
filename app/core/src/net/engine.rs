@@ -61,6 +61,10 @@ pub fn start_proxy(shared: Arc<Shared>) {
                 // project) takes effect at once; a blocking accept only saw
                 // the flag after the next client connected.
                 let _ = l.set_nonblocking(true);
+                let mut readiness = super::accept_wait::Readiness::new(&l).ok();
+                if readiness.is_none() {
+                    shared.log("Proxy readiness unavailable; using polling fallback");
+                }
                 loop {
                     if shared.listener_restart.load(Ordering::SeqCst) {
                         break;
@@ -72,7 +76,17 @@ pub fn start_proxy(shared: Arc<Shared>) {
                             spawn_connection(sh, stream);
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            std::thread::sleep(Duration::from_millis(50))
+                            if let Some(wait) = &mut readiness {
+                                if wait.wait(Duration::from_millis(50)).is_err() {
+                                    // Preserve service if the OS poller fails. Dropping
+                                    // unregisters the borrowed listener before reuse.
+                                    readiness = None;
+                                    shared.log("Proxy readiness failed; using polling fallback");
+                                    std::thread::sleep(Duration::from_millis(50));
+                                }
+                            } else {
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
                         }
                         Err(_) => continue,
                     }
@@ -396,19 +410,41 @@ fn discard_blank(pending: &mut Vec<u8>) {
     }
 }
 
-pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
+pub fn handle_conn(shared: Arc<Shared>, stream: TcpStream) {
     LISTENER_PORT.with(|p| p.set(stream.local_addr().ok().map(|a| a.port())));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
     let _ = stream.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
-    // Bytes read past one request belong to the next pipelined request: they
-    // are carried into the next read, not dropped or forwarded unmanaged.
-    let mut pending: Vec<u8> = Vec::new();
+    serve_plain(shared, stream, Vec::new(), 80);
+}
+
+/// Cleartext request serving for direct proxy traffic and cleartext CONNECT
+/// tunnels alike: pipelined requests under strict framing, intercept,
+/// WebSocket upgrades. Bytes read past one request belong to the next
+/// pipelined request: they are carried into the next read, not dropped or
+/// forwarded unmanaged.
+///
+/// Forward-proxy policy: a CONNECT tunnel does not confine the requests it
+/// carries to the CONNECT authority. Each inner request resolves its own
+/// destination (Host header, then absolute-form authority; the CONNECT port
+/// only defaults a portless Host) and passes the same admission, redirect,
+/// upstream and extension controls as a direct request on this listener.
+/// History records the client-requested (request-resolved) origin even when
+/// a configured listener redirect transports the bytes elsewhere: the
+/// redirect target is transport-only and never becomes the history host.
+/// An extension-dropped request is not an origin exchange: it gets the
+/// local drop page and no history entry; that policy is unchanged here.
+/// There is no second-destination fallback after a failed send. This is
+/// distinct from the opaque byte relay for tls_bypass hosts, which forwards to the
+/// CONNECT authority without parsing inner traffic. The proxy has no
+/// destination ACL beyond this explicit-proxy trust model; target scope
+/// restricts scanner and other tool traffic, not proxy egress.
+fn serve_plain(shared: Arc<Shared>, mut stream: TcpStream, mut pending: Vec<u8>, port: u16) {
     loop {
         discard_blank(&mut pending);
         let req = match read_request_outcome(&mut stream, &mut pending, true) {
             Ok(ReadOutcome::Message(r)) => r,
             Ok(ReadOutcome::Ambiguous(why, b)) => {
-                refuse_ambiguous(&shared, &mut stream, &b, why, 80, false);
+                refuse_ambiguous(&shared, &mut stream, &b, why, port, false);
                 // Unread request bytes would turn the close into a RST that
                 // can cost the client the 400: FIN first, drain what is
                 // already in flight, do not wait for more.
@@ -419,11 +455,11 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
                 return;
             }
             Ok(ReadOutcome::Incomplete(b)) => {
-                capture_unforwardable(&shared, &b, 80, false, INCOMPLETE);
+                capture_unforwardable(&shared, &b, port, false, INCOMPLETE);
                 return;
             }
             Ok(ReadOutcome::Malformed(b)) => {
-                capture_unforwardable(&shared, &b, 80, false, MALFORMED);
+                capture_unforwardable(&shared, &b, port, false, MALFORMED);
                 return;
             }
             Ok(ReadOutcome::Eof) | Err(_) => return,
@@ -436,7 +472,7 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
             return;
         }
 
-        let (req, req_state) = intercept_request(&shared, req, 80);
+        let (req, req_state) = intercept_request(&shared, req, port);
         let Some(req) = req else { return };
         let is_ws = util::get_header(&parts.headers, "Upgrade")
             .map(|v| v.eq_ignore_ascii_case("websocket"))
@@ -450,7 +486,7 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
         // buffered pipelined follow-ups must not be served after it. Drain
         // anything already in flight so the client sees a clean FIN, not a
         // RST that could cost it the page.
-        if upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state) {
+        if upstream_and_deliver(&shared, &mut stream, req, port, false, req_state) {
             let _ = stream.shutdown(std::net::Shutdown::Write);
             pending.clear();
             // Drain bytes already delivered so the close is a clean FIN, not
@@ -560,6 +596,24 @@ pub fn handle_connect_pending(
         relay_tunnel(&stream, &mut upstream);
         return;
     }
+    // A CONNECT tunnel is not always TLS: a ws:// or plain-HTTP client
+    // tunnelled to a cleartext port sends a plain request. A TLS handshake
+    // starts with record type 0x16; read-ahead bytes that are not one are
+    // served as plain HTTP.
+    let cleartext = pending.first().map(|first| *first != 0x16);
+    if cleartext == Some(true) {
+        if stream
+            .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            .is_err()
+        {
+            return;
+        }
+        shared.log(&format!(
+            "CONNECT tunnel to {host}:{port} carries cleartext; serving as plain HTTP"
+        ));
+        serve_plain(shared, stream, pending, port);
+        return;
+    }
     let config = match shared.mitm.listener_config(
         &host,
         listener_supports_http2(&shared, LISTENER_PORT.with(|p| p.get())),
@@ -576,6 +630,19 @@ pub fn handle_connect_pending(
         .is_err()
     {
         return;
+    }
+    // With no read-ahead bytes a cleartext tunneller speaks only after the
+    // 200. Peek once: anything that is not a TLS handshake record (type
+    // 0x16) is served as a plain request, the same as a direct connection.
+    if cleartext.is_none() {
+        let mut first = [0u8; 1];
+        if matches!(stream.peek(&mut first), Ok(1)) && first[0] != 0x16 {
+            shared.log(&format!(
+                "CONNECT tunnel to {host}:{port} carries cleartext; serving as plain HTTP"
+            ));
+            serve_plain(shared, stream, Vec::new(), port);
+            return;
+        }
     }
     let conn = match rustls::ServerConnection::new(config) {
         Ok(conn) => conn,

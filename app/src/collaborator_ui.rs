@@ -13,9 +13,19 @@ use crate::theme::{self, c};
 
 fn hint(ui: &mut Ui, text: &str) {
     ui.add(
-        egui::Label::new(RichText::new(text).size(12.0).color(c(theme::MONO6)))
+        egui::Label::new(RichText::new(text).size(12.0).color(theme::ink_dim()))
             .wrap_mode(egui::TextWrapMode::Wrap),
     );
+}
+
+// The legacy green is designed for dark panels. Keep the status cue readable
+// on the light Collaborator settings page as well.
+fn success_color(palette: theme::Palette) -> egui::Color32 {
+    if palette == theme::Palette::Light {
+        c(0x2E681C)
+    } else {
+        c(theme::GOOD)
+    }
 }
 
 fn status_label(ui: &mut Ui, running: bool, description: &str, bound: Option<String>) {
@@ -25,12 +35,12 @@ fn status_label(ui: &mut Ui, running: bool, description: &str, bound: Option<Str
                 Some(addr) => format!("listening on {addr}"),
                 None => format!("starting on {description}"),
             },
-            theme::GOOD,
+            success_color(theme::appearance().0),
         )
     } else {
-        ("stopped".to_string(), theme::MONO6)
+        ("stopped".to_string(), theme::ink_dim())
     };
-    ui.label(RichText::new(text).size(12.0).color(c(color)));
+    ui.label(RichText::new(text).size(12.0).color(color));
 }
 
 fn error_label(ui: &mut Ui, error: Option<String>) {
@@ -65,7 +75,7 @@ fn listener_notes(ui: &mut Ui, protocol: &str) {
 /// server location", the interactions table and Description / Request to
 /// Collaborator / Response from Collaborator. Server and listener settings
 /// sit behind the gear.
-pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
+pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui, shared: &webprobe_core::net::Shared) {
     poll_registration(state, ui);
     if !state.ui_started {
         ui.add_space(ui.available_height() * 0.25);
@@ -143,7 +153,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             .stroke(egui::Stroke::new(1.0, theme::line()))
             .inner_margin(egui::Margin::same(8))
             .show(ui, |ui| {
-                settings_panel(state, ui);
+                settings_panel(state, ui, shared);
             });
         ui.add_space(6.0);
     }
@@ -240,7 +250,11 @@ fn poll_registration(state: &mut CollaboratorState, ui: &egui::Ui) {
     }
 }
 
-pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
+pub(crate) fn settings_panel(
+    state: &mut CollaboratorState,
+    ui: &mut egui::Ui,
+    shared: &webprobe_core::net::Shared,
+) {
     poll_registration(state, ui);
     hint(
         ui,
@@ -250,7 +264,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
 
     // ------------------------- Public server (interactsh) -------------
     ui.group(|ui| {
-        ui.label(RichText::new("Collaborator server (interactsh)").size(13.0).strong().color(c(theme::ORANGE)));
+        ui.label(RichText::new("Collaborator server (interactsh)").size(13.0).strong().color(theme::ink()));
         let active = state.remote_server();
         ui.horizontal(|ui| {
             ui.add_enabled(
@@ -272,15 +286,21 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                 }
                 if state.is_registering() {
                     ui.spinner();
-                    ui.label(RichText::new("Registering...").size(12.0).color(c(theme::MONO6)));
+                    ui.label(RichText::new("Registering...").size(12.0).color(theme::ink_dim()));
                 }
             } else if ui.button("Use server").clicked() {
                 let choice = state.remote_choice.clone();
-                state.start_remote_in_background(&choice);
+                // The effective upstream route for the server's host: the
+                // OOB control connection honors the configured proxies
+                // (a custom server is a distinct destination, not exempt).
+                let route = crate::interactsh::parse_server(&choice)
+                    .map(|(host, _)| shared.upstream_for(&host))
+                    .unwrap_or_default();
+                state.start_remote_in_background(&choice, route);
             }
         });
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Auth token").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("Auth token").size(12.0).color(theme::ink_dim()));
             ui.add_enabled(
                 active.is_none(),
                 egui::TextEdit::singleline(&mut state.remote_token).password(true).desired_width(200.0).hint_text("only for a private server"),
@@ -288,13 +308,13 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             .on_hover_text("Sent as the Authorization header to a server started with -auth or -token");
         });
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Poll every").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("Poll every").size(12.0).color(theme::ink_dim()));
             let mut secs = state.poll_secs();
             if ui.add(egui::DragValue::new(&mut secs).range(1..=3600).suffix(" s")).changed() {
                 state.set_poll_secs(secs);
             }
             ui.add_space(12.0);
-            ui.label(RichText::new("Keep interactions for").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("Keep interactions for").size(12.0).color(theme::ink_dim()));
             let mut mins = state.retention_secs() / 60;
             if ui
                 .add(egui::DragValue::new(&mut mins).range(0..=10_080).custom_formatter(|v, _| if v == 0.0 { "ever".into() } else { format!("{v} min") }))
@@ -315,13 +335,13 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             RichText::new("HTTP listener")
                 .size(13.0)
                 .strong()
-                .color(c(theme::ORANGE)),
+                .color(theme::ink()),
         );
         let running = state.http.is_running();
         let mut want_start = false;
         let mut want_stop = false;
         ui.horizontal(|ui| {
-            ui.label(RichText::new("port").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("port").size(12.0).color(theme::ink_dim()));
             let port_response = ui.add_enabled(
                 !running,
                 egui::DragValue::new(&mut state.http.port).range(1..=65535),
@@ -371,13 +391,13 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             RichText::new("DNS listener")
                 .size(13.0)
                 .strong()
-                .color(c(theme::ORANGE)),
+                .color(theme::ink()),
         );
         let running = state.dns.is_running();
         let mut want_start = false;
         let mut want_stop = false;
         ui.horizontal(|ui| {
-            ui.label(RichText::new("port").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("port").size(12.0).color(theme::ink_dim()));
             ui.add_enabled(
                 !running,
                 egui::DragValue::new(&mut state.dns.port).range(1..=65535),
@@ -424,7 +444,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             RichText::new("Generated payloads")
                 .size(13.0)
                 .strong()
-                .color(c(theme::MONO7)),
+                .color(theme::ink()),
         );
         ui.horizontal(|ui| {
             if ui.button("Generate payload").clicked() {
@@ -434,7 +454,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             ui.label(
                 RichText::new(format!("{count} retained (max {MAX_PAYLOADS})"))
                     .size(12.0)
-                    .color(c(theme::MONO6)),
+                    .color(theme::ink_dim()),
             );
         });
         let payloads = state.payloads().to_vec();
@@ -450,7 +470,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                             ui.monospace(
                                 RichText::new(payload.http_url.clone())
                                     .size(12.0)
-                                    .color(c(theme::ORANGE_5)),
+                                    .color(theme::Tokens::current().header_ink),
                             );
                             if ui.small_button("copy HTTP").clicked() {
                                 ui.ctx().copy_text(payload.http_url.clone());
@@ -469,7 +489,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                                 payload.token
                             ))
                             .size(12.0)
-                            .color(c(theme::MONO6)),
+                            .color(theme::ink_dim()),
                         );
                     }
                 });
@@ -498,13 +518,13 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
                     RichText::new(name.clone())
                         .monospace()
                         .size(12.0)
-                        .color(c(theme::HEADER_BLUE)),
+                        .color(theme::Tokens::current().header_ink),
                 );
                 ui.label(
                     RichText::new(value.clone())
                         .monospace()
                         .size(12.0)
-                        .color(c(theme::EDITOR_TEXT)),
+                        .color(theme::Tokens::current().editor_ink),
                 );
                 ui.end_row();
             }
@@ -513,12 +533,12 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
         ui.label(
             RichText::new(format!("body ({} bytes)", http.body.len()))
                 .size(12.0)
-                .color(c(theme::MONO6)),
+                .color(theme::ink_dim()),
         );
         ui.monospace(
             RichText::new(String::from_utf8_lossy(&http.body).into_owned())
                 .size(12.0)
-                .color(c(theme::EDITOR_TEXT)),
+                .color(theme::Tokens::current().editor_ink),
         );
     }
 }
@@ -528,13 +548,13 @@ fn smtp_details(ui: &mut Ui, smtp: &crate::collaborator::SmtpInteraction) {
         RichText::new(format!("MAIL FROM: {}", smtp.from))
             .monospace()
             .size(12.0)
-            .color(c(theme::EDITOR_TEXT)),
+            .color(theme::Tokens::current().editor_ink),
     );
     ui.label(
         RichText::new(&smtp.conversation)
             .monospace()
             .size(12.0)
-            .color(c(theme::MONO6)),
+            .color(theme::ink_dim()),
     );
 }
 
@@ -543,7 +563,7 @@ fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {
         RichText::new(format!("query: {}", dns.qname))
             .monospace()
             .size(12.0)
-            .color(c(theme::EDITOR_TEXT)),
+            .color(theme::Tokens::current().editor_ink),
     );
     ui.label(
         RichText::new(format!(
@@ -553,11 +573,64 @@ fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {
             dns.raw_query.len()
         ))
         .size(12.0)
-        .color(c(theme::MONO6)),
+        .color(theme::ink_dim()),
     );
     ui.label(
         RichText::new("reply: A 127.0.0.1")
             .size(12.0)
-            .color(c(theme::GOOD)),
+            .color(success_color(theme::appearance().0)),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn luminance(color: egui::Color32) -> f64 {
+        let channel = |v: u8| {
+            let v = f64::from(v) / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(color.r()) + 0.7152 * channel(color.g()) + 0.0722 * channel(color.b())
+    }
+
+    fn contrast(a: egui::Color32, b: egui::Color32) -> f64 {
+        let (a, b) = (luminance(a), luminance(b));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    #[test]
+    fn collaborator_text_and_status_are_readable_in_each_palette() {
+        for palette in [
+            theme::Palette::Light,
+            theme::Palette::Dark,
+            theme::Palette::HighContrast,
+        ] {
+            let tokens = theme::Tokens::for_palette(palette);
+            for ink in [
+                tokens.ink,
+                tokens.ink_dim,
+                tokens.header_ink,
+                tokens.editor_ink,
+                success_color(palette),
+            ] {
+                for background in [tokens.surface, tokens.chrome] {
+                    assert!(
+                        contrast(ink, background) >= 4.5,
+                        "{palette:?}: {ink:?} on {background:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dark_success_status_keeps_legacy_green() {
+        assert_eq!(success_color(theme::Palette::Dark), c(theme::GOOD));
+        assert_ne!(success_color(theme::Palette::Light), c(theme::GOOD));
+    }
 }

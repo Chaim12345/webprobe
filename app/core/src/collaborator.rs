@@ -679,25 +679,40 @@ impl CollaboratorState {
     }
 
     /// Register with a public interactsh server and start polling it every
-    /// few seconds. New payloads then use that server's domain.
-    pub fn start_remote(&mut self, server: &str) -> Result<String, String> {
+    /// few seconds. New payloads then use that server's domain. All
+    /// control-server traffic transports over `route` (the effective
+    /// upstream route for the server's host); a failed route fails the
+    /// registration with its diagnostic, never a direct fallback.
+    pub fn start_remote(
+        &mut self,
+        server: &str,
+        route: &crate::upstream::UpstreamConfig,
+    ) -> Result<String, String> {
         self.stop_remote();
         let token = self.remote_token.clone();
-        let session = crate::interactsh::Session::register_with(server, Some(&token))?;
+        let session = crate::interactsh::Session::register_with(server, Some(&token), route)?;
         Ok(self.attach_session(session))
     }
 
     /// Register on `server` on a background thread (key generation and the
     /// network round trip can take seconds); `finish_registration` picks up
     /// the outcome. Used by the UI so it never blocks on the server.
-    pub fn start_remote_in_background(&mut self, server: &str) {
+    /// `route` is the effective upstream route for the server's host,
+    /// captured when registration starts; a route change applies to the
+    /// next registration.
+    pub fn start_remote_in_background(
+        &mut self,
+        server: &str,
+        route: crate::upstream::UpstreamConfig,
+    ) {
         self.stop_remote();
         let (tx, rx) = std::sync::mpsc::channel();
         let (server, token) = (server.to_string(), self.remote_token.clone());
         crate::rt::engine().spawn(async move {
             let _ = tokio::task::spawn_blocking(move || {
-                let outcome = crate::interactsh::Session::register_with(&server, Some(&token))
-                    .map(|session| RegisteredSession(Some(session)));
+                let outcome =
+                    crate::interactsh::Session::register_with(&server, Some(&token), &route)
+                        .map(|session| RegisteredSession(Some(session)));
                 let _ = tx.send(outcome);
             })
             .await;
@@ -1655,7 +1670,7 @@ mod tests {
     fn background_registration_reports_failure_without_blocking() {
         let mut st = CollaboratorState::new();
         let t0 = std::time::Instant::now();
-        st.start_remote_in_background("127.0.0.1:1");
+        st.start_remote_in_background("127.0.0.1:1", crate::upstream::UpstreamConfig::default());
         assert!(t0.elapsed() < Duration::from_millis(100), "returns at once");
         assert!(st.is_registering());
         let outcome = loop {

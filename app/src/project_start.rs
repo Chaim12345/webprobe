@@ -66,7 +66,9 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
             "{target} already exists: open it instead, or choose another name"
         ));
     }
-    crate::settings_dialog::install(app, &webprobe_core::project::ProjectData::default())?;
+    // A new project replaces the session, unlike settings import/defaults,
+    // which deliberately keep traffic and tool contents.
+    crate::tools::apply_project(app, &webprobe_core::project::ProjectData::default(), true);
     // Cross-response passive state (password tracking) is per project.
     app.shared.passive.clear();
     app.project_path = target.clone();
@@ -76,6 +78,7 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
     } else {
         app.hist_cache_key.clear();
         app.site_cache_key.clear();
+        app.history_sel = None;
         app.project_status = "temporary project".into();
         feedback::toast(Level::Success, "Temporary project started");
     }
@@ -210,5 +213,132 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         }
     } else if !shown {
         app.chooser.open = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{logger, net, project, scan};
+
+    fn session_with_traffic(name: &str) -> (App, std::path::PathBuf) {
+        let dir =
+            std::env::temp_dir().join(format!("wp-project-start-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::new(net::Shared::new());
+        app.project_path = dir.join("original.json").display().to_string();
+        app.shared.push_history(net::HistEntry {
+            id: 77,
+            host: "previous-project.test".into(),
+            ..Default::default()
+        });
+        app.shared.issues.lock().unwrap().push(scan::ScanIssue {
+            id: 78,
+            name: "previous finding".into(),
+            ..Default::default()
+        });
+        app.logger.push(logger::LogEntry {
+            host: "previous-project.test".into(),
+            ..Default::default()
+        });
+        app.shared.repeaters.lock().unwrap().push(net::RepTab {
+            id: 79,
+            name: "previous request".into(),
+            host: "previous-project.test".into(),
+            port: 80,
+            https: false,
+            request: "GET / HTTP/1.1\r\nHost: previous-project.test\r\n\r\n".into(),
+            response: None,
+            result_line: String::new(),
+            history: Vec::new(),
+            hist_pos: 0,
+            response_sources: Vec::new(),
+            ws: None,
+        });
+        app.shared
+            .tasks
+            .lock()
+            .unwrap()
+            .push(crate::tasks::ScanTask {
+                id: 80,
+                name: "previous scan".into(),
+                kind: crate::tasks::TaskKind::Audit(Vec::new()),
+                state: crate::tasks::TaskState::Paused,
+                done: 0,
+                total: Some(0),
+                issues_found: 0,
+                created: 0,
+                finished: None,
+            });
+        app.log_sel = Some(1);
+        app.log_seen = 77;
+        app.decoder.input = "previous secret".into();
+        app.history_sel = Some(77);
+        (app, dir)
+    }
+
+    fn assert_empty_session(app: &App) {
+        assert!(
+            app.shared.history.snapshot().is_empty(),
+            "new project inherited HTTP history"
+        );
+        assert!(
+            app.shared.issues.lock().unwrap().is_empty(),
+            "new project inherited findings"
+        );
+        assert!(
+            app.logger.entries.is_empty(),
+            "project inherited Logger rows"
+        );
+        assert!(app.shared.repeaters.lock().unwrap().is_empty());
+        assert!(app.shared.tasks.lock().unwrap().is_empty());
+        assert!(app.log_sel.is_none());
+        assert_eq!(app.log_seen, 0);
+        assert!(
+            app.decoder.input.is_empty(),
+            "project inherited editor contents"
+        );
+        assert!(app.history_sel.is_none());
+    }
+
+    #[test]
+    fn new_disk_project_does_not_inherit_session_data() {
+        let (mut app, dir) = session_with_traffic("new-disk");
+        let target = dir.join("new.json");
+        new_project(&mut app, Some(target.to_str().unwrap())).unwrap();
+        assert_empty_session(&app);
+        let saved = project::load(&target).unwrap();
+        assert!(saved.history.is_empty());
+        assert!(saved.issues.is_empty());
+        assert!(saved.logger.is_empty());
+        assert!(saved.repeaters.is_empty());
+        assert!(saved.tasks.scans.is_empty());
+        let original = project::load(&dir.join("original.json")).unwrap();
+        assert_eq!(
+            original.history.len(),
+            1,
+            "previous session saved before switching"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn temporary_project_does_not_inherit_session_data() {
+        let (mut app, dir) = session_with_traffic("new-temporary");
+        new_project(&mut app, None).unwrap();
+        assert_empty_session(&app);
+        assert_eq!(app.project_status, "temporary project");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn opening_empty_project_clears_previous_logger() {
+        let (mut app, dir) = session_with_traffic("open-empty");
+        let target = dir.join("empty.json");
+        project::save(&target, &project::ProjectData::default()).unwrap();
+        open(&mut app, target.to_str().unwrap()).unwrap();
+        assert_empty_session(&app);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
