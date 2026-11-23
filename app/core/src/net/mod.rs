@@ -99,7 +99,7 @@ mod attack;
 mod sni;
 pub use sni::{sni_scope, SniScope};
 #[cfg(test)]
-pub(crate) use sni::{tls_sni_lab, SniLog};
+pub(crate) use sni::tls_sni_lab;
 pub use attack::*;
 
 #[cfg(test)]

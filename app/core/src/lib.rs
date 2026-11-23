@@ -59,6 +59,8 @@ pub mod stored;
 mod streaming_tests;
 pub mod tasks;
 pub mod upstream;
+pub(crate) mod h2_group;
+pub mod send_group;
 pub(crate) mod url_payloads;
 mod util_tests;
 pub mod ws_history;
