@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub(crate) enum AdmissionError {
     Busy,
     Internal,
+    InvalidRequest,
     InvalidLimits,
     ConfigurationMismatch,
     IncompleteActive,
@@ -227,6 +228,10 @@ impl Coordinator {
                 Arc::new(Ledger::pending(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
             self.shared.stored.open_batch();
             let owner = self.fresh();
+            self.shared
+                .scan
+                .stop
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             *state = Some(Run {
                 ledger,
                 owner: owner.clone(),
@@ -261,6 +266,10 @@ impl Coordinator {
                 Arc::new(Ledger::pending(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
             self.shared.stored.clear();
             let owner = self.fresh();
+            self.shared
+                .scan
+                .stop
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             *state = Some(Run {
                 ledger,
                 owner,
@@ -397,6 +406,13 @@ impl Drop for Batch {
     }
 }
 impl Audit {
+    pub fn mark_incomplete(&self) {
+        if let Some(run) = self.coordinator.state.lock().unwrap().as_mut() {
+            if Arc::ptr_eq(&run.owner, &self.owner) {
+                run.incomplete = true;
+            }
+        }
+    }
     pub fn complete(mut self) -> Result<Handoff, AdmissionError> {
         let c = self.coordinator.clone();
         let mut state = c.state.lock().unwrap();

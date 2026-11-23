@@ -192,6 +192,12 @@ pub(crate) struct ExperimentalEngine {
     coordinator: Arc<crate::scan_lifecycle::Coordinator>,
 }
 #[cfg(test)]
+pub(crate) struct AcceptedAudit {
+    pub completion: crate::scan_lifecycle::Finish,
+    pub error: Option<crate::scan_lifecycle::AdmissionError>,
+    pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
+}
+#[cfg(test)]
 impl ExperimentalEngine {
     pub fn new(
         shared: Arc<Shared>,
@@ -211,13 +217,13 @@ impl ExperimentalEngine {
     pub fn audit(
         &self,
         entry: HistEntry,
-    ) -> Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError> {
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
         use crate::scan_lifecycle::{AdmissionError, ExecutionContext};
         let shared = &self.shared;
         let parts = util::parse_http(&entry.req_raw);
         let host_header = util::get_header(&parts.headers, "Host")
             .filter(|h| !h.is_empty())
-            .ok_or(AdmissionError::InvalidLimits)?;
+            .ok_or(AdmissionError::InvalidRequest)?;
         let (host, port) = net::split_h_p(&host_header, entry.port);
         let req = String::from_utf8_lossy(&entry.req_raw).into_owned();
         let (a, legacy, item) = self.coordinator.admit(crate::stored::Item {
@@ -228,11 +234,20 @@ impl ExperimentalEngine {
             https: entry.https,
         })?;
         // Admission succeeds before changing the accepted run's UI flags.
-        shared.scan.stop.store(false, Ordering::SeqCst);
         shared.scan.done.store(0, Ordering::SeqCst);
         let context = ExecutionContext::Legacy(legacy.clone());
         let _expected = net::scanner_io::ExpectedScanner.install();
-        let installed = context.enter(shared)?;
+        let installed = match context.enter(shared) {
+            Ok(i) => i,
+            Err(_) => {
+                a.mark_incomplete();
+                return Ok(AcceptedAudit {
+                    completion: crate::scan_lifecycle::Finish::Incomplete,
+                    error: Some(AdmissionError::Internal),
+                    handoff: a.complete(),
+                });
+            }
+        };
         let _tool = net::tool_scope("Scanner");
         let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let config = crate::scan_config::shared_config(shared)
@@ -259,17 +274,32 @@ impl ExperimentalEngine {
                 item,
                 legacy.owner,
             );
+            let baseline_complete = cx.baseline.resp.is_some();
             checks::run_stored_seeding(&cx, &points);
             checks::run_point_checks(&cx, &points);
             checks::run_request_checks(&cx);
             checks::run_extension_checks(&cx, &points);
+            baseline_complete
         }));
         drop(installed);
-        if run.is_err() {
-            drop(a);
-            return Err(AdmissionError::Internal);
-        }
-        a.complete()
+        let completion = if matches!(run, Ok(true))
+            && context.validate(shared).is_ok()
+            && !shared.scan.stop.load(Ordering::SeqCst)
+        {
+            crate::scan_lifecycle::Finish::Complete
+        } else {
+            a.mark_incomplete();
+            crate::scan_lifecycle::Finish::Incomplete
+        };
+        Ok(AcceptedAudit {
+            completion,
+            error: if run.is_err() {
+                Some(AdmissionError::Internal)
+            } else {
+                None
+            },
+            handoff: a.complete(),
+        })
     }
 }
 

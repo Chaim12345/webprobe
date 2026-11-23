@@ -1546,7 +1546,10 @@ fn required_limits_actual_engine_rejects_busy_without_reset_or_egress() {
             .into(),
         ..Default::default()
     };
-    assert!(matches!(engine.audit(entry.clone()), Ok(Handoff::Joined)));
+    let accepted = engine.audit(entry.clone()).unwrap();
+    assert_eq!(accepted.completion, Finish::Complete);
+    assert_eq!(accepted.error, None);
+    assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
     assert_eq!(wire.load(Ordering::SeqCst), 1);
     let Handoff::Finalize(finalizer) = batch.finish().unwrap() else {
         panic!("finalizer")
@@ -1631,7 +1634,11 @@ fn required_limits_actual_engine_adopts_inflight_baseline_without_second_owner()
         done_rx
             .recv_timeout(std::time::Duration::from_secs(3))
             .unwrap(),
-        Ok(Handoff::Joined)
+        Ok(crate::scan::AcceptedAudit {
+            completion: Finish::Complete,
+            handoff: Ok(Handoff::Joined),
+            ..
+        })
     ));
     worker.join().unwrap();
     server.join().unwrap();
@@ -1684,4 +1691,67 @@ fn cancelled_batch_actual_engine_admission_cannot_reset_shared_stop() {
         panic!("finalizer")
     };
     assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+}
+
+#[test]
+fn actual_engine_accepted_baseline_and_install_failures_carry_incomplete_handoff() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    for install_failure in [false, true] {
+        let shared = crate::net::Shared::new();
+        {
+            let config_slot = crate::scan_config::shared_config(&shared);
+            let mut cfg = config_slot.lock().unwrap();
+            for (id, ..) in crate::scan::check_catalogue() {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        let limits = crate::scan_budget::Limits {
+            duration: std::time::Duration::from_secs(1),
+            http_attempts: 10,
+            connection_attempts: 10,
+            outgoing: 65536,
+            response: 65536,
+            decompressed: 65536,
+            inputs: 65536,
+            evidence: 65536,
+            evidence_records: 10,
+            records: 10,
+        };
+        let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+        let b = engine.open().unwrap();
+        let context = b.context();
+        let mut guards = Vec::new();
+        if install_failure {
+            for _ in 0..64 {
+                guards.push(context.enter(&shared).unwrap());
+            }
+        }
+        let e = crate::net::HistEntry {
+            port: 0,
+            req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:0\r\n\r\n"
+                .to_vec()
+                .into(),
+            ..Default::default()
+        };
+        let accepted = engine.audit(e).unwrap();
+        assert_eq!(accepted.completion, Finish::Incomplete);
+        assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
+        assert_eq!(
+            accepted.error,
+            if install_failure {
+                Some(AdmissionError::Internal)
+            } else {
+                None
+            }
+        );
+        drop(guards);
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+        assert!(matches!(
+            engine.audit(Default::default()),
+            Err(AdmissionError::InvalidRequest)
+        ));
+    }
 }
