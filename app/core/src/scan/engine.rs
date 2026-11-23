@@ -230,7 +230,7 @@ impl ExperimentalEngine {
     pub fn open(
         &self,
     ) -> Result<crate::scan_lifecycle::Batch, crate::scan_lifecycle::AdmissionError> {
-        self.coordinator.open()
+        self.coordinator.open_standalone()
     }
     /// Explicit parameterized batch caller. Every accepted path discharges
     /// its lease through finish; no Item rejection is counted as successful.
@@ -238,13 +238,13 @@ impl ExperimentalEngine {
         &self,
         entries: Vec<HistEntry>,
     ) -> Result<AcceptedBatch, crate::scan_lifecycle::AdmissionError> {
-        self.audit_batch_before_finish(entries, || {})
+        self.audit_batch_before_finish(entries, |_| {})
     }
     /// Fixture-only close barrier, not a runtime callback boundary.
     pub(crate) fn audit_batch_before_finish(
         &self,
         entries: Vec<HistEntry>,
-        before_finish: impl FnOnce(),
+        before_finish: impl FnOnce(&crate::scan_lifecycle::Batch),
     ) -> Result<AcceptedBatch, crate::scan_lifecycle::AdmissionError> {
         use crate::scan_lifecycle::{Finish, Handoff};
         let batch = self.open()?;
@@ -257,7 +257,7 @@ impl ExperimentalEngine {
             handoff: Ok(Handoff::Joined),
         };
         for entry in entries {
-            match self.audit(entry) {
+            match self.audit_in(&batch, entry) {
                 Ok(accepted) => {
                     if accepted.audit_phase_completion == Finish::Complete {
                         result.completed_items += 1
@@ -311,7 +311,7 @@ impl ExperimentalEngine {
         if result.audit_phase_completion == Finish::Incomplete {
             result.outcome = BatchOutcome::Incomplete;
         }
-        before_finish();
+        before_finish(&batch);
         result.handoff = batch.finish();
         if let Err(error) = result.handoff {
             result.audit_phase_completion = Finish::Incomplete;
@@ -330,7 +330,7 @@ impl ExperimentalEngine {
         batch: &crate::scan_lifecycle::Batch,
         entry: HistEntry,
     ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
-        self.audit_with_lease(Some(batch), entry, || {})
+        self.audit_with_lease(Some(batch), None, entry, |_| {})
     }
     pub(crate) fn audit_in_after_admission(
         &self,
@@ -338,7 +338,7 @@ impl ExperimentalEngine {
         entry: HistEntry,
         admitted: impl FnOnce(),
     ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
-        self.audit_with_lease(Some(batch), entry, admitted)
+        self.audit_with_lease(Some(batch), None, entry, |_| admitted())
     }
     pub fn audit(
         &self,
@@ -352,13 +352,35 @@ impl ExperimentalEngine {
         entry: HistEntry,
         admitted: impl FnOnce(),
     ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
-        self.audit_with_lease(None, entry, admitted)
+        self.audit_with_lease(None, None, entry, |_| admitted())
+    }
+    pub(crate) fn adopt_scanner(
+        &self,
+        scanner: &crate::scan_lifecycle::LegacyScanner,
+    ) -> Result<crate::scan_lifecycle::Batch, crate::scan_lifecycle::AdmissionError> {
+        self.coordinator.adopt_scanner(scanner)
+    }
+    pub(crate) fn audit_with_capability(
+        &self,
+        entry: HistEntry,
+        admitted: impl FnOnce(crate::scan_lifecycle::LegacyScanner),
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        self.audit_with_lease(None, None, entry, admitted)
+    }
+    pub(crate) fn audit_in_scanner(
+        &self,
+        scanner: &crate::scan_lifecycle::LegacyScanner,
+        entry: HistEntry,
+        admitted: impl FnOnce(),
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        self.audit_with_lease(None, Some(scanner), entry, |_| admitted())
     }
     fn audit_with_lease(
         &self,
         batch: Option<&crate::scan_lifecycle::Batch>,
+        scanner: Option<&crate::scan_lifecycle::LegacyScanner>,
         entry: HistEntry,
-        admitted: impl FnOnce(),
+        admitted: impl FnOnce(crate::scan_lifecycle::LegacyScanner),
     ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
         use crate::scan_lifecycle::{AdmissionError, ExecutionContext};
         let shared = &self.shared;
@@ -377,9 +399,12 @@ impl ExperimentalEngine {
         };
         let (a, legacy, item) = match batch {
             Some(batch) => self.coordinator.admit_in(batch, stored_item),
-            None => self.coordinator.admit(stored_item),
+            None => match scanner {
+                Some(scanner) => self.coordinator.admit_scanner(scanner, stored_item),
+                None => self.coordinator.admit_standalone(stored_item),
+            },
         }?;
-        admitted();
+        admitted(legacy.clone());
         // Admission succeeds before changing the accepted run's UI flags.
         shared.scan.done.store(0, Ordering::SeqCst);
         let context = ExecutionContext::Legacy(legacy.clone());

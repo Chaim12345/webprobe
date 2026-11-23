@@ -543,6 +543,51 @@ impl Coordinator {
         let batch = self.open_locked(&mut state, true)?;
         Ok(batch)
     }
+    pub(crate) fn adopt_scanner(
+        self: &Arc<Self>,
+        scanner: &LegacyScanner,
+    ) -> Result<Batch, AdmissionError> {
+        let mut state = self.state.lock_on(&self.shared);
+        self.validate_scanner_locked(scanner, &state)?;
+        self.open_locked(&mut state, false)
+    }
+    fn validate_scanner_locked(
+        &self,
+        scanner: &LegacyScanner,
+        state: &OwnerStateGuard<'_>,
+    ) -> Result<(), AdmissionError> {
+        if !std::ptr::eq(scanner.coordinator.as_ptr(), self) {
+            return Err(AdmissionError::Busy);
+        }
+        if !scanner
+            .lease
+            .upgrade()
+            .is_some_and(|l| l.load(std::sync::atomic::Ordering::SeqCst))
+            || !state.as_ref().is_some_and(|r| {
+                r.phase == Phase::Open
+                    && Arc::ptr_eq(&r.owner, &scanner.owner)
+                    && !r.owner.is_cancelled()
+            })
+        {
+            return Err(AdmissionError::Busy);
+        }
+        // Validate captured generation under actual store lock. Empty batch is valid;
+        // this read checks identity, not the presence of item zero.
+        scanner
+            .generation
+            .item(0)
+            .map_err(|_| AdmissionError::Internal)?;
+        Ok(())
+    }
+    pub(crate) fn admit_scanner(
+        self: &Arc<Self>,
+        scanner: &LegacyScanner,
+        item: Item,
+    ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
+        let mut state = self.state.lock_on(&self.shared);
+        self.validate_scanner_locked(scanner, &state)?;
+        self.admit_locked(item, &mut state, false)
+    }
     pub fn adopt(self: &Arc<Self>, lease: &Batch) -> Result<Batch, AdmissionError> {
         if !Arc::ptr_eq(self, &lease.coordinator)
             || !lease.live

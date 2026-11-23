@@ -1669,14 +1669,42 @@ fn required_limits_actual_engine_adopts_inflight_baseline_without_second_owner()
             .into(),
         ..Default::default()
     };
+    let (cap_tx, cap_rx) = std::sync::mpsc::channel();
     let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
     let worker = std::thread::spawn(move || {
-        done_tx.send(running.audit(entry)).unwrap();
+        done_tx
+            .send(running.audit_with_capability(entry, |cap| cap_tx.send(cap).unwrap()))
+            .unwrap();
     });
     at_rx
         .recv_timeout(std::time::Duration::from_secs(2))
         .unwrap();
-    let batch = engine.open().unwrap();
+    let cap = cap_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    assert!(matches!(
+        engine.open(),
+        Err(crate::scan_lifecycle::AdmissionError::Busy)
+    ));
+    let generation = crate::scan_lifecycle::ExecutionContext::Legacy(cap.clone()).generation();
+    assert!(generation.item(0).unwrap().unwrap().req.contains("/base"));
+    let point = InsertionPoint::new(IpKind::Query, "saved", "old");
+    let token = generation.token(0, &point).unwrap();
+    generation
+        .note_injection(&token, b"original injection", Some(b"original evidence"))
+        .unwrap();
+    let batch = engine.adopt_scanner(&cap).unwrap();
+    assert_eq!(generation.token(0, &point).unwrap(), token);
+    generation
+        .observe(0, b"retrieval", token.as_bytes())
+        .unwrap();
+    assert_eq!(
+        generation.pairs().unwrap()[0].injection,
+        (
+            b"original injection".to_vec(),
+            Some(b"original evidence".to_vec())
+        )
+    );
     release_tx.send(()).unwrap();
     assert!(matches!(
         done_rx
@@ -1693,10 +1721,20 @@ fn required_limits_actual_engine_adopts_inflight_baseline_without_second_owner()
     let Handoff::Finalize(f) = batch.finish().unwrap() else {
         panic!("finalizer")
     };
+    let a4_count = std::sync::atomic::AtomicUsize::new(0);
     assert_eq!(
-        f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        f.run(|p| {
+            a4_count.fetch_add(1, Ordering::SeqCst);
+            run_stored_stage_budgeted(&shared, p, 10, 8192)
+        }),
         Finish::Complete
     );
+    assert_eq!(a4_count.load(Ordering::SeqCst), 1);
+    assert!(matches!(
+        engine.adopt_scanner(&cap),
+        Err(crate::scan_lifecycle::AdmissionError::Busy)
+    ));
+    assert!(!shared.stored.in_batch());
     assert!(!shared.scan.is_busy());
 }
 
@@ -1821,7 +1859,8 @@ fn actual_engine_cancel_after_registration_cannot_reset_owner_or_start_baseline(
         records: 10,
     };
     let engine = Arc::new(crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap());
-    let b = engine.open().unwrap();
+    let b = Arc::new(engine.open_strict().unwrap());
+    let worker_batch = b.clone();
     let cancel = b.cancel_handle();
     let (admitted_tx, admitted_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
@@ -1835,7 +1874,7 @@ fn actual_engine_cancel_after_registration_cannot_reset_owner_or_start_baseline(
                 .into(),
             ..Default::default()
         };
-        let result = runner.audit_after_admission(e, || {
+        let result = runner.audit_in_after_admission(&worker_batch, e, || {
             admitted_tx.send(()).unwrap();
             release_rx
                 .recv_timeout(std::time::Duration::from_secs(2))
@@ -1858,7 +1897,7 @@ fn actual_engine_cancel_after_registration_cannot_reset_owner_or_start_baseline(
     assert!(matches!(result.handoff, Ok(Handoff::Joined)));
     assert!(shared.scan.stop.load(Ordering::SeqCst));
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
-    let Handoff::Finalize(f) = b.finish().unwrap() else {
+    let Handoff::Finalize(f) = Arc::try_unwrap(b).ok().unwrap().finish().unwrap() else {
         panic!("finalizer")
     };
     assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
@@ -2098,10 +2137,14 @@ fn actual_batch_active_final_close_never_reports_complete() {
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
     let (start_tx, start_rx) = std::sync::mpsc::sync_channel(1);
     let worker = std::thread::spawn(move || {
-        start_rx
+        let context = start_rx
             .recv_timeout(std::time::Duration::from_secs(2))
             .unwrap();
-        runner.audit_after_admission(
+        let crate::scan_lifecycle::ExecutionContext::Legacy(cap) = context else {
+            panic!("legacy")
+        };
+        runner.audit_in_scanner(
+            &cap,
             crate::net::HistEntry {
                 req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:0\r\n\r\n"
                     .to_vec()
@@ -2117,9 +2160,11 @@ fn actual_batch_active_final_close_never_reports_complete() {
         )
     });
     // Separate batch starts before audit so final close owns the obligation.
+    let (retained_tx, retained_rx) = std::sync::mpsc::channel();
     let result = engine
-        .audit_batch_before_finish(vec![], || {
-            start_tx.send(()).unwrap();
+        .audit_batch_before_finish(vec![], |batch| {
+            retained_tx.send(batch.context().cancel_handle()).unwrap();
+            start_tx.send(batch.context()).unwrap();
             admitted_rx
                 .recv_timeout(std::time::Duration::from_secs(2))
                 .unwrap();
@@ -2142,6 +2187,12 @@ fn actual_batch_active_final_close_never_reports_complete() {
         audit.handoff,
         Err(AdmissionError::IncompleteActive)
     ));
+    assert_eq!(
+        retained_rx.recv().unwrap().aggregate().unwrap().outcome,
+        crate::scan_lifecycle::Finish::Incomplete
+    );
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
+    assert!(!shared.stored.in_batch());
     assert!(matches!(
         engine.open().unwrap().finish(),
         Ok(Handoff::Finalize(_))

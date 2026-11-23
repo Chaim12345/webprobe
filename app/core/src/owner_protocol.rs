@@ -944,6 +944,51 @@ mod tests {
             assert!(!shared.stored.in_batch());
         }
     }
+    #[test]
+    fn scanner_capability_adoption_rejects_foreign_expired_cancelled_and_closed() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let (audit, cap, _) = c.admit_standalone(item()).unwrap();
+        let other = Coordinator::new(crate::net::Shared::new(), limits()).unwrap();
+        assert!(matches!(
+            other.adopt_scanner(&cap),
+            Err(crate::scan_lifecycle::AdmissionError::Busy)
+        ));
+        assert!(matches!(
+            c.open(),
+            Err(crate::scan_lifecycle::AdmissionError::Busy)
+        ));
+        let adopted = c.adopt_scanner(&cap).unwrap();
+        assert!(matches!(audit.complete().unwrap(), Handoff::Joined));
+        // Audit lease has expired, even though its owner still lives through adopted batch.
+        assert!(matches!(
+            c.adopt_scanner(&cap),
+            Err(crate::scan_lifecycle::AdmissionError::Busy)
+        ));
+        finish(adopted);
+        assert!(matches!(
+            c.adopt_scanner(&cap),
+            Err(crate::scan_lifecycle::AdmissionError::Busy)
+        ));
+        let (audit, cancelled, _) = c.admit_standalone(item()).unwrap();
+        cancelled.owner.cancel();
+        assert!(matches!(
+            c.adopt_scanner(&cancelled),
+            Err(crate::scan_lifecycle::AdmissionError::Busy)
+        ));
+        drop(audit);
+        assert!(!shared.scan.is_busy());
+        assert!(!shared.stored.in_batch());
+        let (audit, stale, _) = c.admit_standalone(item()).unwrap();
+        stale.generation.close().unwrap();
+        assert!(matches!(
+            c.adopt_scanner(&stale),
+            Err(crate::scan_lifecycle::AdmissionError::Internal)
+        ));
+        drop(audit);
+        assert!(!shared.scan.is_busy());
+        assert!(!shared.stored.in_batch());
+    }
     fn task(id: u64) -> crate::tasks::ScanTask {
         crate::tasks::ScanTask {
             id,
