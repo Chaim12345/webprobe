@@ -4405,8 +4405,18 @@ fn inherited_net_refused_h2_retry_retains_old_cancelled_context_after_reset() {
         port,
         b"GET /refused HTTP/1.1\r\nHost: localhost\r\n\r\n",
     );
-    assert!(response.resp.is_none());
-    assert!(response.error.unwrap_or_default().contains("context"));
+    assert!(
+        response.resp.is_none(),
+        "unexpected H2 response: {:?}",
+        response.resp
+    );
+    let diagnostic = response.error.unwrap_or_default();
+    assert!(
+        diagnostic.contains("context"),
+        "H2 refusal/reset diagnostic={diagnostic:?}; opened={}; protocol={}",
+        shared.conns_opened.load(Ordering::SeqCst),
+        last_protocol()
+    );
     let listener = join(server);
     listener.set_nonblocking(true).unwrap();
     assert_eq!(
