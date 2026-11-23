@@ -270,12 +270,14 @@ mod tests {
     /// round-trips.
     #[test]
     fn user_options_round_trip() {
-        let mut api = ApiConfig::default();
-        api.enabled = true;
-        api.port = 1338;
-        api.listen_mode = "all_interfaces".to_string();
-        api.insecure_mode = true;
-        api.keys = vec!["abc".to_string()];
+        let api = ApiConfig {
+            enabled: true,
+            port: 1338,
+            listen_mode: "all_interfaces".to_string(),
+            insecure_mode: true,
+            keys: vec!["abc".to_string()],
+            ..Default::default()
+        };
         let json = export_user_options(&api);
         assert_eq!(json["user_options"]["misc"]["api"]["port"], json!(1338));
         assert_eq!(json["user_options"]["misc"]["api"]["insecure_mode"], Value::Bool(true));
