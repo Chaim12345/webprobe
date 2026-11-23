@@ -517,4 +517,5 @@ mod tests {
 }
 
 #[cfg(test)]
+#[path = "interactsh_route_tests.rs"]
 mod interactsh_route_tests;
