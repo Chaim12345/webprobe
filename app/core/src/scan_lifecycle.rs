@@ -371,11 +371,11 @@ impl Coordinator {
         let mut tasks = self.shared.tasks.lock().unwrap();
         let mut state = self.state.lock_on(&self.shared);
         let registration = state.0.dispatch.get(key).ok_or(DispatchError::Stale)?;
-        if !registration
-            .control
-            .as_ref()
-            .is_some_and(|c| Arc::ptr_eq(&c.owner, &control.owner))
-        {
+        if !registration.control.as_ref().is_some_and(|c| {
+            Arc::ptr_eq(&c.owner, &control.owner)
+                && c.coordinator.ptr_eq(&control.coordinator)
+                && Arc::ptr_eq(&c.pause, &control.pause)
+        }) {
             return Err(DispatchError::Stale);
         }
         let task = tasks

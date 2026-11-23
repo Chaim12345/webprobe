@@ -700,6 +700,28 @@ mod tests {
             let batch = c.dispatch(&key, true, false).unwrap();
             let control = batch.control().unwrap();
             let completion = TaskCompletion::new(&c, &key, control.clone());
+            assert_eq!(
+                completion.publish(Completion::Terminal(Finish::Complete)),
+                Err(DispatchError::Busy)
+            );
+            assert_eq!(
+                shared.tasks.lock().unwrap()[0].state,
+                crate::tasks::TaskState::Running
+            );
+            let mut forged = control.clone();
+            forged.pause = Arc::new(Default::default());
+            assert_eq!(
+                TaskCompletion::new(&c, &key, forged)
+                    .publish(Completion::Terminal(Finish::Complete)),
+                Err(DispatchError::Stale)
+            );
+            let mut forged = control.clone();
+            forged.coordinator = Weak::new();
+            assert_eq!(
+                TaskCompletion::new(&c, &key, forged)
+                    .publish(Completion::Terminal(Finish::Complete)),
+                Err(DispatchError::Stale)
+            );
             let (audit, _, _) = c.admit_in(&batch, item()).unwrap();
             let (submitted, rx) = Submission::new(audit);
             submitted.run(|| Finish::Complete);
@@ -717,10 +739,12 @@ mod tests {
             } else {
                 finish(batch);
             }
+            // Intentionally wrong labels: retained published aggregate alone
+            // determines the record. Neither is evidence of user cancellation.
             let terminal = if abandoned {
-                Completion::Abandoned
-            } else {
                 Completion::Terminal(Finish::Complete)
+            } else {
+                Completion::Abandoned
             };
             assert_eq!(completion.publish(terminal), Ok(ControlResult::Applied));
             assert_eq!(
