@@ -2267,9 +2267,9 @@ fn listener_redirect_and_non_proxy_style_requests() {
     });
     let spec = ListenerSpec::new("127.0.0.1", free_port());
     let state = Arc::new(ListenerState::new(spec.clone()));
-    let gen = shared.listener_generation.load(Ordering::SeqCst);
+    let r#gen = shared.listener_generation.load(Ordering::SeqCst);
     let (sh, st) = (shared.clone(), state.clone());
-    let worker = std::thread::spawn(move || listener_worker(sh, st, gen));
+    let worker = std::thread::spawn(move || listener_worker(sh, st, r#gen));
     let addr = format!("127.0.0.1:{}", spec.port);
     let ask = |request: String| -> String {
         let mut client = None;
@@ -2335,10 +2335,10 @@ fn extra_listener_serves_traffic() {
     });
     let spec = ListenerSpec::new("127.0.0.1", free_port());
     let state = Arc::new(ListenerState::new(spec.clone()));
-    let gen = shared.listener_generation.load(Ordering::SeqCst);
+    let r#gen = shared.listener_generation.load(Ordering::SeqCst);
     let sh = shared.clone();
     let st = state.clone();
-    let worker = std::thread::spawn(move || listener_worker(sh, st, gen));
+    let worker = std::thread::spawn(move || listener_worker(sh, st, r#gen));
     // Wait for the worker to bind.
     let addr = format!("127.0.0.1:{}", spec.port);
     let mut up = None;

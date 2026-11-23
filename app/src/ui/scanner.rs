@@ -440,13 +440,13 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
                     .unwrap_or_else(|| format!("http://{}{}", i.host, i.path));
                 ui.ctx().copy_text(url);
             }
-        } else if let Some(ids) = crate::issue_view::apply_issue_action(
+        } else { match crate::issue_view::apply_issue_action(
             &mut app.shared.issues.lock().unwrap(),
             id,
             &action,
-        ) {
+        ) { Some(ids) => {
             report_ids = Some(ids);
-        }
+        } _ => {}}}
         if action == crate::issue_view::IssueAction::Delete && app.scan_sel == Some(id) {
             app.scan_sel = None;
         }

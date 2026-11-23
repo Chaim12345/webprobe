@@ -87,7 +87,7 @@ pub(crate) struct PassiveCheck {
 }
 
 macro_rules! unit {
-    ($c:expr, $run:expr) => {
+    ($c:expr_2021, $run:expr_2021) => {
         PassiveCheck {
             id: $c.id,
             issue: $c.name,

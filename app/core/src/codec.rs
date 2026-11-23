@@ -22,7 +22,7 @@ pub enum BodyKind {
     None,
 }
 
-fn header_values<'a>(head: &'a str, name: &str) -> impl Iterator<Item = &'a str> {
+fn header_values<'a>(head: &'a str, name: &str) -> impl Iterator<Item = &'a str> + use<'a> {
     let lower = name.to_ascii_lowercase();
     head.lines().filter_map(move |line| {
         let (k, v) = line.split_once(':')?;

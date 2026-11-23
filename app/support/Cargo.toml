@@ -1,7 +1,8 @@
 [package]
 name = "webprobe-support"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 # Stage A (#37): acyclic leaf modules extracted from webprobe-core so the
 # core crate is smaller and these compile in parallel. No dependency on
