@@ -2147,3 +2147,7 @@ mod tests {
         assert!(conn.start_request(&get_request()).is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "h2_coverage_tests.rs"]
+mod coverage_tests;
