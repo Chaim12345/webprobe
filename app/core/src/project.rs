@@ -1566,12 +1566,12 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
             run_save(&path, &data, done);
         }
     };
-    if let Err(e) = std::thread::Builder::new()
+    if let Err(_e) = std::thread::Builder::new()
         .name("project-save".into())
         .spawn(worker)
     {
         // No thread: save on this one rather than lose the snapshot.
-        eprintln!("webprobe: project-save thread unavailable ({e}); saving inline");
+        tracing::warn!(target: "webprobe", event_code = "project.save.thread_failed", "Project-save worker unavailable; saving inline");
         loop {
             let job = lock.lock().unwrap().pending.pop_front();
             match job {

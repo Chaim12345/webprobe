@@ -302,11 +302,9 @@ pub fn spill(body: &Body) -> Body {
                 len: body.len(),
             })
         }
-        Err(e) => {
+        Err(_e) => {
             if st.retry_at.is_none() {
-                eprintln!(
-                    "webprobe: history bodies stay in memory for now, the body store failed: {e}"
-                );
+                tracing::warn!(target: "webprobe", event_code = "body.store.failed", "Body store failed; keeping history in memory temporarily");
             }
             // Start a fresh segment next time and back off for a minute.
             st.current = None;

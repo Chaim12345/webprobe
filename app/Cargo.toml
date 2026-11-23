@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tracing.workspace = true
 # SIGTERM / SIGINT close the window cleanly (project saved, no crash prompt).
 signal-hook.workspace = true
 webprobe-core = { path = "core" }
@@ -69,6 +70,8 @@ default-members = [".", "core"]
 # reference them with `workspace = true`. Member-only versions stay in the
 # member manifests.
 [workspace.dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi"] }
 signal-hook = "0.3"
 flate2 = "1"
 regex = "1"

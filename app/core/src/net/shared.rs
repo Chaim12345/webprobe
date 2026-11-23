@@ -340,6 +340,20 @@ impl Shared {
         })
     }
 
+    /// Structured, traffic-free operational event, also shown in the UI.
+    pub fn event(
+        &self,
+        level: crate::diagnostics::Level,
+        code: &'static str,
+        message: &'static str,
+        fields: &[crate::diagnostics::Field],
+    ) {
+        crate::diagnostics::emit(level, code, message, fields);
+        self.log(&crate::diagnostics::summary(code, message, fields));
+    }
+
+    /// Legacy UI-only messages. Never forward these to an external subscriber:
+    /// some callers include traffic, extension output or arbitrary error text.
     pub fn log(&self, msg: &str) {
         let ts = util::now_secs();
         {
@@ -510,5 +524,64 @@ impl Shared {
         if let Some(hooks) = scan_hooks() {
             hooks.add_issues(self, issues);
         }
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+    use crate::diagnostics::{Field, Level};
+
+    #[test]
+    fn structured_events_keep_ui_ring_bounded_and_wake_frontend() {
+        let shared = Shared::new();
+        let wakes = Arc::new(AtomicUsize::new(0));
+        let counter = wakes.clone();
+        shared.set_waker(Arc::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        }));
+        for i in 0..503 {
+            shared.event(
+                Level::Info,
+                "test.event",
+                "Test event",
+                &[Field::Count("n", i)],
+            );
+        }
+        let events = shared.events.lock().unwrap();
+        assert_eq!(events.len(), 500);
+        assert!(events
+            .first()
+            .unwrap()
+            .ends_with("test.event: Test event n=3"));
+        assert!(events
+            .last()
+            .unwrap()
+            .ends_with("test.event: Test event n=502"));
+        // Wakes are coalesced (see `Shared::wake`): every event either woke the
+        // frontend or was counted as coalesced, and the first one always woke it.
+        let woke = wakes.load(Ordering::SeqCst) as u64;
+        assert!(woke >= 1);
+        assert_eq!(woke + shared.wakes_coalesced.load(Ordering::SeqCst), 503);
+    }
+
+    #[test]
+    fn scanner_rejection_does_not_log_request_or_cookie() {
+        let shared = Shared::new();
+        crate::scan::start_active_scan(
+            shared.clone(),
+            HistEntry {
+                req_raw: b"GET /?token=secret-query HTTP/1.1\r\nCookie: secret-cookie\r\n\r\n"
+                    .to_vec()
+                    .into(),
+                ..Default::default()
+            },
+            &[],
+            &[],
+        );
+        let events = shared.events.lock().unwrap().join("\n");
+        assert!(events.contains("scan.missing_host"));
+        assert!(!events.contains("secret"));
+        assert!(!events.contains("Cookie"));
     }
 }

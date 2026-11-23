@@ -226,6 +226,7 @@ fn scan_urls(mut args: Vec<String>) {
 }
 
 fn main() {
+    webprobe_core::diagnostics::init_stderr();
     webprobe_core::scan::register_scan_hooks();
     webprobe_core::scan::register_task_ops();
     webprobe_core::scan::register_type_checks();

@@ -2888,6 +2888,20 @@ const CHARACTERISATION_ISSUES: &[(&str, &str, &str, &str)] = &[
         "Firm",
         "/board",
     ),
+    // G.11: the lab pages reflect the query into link hrefs, so the
+    // `<r3>&<r3>` probe reads as client-side parameter pollution there.
+    (
+        "Client-side HTTP parameter pollution (reflected)",
+        "low",
+        "Tentative",
+        "/go",
+    ),
+    (
+        "Client-side HTTP parameter pollution (reflected)",
+        "low",
+        "Tentative",
+        "/search",
+    ),
     ("Cross-origin resource sharing", "info", "Certain", "/board"),
     ("Cross-origin resource sharing", "info", "Certain", "/go"),
     ("Cross-origin resource sharing", "info", "Certain", "/item"),
@@ -3684,6 +3698,16 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                     "<html><body>{}</body></html>",
                     list(&comments.lock().unwrap())
                 ))
+            } else if head.starts_with("GET /embed") {
+                // Every stored comment in CSS, attribute, form-target and
+                // link-target positions (the G.11 stored lab).
+                let shown = comments
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|x| format!("<style>{x}</style><div data-x=\"{x}\"></div><form action=\"{x}\"></form><a href=\"{x}\">l</a>"))
+                    .collect::<String>();
+                Some(format!("<html><body>{shown}</body></html>"))
             } else if head.starts_with("POST /search") {
                 let q = field("q=").unwrap_or_default();
                 let shown = if post_only {
@@ -3814,6 +3838,112 @@ fn stored_input_pairs_across_items_and_stage_a4_finds_stored_xss() {
         shared.scan.total.load(Ordering::SeqCst),
         shared.scan.done.load(Ordering::SeqCst)
     );
+}
+
+/// The G.11 stored families: input stored by POST /comment and embedded
+/// by GET /embed in style/attribute/form/link positions is found by
+/// stage A4's stored CSS, HPP, form-action and link-manipulation checks.
+#[test]
+fn stage_a4_finds_the_stored_g11_families() {
+    let expect = [
+        ("Link manipulation (stored)", "info", "Firm"),
+        ("CSS injection (stored)", "medium", "Tentative"),
+        (
+            "Client-side HTTP parameter pollution (stored)",
+            "low",
+            "Tentative",
+        ),
+        ("Form action hijacking (stored)", "medium", "Tentative"),
+    ];
+    for (name, sev, confidence) in expect {
+        let (port, _) = guestbook(false);
+        let shared = Shared::new();
+        let item = |method: &str, path: &str, body: &str| {
+            let entry = guestbook_entry(port, method, path, body);
+            crate::stored::Item {
+                req: String::from_utf8_lossy(&entry.req_raw).into_owned(),
+                entry,
+                host: "127.0.0.1".into(),
+                port,
+                https: false,
+            }
+        };
+        let pair = crate::stored::Pair {
+            item: item("POST", "/comment", "c=hi"),
+            point: InsertionPoint::new(IpKind::Body, "c", "hi"),
+            retrieval: item("GET", "/embed", ""),
+            injection: (vec![], None),
+        };
+        let cx = checks::PairCtx::new(shared.clone(), pair);
+        checks::STORED_CHECKS
+            .iter()
+            .find(|c| c.issue() == name)
+            .unwrap()
+            .run(&cx);
+
+        let hits = issues_named(&shared, name);
+        let h = hits
+            .iter()
+            .find(|i| i.path == "/comment")
+            .unwrap_or_else(|| {
+                panic!(
+                    "{name} not reported: {:?}",
+                    hits.iter().map(|i| i.path.clone()).collect::<Vec<_>>()
+                )
+            });
+        assert_eq!(
+            (h.sev.as_str(), h.confidence.as_str()),
+            (sev, confidence),
+            "{name}"
+        );
+        assert!(h.detail.contains("GET /embed"), "{name}: {}", h.detail);
+    }
+}
+
+#[test]
+fn stored_g11_skips_unsafe_retrieval_and_stops_after_first_family_hit() {
+    let (port, hits) = guestbook(false);
+    let item = |method: &str, path: &str, body: &str| {
+        let entry = guestbook_entry(port, method, path, body);
+        crate::stored::Item {
+            req: String::from_utf8_lossy(&entry.req_raw).into_owned(),
+            entry,
+            host: "127.0.0.1".into(),
+            port,
+            https: false,
+        }
+    };
+    let shared = Shared::new();
+    let pair = |method: &str| crate::stored::Pair {
+        item: item("POST", "/comment", "c=hi"),
+        point: InsertionPoint::new(IpKind::Body, "c", "hi"),
+        retrieval: item(method, "/embed", ""),
+        injection: (vec![], None),
+    };
+    for method in ["POST", "PUT", "DELETE"] {
+        let cx = checks::PairCtx::new(shared.clone(), pair(method));
+        for check in checks::STORED_CHECKS.iter().skip(1) {
+            check.run(&cx);
+        }
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            0,
+            "{method} retrieval sends nothing"
+        );
+    }
+    let cx = checks::PairCtx::new(shared.clone(), pair("GET"));
+    for check in checks::STORED_CHECKS.iter().skip(1) {
+        check.run(&cx);
+    }
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        2,
+        "one injection and retrieval, no later families"
+    );
+    assert_eq!(shared.issues.lock().unwrap().len(), 1);
+    assert!(!cx.g11_allowed());
+    let head = checks::PairCtx::new(shared, pair("HEAD"));
+    assert!(head.g11_allowed(), "HEAD retrieval is a safe method");
 }
 
 /// The retrieval item may be a POST: only POST /search shows the stored

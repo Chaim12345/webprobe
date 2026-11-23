@@ -446,6 +446,187 @@ impl RequestCheck for SpoofableClientIp {
     }
 }
 
+/// Remove `authorization`, `cookie` and `x-*` headers — except
+/// `x-requested-with` — from a raw request (burp.Zii_.java:25-64),
+/// returning the rewritten request and the names removed.
+/// Bare-LF headers are not stripped; this helper expects CRLF.
+fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
+    let Some(end) = util::find_head_end(raw) else {
+        return (raw.to_vec(), Vec::new());
+    };
+    let head = String::from_utf8_lossy(&raw[..end]);
+    let mut out = String::new();
+    let mut removed = Vec::new();
+    for (i, line) in head.split("\r\n").enumerate() {
+        if line.is_empty() {
+            continue;
+        }
+        if i > 0 {
+            if let Some((k, _)) = line.split_once(':') {
+                let k = k.trim();
+                let drop = k.eq_ignore_ascii_case("authorization")
+                    || k.eq_ignore_ascii_case("cookie")
+                    || (k.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-"))
+                        && !k.eq_ignore_ascii_case("x-requested-with"));
+                if drop {
+                    removed.push(k.to_string());
+                    continue;
+                }
+            }
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    out.push_str("\r\n");
+    let mut v = out.into_bytes();
+    v.extend_from_slice(&raw[end..]);
+    (v, removed)
+}
+
+/// Total JSON nodes in a body (0 when the body is not JSON): Burp's
+/// equivalence metric counts parsed nodes either way (Zcxn.java:74-92).
+fn json_node_count(body: &[u8]) -> i64 {
+    fn count(v: &serde_json::Value) -> i64 {
+        1 + match v {
+            serde_json::Value::Array(a) => a.iter().map(count).sum(),
+            serde_json::Value::Object(m) => m.values().map(count).sum(),
+            _ => 0,
+        }
+    }
+    serde_json::from_slice::<serde_json::Value>(body)
+        .map(|v| count(&v))
+        .unwrap_or(0)
+}
+
+/// The text of the first <title> element, trimmed ("" when none).
+fn page_title(body: &[u8]) -> String {
+    let text = String::from_utf8_lossy(body);
+    let lower = text.to_lowercase();
+    let Some(s) = lower.find("<title") else {
+        return String::new();
+    };
+    let Some(gt) = lower[s..].find('>') else {
+        return String::new();
+    };
+    let start = s + gt + 1;
+    let Some(e) = lower[start..].find("</title") else {
+        return String::new();
+    };
+    text[start..start + e].trim().to_string()
+}
+
+/// Burp's broken-access-control equivalence (Zcxn.java:74-92,117-123):
+/// same status, same JSON node count, and — for an HTML reference — the
+/// same page title, otherwise the same line count.
+fn bac_equivalent(reference: &[u8], candidate: &[u8]) -> bool {
+    let pa = util::parse_http(reference);
+    let pb = util::parse_http(candidate);
+    let status_a = pa.first.split_whitespace().nth(1).unwrap_or("");
+    let status_b = pb.first.split_whitespace().nth(1).unwrap_or("");
+    if status_a != status_b {
+        return false;
+    }
+    let body_a = &reference[pa.head_len.min(reference.len())..];
+    let body_b = &candidate[pb.head_len.min(candidate.len())..];
+    if json_node_count(body_a) != json_node_count(body_b) {
+        return false;
+    }
+    let html = util::get_header(&pa.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .contains("html");
+    if html {
+        page_title(body_a) == page_title(body_b)
+    } else {
+        body_a.iter().filter(|b| **b == b'\n').count()
+            == body_b.iter().filter(|b| **b == b'\n').count()
+    }
+}
+
+/// Broken access control, the established core of burp.Zcxn
+/// (APR_BrokenAccessControl, in-session per request, KB 00100850):
+/// the request with a fresh random URL parameter, and the same request
+/// with authorization/cookie/x-* headers removed (x-requested-with kept,
+/// Zii_.java:25-64), are sent for eight rounds; reported when every
+/// round's responses stay equivalent — removing the session changed
+/// nothing. Zr0k.java:20-59 builds the issue with both exchanges.
+/// Information (KB); confidence not established: Tentative here.
+/// Guards WebProbe adds because Burp's own preconditions are stripped:
+/// the base response must be 2xx (a request the session already fails
+/// proves nothing) and some header must actually be removed.
+/// Not established and omitted: the accepted content-type set ZP, the
+/// minimize-false-negatives / false-positive-reduction configuration
+/// gating, and the Zbwz browser/session verdicts.
+pub(crate) struct BrokenAccessControl;
+
+impl RequestCheck for BrokenAccessControl {
+    fn id(&self) -> &'static str {
+        "active.broken-access-control"
+    }
+    fn issue(&self) -> &'static str {
+        "Broken access control"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
+            return;
+        }
+        // Replay GET only. HEAD has no body for equivalence checks, and
+        // POST or other methods could repeat application side effects.
+        let method = cx.req.split_whitespace().next().unwrap_or("");
+        if !method.eq_ignore_ascii_case("GET") {
+            return;
+        }
+        let base = util::parse_http(&cx.baseline.raw);
+        let status: u16 = base
+            .first
+            .split_whitespace()
+            .nth(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        if !(200..300).contains(&status) {
+            return;
+        }
+        let mut pair = None;
+        let mut removed_names = Vec::new();
+        for round in 0..8 {
+            if cx.stopped() {
+                return;
+            }
+            let marker = rnd_letters(8);
+            let full = super::cache::with_query_param(cx.req.as_bytes(), &marker, &marker);
+            let (stripped, removed) = strip_auth_headers(&full);
+            if removed.is_empty() {
+                return;
+            }
+            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else {
+                return;
+            };
+            if !bac_equivalent(&a, &b) {
+                return;
+            }
+            if round == 0 {
+                pair = Some((full, stripped, a, b));
+                removed_names = removed;
+            }
+        }
+        let Some((full, stripped, a, b)) = pair else {
+            return;
+        };
+        let mut i = mk(
+            "info",
+            self.issue(),
+            &cx.entry,
+            format!("The application appears not to enforce access control on this request.<br><br>Removing the session material (<b>{}</b>) left the response equivalent to the authenticated response over eight rounds (status, page title / line count and JSON structure), so the resource appears to be reachable without authentication.", removed_names.join(", ")),
+        )
+        .with_evidence(vec![ScanEvidence::new(&full, Some(&a)), ScanEvidence::new(&stripped, Some(&b))]);
+        i.confidence = "Tentative".into();
+        cx.report(vec![i]);
+    }
+}
+
 /// The backup-file names Burp tries for a file name (`stem` + `ext`, the
 /// extension with its dot), from the decoded literals of its four
 /// mutation families: burp.Zxc6 (prefixes), Zxfn (suffixes before the
@@ -859,6 +1040,101 @@ impl PointCheck for LinkManipulation {
     }
 }
 
+/// The G.11 reflected families share burp.Zb_5's applicability (every
+/// insertion-point kind, not server-side) and differ only in probe and
+/// reflection context; the impls below are that shape three times.
+macro_rules! g11_reflected_check {
+    ($name:ident, $id:literal, $issue:literal, $severity:literal, $runner:path, $doc:literal) => {
+        #[doc = $doc]
+        pub(crate) struct $name;
+
+        impl PointCheck for $name {
+            fn id(&self) -> &'static str {
+                $id
+            }
+            fn issue(&self) -> &'static str {
+                $issue
+            }
+            fn applies_to(&self, ip: &InsertionPoint) -> bool {
+                match &ip.kind {
+                    IpKind::Query
+                    | IpKind::Body
+                    | IpKind::Json(_)
+                    | IpKind::Multipart { .. }
+                    | IpKind::Cookie
+                    | IpKind::Header
+                    | IpKind::PathFolder(_)
+                    | IpKind::PathFilename(_)
+                    | IpKind::EntireBody
+                    | IpKind::XmlParam { .. }
+                    | IpKind::XmlTag { .. }
+                    | IpKind::XmlAttr { .. }
+                    | IpKind::ParamName(_)
+                    | IpKind::Base64 { .. } => true,
+                }
+            }
+            fn server_side(&self) -> bool {
+                false
+            }
+            fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
+                if cx.stopped() {
+                    return;
+                }
+                let ip = pt.ip;
+                let rec = Recorder::default();
+                let send = |payload: &str| -> Option<Vec<u8>> {
+                    if cx.stopped() {
+                        return None;
+                    }
+                    let new_req = inject_payload(&cx.req, ip, &payload);
+                    rec.send(cx, payload, new_req.as_bytes())
+                };
+                if let Some((payload, context, _resp)) = $runner(send) {
+                    cx.report(vec![mk_point(
+                        $issue,
+                        $severity,
+                        "Tentative",
+                        &cx.entry,
+                        ip,
+                        format!(
+                            "The injected value <b>{}</b> was reflected in {}.",
+                            util::html_encode(&payload),
+                            context
+                        ),
+                    )
+                    .with_evidence(evidence([rec.last(&payload)]))]);
+                }
+                cx.progress();
+            }
+        }
+    };
+}
+
+g11_reflected_check!(
+    CssInjectionReflected,
+    "active.css-injection",
+    "CSS injection (reflected)",
+    "medium",
+    crate::scan::run_css_reflected,
+    "CSS injection (reflected), burp.Zb_5 -> Zw0x, KB 00501300: the probe must reflect in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href). Burp's payload literal and applicable-tag map are stripped (not established): plain token, contextual detection, REPLACE only. Severity Medium (KB); confidence not established: Tentative (a single contextual reflection, no breakout confirmation)."
+);
+g11_reflected_check!(
+    HppReflected,
+    "active.client-side-hpp",
+    "Client-side HTTP parameter pollution (reflected)",
+    "low",
+    crate::scan::run_hpp_reflected,
+    "Client-side HTTP parameter pollution (reflected), burp.Zb_5 -> Zi4q, KB 00501400: a `<random3>&<random3>` pair (the stripped suffix is omitted, not established) must reflect in a URL-bearing attribute (href/src/action/formaction), JavaScript string or response header. Severity Low (KB); confidence not established: Tentative (a single contextual reflection, no confirmation probe)."
+);
+g11_reflected_check!(
+    FormActionHijacking,
+    "active.form-action-hijacking",
+    "Form action hijacking (reflected)",
+    "medium",
+    crate::scan::run_form_action_reflected,
+    "Form action hijacking (reflected), burp.Zb_5 -> Zc51, KB 00501500: an injected URL must reflect as a form's action or an element's formaction. Severity Medium (KB); confidence not established: Tentative (single request, no confirmation)."
+);
+
 /// File path manipulation (burp.Zsl1).
 pub(crate) struct FilePathManipulation;
 
@@ -1213,6 +1489,144 @@ impl StoredCheck for StoredXss {
         cx.progress();
     }
 }
+
+/// The G.11 stored families share burp.Zb_5's stored half (the Ze20 /
+/// Zw0x / Zi4q / Zc51 selectors through the stored registry): every
+/// insertion-point kind, and not server-side, matching their reflected
+/// halves. Each probe is sent to the pair's injection item and the
+/// retrieval item's own request is replayed after it (burp.Zpqv.Z_).
+/// Stored G.11 checks submit their probes into the live application
+/// (comment fields, profiles and the like), as every stored-input
+/// scanner does; the probes are inert tokens and URLs, but operators
+/// should expect them to persist where the application stores input.
+/// No cleanup is attempted. Only GET/HEAD retrieval is replayed, and a
+/// first G.11 hit stops later G.11 families for this pair.
+macro_rules! g11_stored_check {
+    ($name:ident, $id:literal, $issue:literal, $severity:literal, $confidence:literal, $probes:expr, $hit:expr, $doc:literal) => {
+        #[doc = $doc]
+        pub(crate) struct $name;
+
+        impl StoredCheck for $name {
+            fn id(&self) -> &'static str {
+                $id
+            }
+            fn issue(&self) -> &'static str {
+                $issue
+            }
+            /// burp.Zb_5's stored half has no applicability test: every kind.
+            fn applies_to(&self, ip: &InsertionPoint) -> bool {
+                match &ip.kind {
+                    IpKind::Query
+                    | IpKind::Body
+                    | IpKind::Json(_)
+                    | IpKind::Multipart { .. }
+                    | IpKind::Cookie
+                    | IpKind::Header
+                    | IpKind::PathFolder(_)
+                    | IpKind::PathFilename(_)
+                    | IpKind::EntireBody
+                    | IpKind::XmlParam { .. }
+                    | IpKind::XmlTag { .. }
+                    | IpKind::XmlAttr { .. }
+                    | IpKind::ParamName(_)
+                    | IpKind::Base64 { .. } => true,
+                }
+            }
+            fn server_side(&self) -> bool {
+                false
+            }
+            fn run(&self, cx: &PairCtx) {
+                if cx.stopped() || !cx.g11_allowed() {
+                    return;
+                }
+                let pair = &cx.pair;
+                let ip = &pair.point;
+                let log: RefCell<Vec<ScanEvidence>> = RefCell::new(Vec::new());
+                let send = |payload: &str| -> Option<Vec<u8>> {
+                    if cx.stopped() {
+                        return None;
+                    }
+                    let chain = cx.send_following(&pair.item, &inject_payload(&pair.item.req, ip, payload));
+                    let (req, resp) = chain.into_iter().last()?;
+                    log.borrow_mut().push(ScanEvidence::new(req.as_bytes(), resp.as_deref()));
+                    resp
+                };
+                let retrieve = || -> Option<Vec<u8>> {
+                    if cx.stopped() {
+                        return None;
+                    }
+                    let chain = cx.send_following(&pair.retrieval, &pair.retrieval.req);
+                    let (req, resp) = chain.into_iter().last()?;
+                    log.borrow_mut().push(ScanEvidence::new(req.as_bytes(), resp.as_deref()));
+                    resp
+                };
+                if let Some((probe, what)) = crate::scan::run_g11_stored(&$probes, send, retrieve, $hit) {
+                    cx.note_g11_hit();
+                    let log = log.borrow();
+                    let ev: Vec<ScanEvidence> = log.iter().rev().take(2).rev().cloned().collect();
+                    cx.report(vec![mk_point(
+                        $issue,
+                        $severity,
+                        $confidence,
+                        &pair.item.entry,
+                        ip,
+                        format!(
+                            "The value <b>{}</b>, submitted in the {} in a previous request, was stored and returned in {} in the response to the later request {:?} ({}).",
+                            util::html_encode(&probe),
+                            ip.describe_short(false),
+                            what,
+                            pair.retrieval.req.lines().next().unwrap_or(""),
+                            pair.retrieval.url()
+                        ),
+                    )
+                    .with_evidence(ev)]);
+                }
+                cx.progress();
+            }
+        }
+    };
+}
+
+g11_stored_check!(
+    LinkManipulationStored,
+    "active.link-manipulation-stored",
+    "Link manipulation (stored)",
+    "info",
+    "Firm",
+    crate::scan::g11_link_probes(),
+    crate::scan::g11_link_stored_hit,
+    "Link manipulation (stored), burp.Zb_5 -> Ze20, KB 00501004: the Zpyp probes (random host/path under http://, https://, //, \\/ - established literals) must come back as a link or redirect target of the retrieval response. Severity Information (KB); confidence not established: Firm."
+);
+g11_stored_check!(
+    CssInjectionStored,
+    "active.css-injection-stored",
+    "CSS injection (stored)",
+    "medium",
+    "Tentative",
+    crate::scan::g11_css_probes(),
+    |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_css_match),
+    "CSS injection (stored), burp.Zb_5 -> Zw0x, KB 00501301: the token probe must be returned in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href) of the retrieval response. Severity Medium (KB); confidence not established: Tentative (retrieval proves storage, not breakout)."
+);
+g11_stored_check!(
+    HppStored,
+    "active.client-side-hpp-stored",
+    "Client-side HTTP parameter pollution (stored)",
+    "low",
+    "Tentative",
+    crate::scan::g11_hpp_probes(),
+    |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_hpp_match),
+    "Client-side HTTP parameter pollution (stored), burp.Zb_5 -> Zi4q, KB 00501401: the `<random3>&<random3>` probe (the stripped suffix is omitted, not established) must be returned in a URL-bearing attribute (href/src/action/formaction), JavaScript string or response header of the retrieval response. Severity Low (KB); confidence not established: Tentative (retrieval proves storage, not exploitability)."
+);
+g11_stored_check!(
+    FormActionHijackingStored,
+    "active.form-action-hijacking-stored",
+    "Form action hijacking (stored)",
+    "medium",
+    "Tentative",
+    crate::scan::g11_form_action_probes(),
+    |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_form_action_match),
+    "Form action hijacking (stored), burp.Zb_5 -> Zc51, KB 00501501: the injected URL must be returned as a form's action or an element's formaction in the retrieval response. Severity Medium (KB); confidence not established: Tentative (retrieval proves storage, not exploitability)."
+);
 
 /// Client-side template injection, burp.Zrmh.
 pub(crate) struct ClientTemplateInjection;
@@ -2127,5 +2541,63 @@ impl PointCheck for StoredEcho {
         }
         cx.progress();
         cx.pace(50);
+    }
+}
+
+#[cfg(test)]
+mod bac_helper_tests {
+    use super::*;
+
+    #[test]
+    fn strip_auth_headers_handles_non_ascii_names_without_panicking() {
+        let raw = "GET / HTTP/1.1\r\nHost: h\r\n�name: v\r\néname: v\r\nCookie: s\r\n\r\n";
+        let (out, removed) = strip_auth_headers(raw.as_bytes());
+        assert_eq!(removed, ["Cookie"]);
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("�name: v"));
+        assert!(out.contains("éname: v"));
+    }
+
+    #[test]
+    fn strip_auth_headers_drops_cookie_authorization_and_x_headers_only() {
+        let raw = b"POST /a?b=1 HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\nAuthorization: Bearer t\r\nX-Csrf: c\r\nX-Requested-With: XMLHttpRequest\r\nAccept: */*\r\nContent-Length: 3\r\n\r\nabc";
+        let (out, removed) = strip_auth_headers(raw);
+        assert_eq!(removed, ["Cookie", "Authorization", "X-Csrf"]);
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("X-Requested-With: XMLHttpRequest\r\n"));
+        assert!(text.contains("Host: h\r\n") && text.contains("Accept: */*\r\n"));
+        assert!(!text.to_lowercase().contains("cookie"));
+        assert!(text.ends_with("\r\n\r\nabc"), "body kept: {text:?}");
+    }
+
+    #[test]
+    fn marker_then_strip_keeps_query_body_and_request_line_for_get_and_post() {
+        use super::super::cache::with_query_param;
+        let get = b"GET /p HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\n\r\n";
+        let (s, r) = strip_auth_headers(&with_query_param(get, "mk", "mk"));
+        assert_eq!(r, ["Cookie"]);
+        assert!(String::from_utf8(s)
+            .unwrap()
+            .starts_with("GET /p?mk=mk HTTP/1.1\r\n"));
+        let post = b"POST /p?x=1 HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\nContent-Length: 2\r\n\r\nhi";
+        let (s, _) = strip_auth_headers(&with_query_param(post, "mk", "mk"));
+        let s = String::from_utf8(s).unwrap();
+        assert!(s.starts_with("POST /p?x=1&mk=mk HTTP/1.1\r\n"));
+        assert!(s.ends_with("\r\n\r\nhi"));
+        let trailing = b"GET /p? HTTP/1.1\r\nHost: h\r\n\r\n";
+        assert!(String::from_utf8(with_query_param(trailing, "mk", "mk"))
+            .unwrap()
+            .starts_with("GET /p?mk=mk HTTP/1.1"));
+    }
+
+    #[test]
+    fn json_node_count_and_page_title_follow_the_equivalence_metric() {
+        assert_eq!(json_node_count(br#"{"a":[1,2],"b":{"c":null}}"#), 6);
+        assert_eq!(json_node_count(b"<html>"), 0);
+        assert_eq!(
+            page_title(b"<HTML><head><TITLE> Acct </TITLE></head>"),
+            "Acct"
+        );
+        assert_eq!(page_title(b"no title here"), "");
     }
 }

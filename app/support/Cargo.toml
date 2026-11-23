@@ -7,6 +7,8 @@ edition = "2021"
 # core crate is smaller and these compile in parallel. No dependency on
 # webprobe-core; anything engine-facing stays in core.
 [dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
 base64 = "0.22"
 flate2 = "1"
 memmap2 = "0.9"
