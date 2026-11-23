@@ -3639,6 +3639,7 @@ pub fn project_controls(app: &mut App, ui: &mut Ui) {
 fn burp_options_json(app: &mut App, ui: &mut Ui) {
     use crate::feedback::{toast, Level};
     ui.add_space(6.0);
+    ui.label("Imported listener/API connection settings require restarting WebProbe to replace an existing server.");
     let opts_id = egui::Id::unique("burp_options_path");
     let mut opts_path: String = ui
         .data_mut(|d| d.get_temp(opts_id))
@@ -3717,12 +3718,12 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                     if notes.is_empty() {
                         toast(
                             Level::Success,
-                            format!("Project options loaded from {}", opts_path.trim()),
+                            format!("Project options loaded from {}; restart WebProbe for listener changes", opts_path.trim()),
                         );
                     } else {
                         toast(
                             Level::Warn,
-                            format!("Project options loaded with notes: {}", notes.join("; ")),
+                            format!("Project options loaded; restart WebProbe for listener changes. Notes: {}", notes.join("; ")),
                         );
                     }
                 }
@@ -3776,7 +3777,7 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                     if !notes.is_empty() {
                         toast(
                             Level::Warn,
-                            format!("User options loaded with notes: {}", notes.join("; ")),
+                            format!("User options loaded; existing API servers require restart for changes. Notes: {}", notes.join("; ")),
                         );
                     }
                 }

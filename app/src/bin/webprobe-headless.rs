@@ -174,6 +174,19 @@ fn take_opt(args: &mut Vec<String>, name: &str) -> Option<String> {
     Some(v)
 }
 
+/// Consume both project aliases in their original order, including repeats.
+fn take_project_file(args: &mut Vec<String>) -> Option<String> {
+    let mut selected = None;
+    while let Some(index) = args.iter().position(|a| matches!(a.as_str(), "--project" | "--project-file")) {
+        if index + 1 >= args.len() {
+            usage();
+        }
+        selected = Some(args.remove(index + 1));
+        args.remove(index);
+    }
+    selected
+}
+
 fn take_flag(args: &mut Vec<String>, name: &str) -> bool {
     match args.iter().position(|a| a == name) {
         Some(i) => {
@@ -236,10 +249,7 @@ fn proxy(mut args: Vec<String>) {
         std::process::exit(0);
     }
     // --project-file is Burp's name for --project.
-    let project_file = [take_opt(&mut args, "--project"), take_opt(&mut args, "--project-file")]
-        .into_iter()
-        .flatten()
-        .last();
+    let project_file = take_project_file(&mut args);
     let seconds: Option<u64> =
         take_opt(&mut args, "--seconds").map(|s| s.parse().unwrap_or_else(|_| usage()));
     if !args.is_empty() {
@@ -531,14 +541,14 @@ mod tests {
     #[test]
     fn project_file_alias_last_wins() {
         let mut args = strings(&["--project", "first.burp", "--project-file", "second.burp"]);
-        let project_file = [
-            take_opt(&mut args, "--project"),
-            take_opt(&mut args, "--project-file"),
-        ]
-        .into_iter()
-        .flatten()
-        .last();
+        let project_file = take_project_file(&mut args);
         assert_eq!(project_file.as_deref(), Some("second.burp"));
+        assert!(args.is_empty());
+        let mut args = strings(&["--project-file", "first.burp", "--project", "second.burp"]);
+        assert_eq!(take_project_file(&mut args).as_deref(), Some("second.burp"));
+        assert!(args.is_empty());
+        let mut args = strings(&["--project", "a", "--project", "b", "--project-file", "c"]);
+        assert_eq!(take_project_file(&mut args).as_deref(), Some("c"));
         assert!(args.is_empty());
     }
 }
