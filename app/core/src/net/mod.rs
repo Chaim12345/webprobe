@@ -136,3 +136,33 @@ mod hist_tests;
 
 #[cfg(test)]
 mod tool_state_tests;
+
+/// Experimental inherited-context seam only. No production send policy changes.
+/// Wrappers check status without charging: transport accounting is a separate
+/// unified patch, and this seam is not evidence of byte/attempt limits.
+#[cfg(test)]
+pub(crate) fn scanner_send_admission(shared: &Shared) -> Result<(), String> {
+    use crate::scan_lifecycle::{captured, ExecutionContext};
+    let inherited = captured();
+    if inherited.is_none() && TOOL.with(|t| t.get()) != Some("Scanner") {
+        return Ok(());
+    }
+    let context = inherited.ok_or("scanner execution context missing")?;
+    loop {
+        context
+            .validate(shared)
+            .map_err(|_| "scanner execution context cancelled, stale or mismatched")?;
+        if let ExecutionContext::Budgeted(permit) = &context {
+            permit
+                .ledger()
+                .reserve(&[])
+                .map_err(|_| "scanner execution ledger denied")?;
+        }
+        if !shared.scan.paused.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+#[cfg(test)]
+mod inherited_context_tests;

@@ -4348,3 +4348,67 @@ fn connect_tunnel_inner_request_dropped_by_extension_has_zero_egress() {
         "a dropped request is not an origin exchange"
     );
 }
+
+#[test]
+fn inherited_net_refused_h2_retry_retains_old_cancelled_context_after_reset() {
+    use super::inherited_context_tests::{accept, join, limits};
+    use crate::scan_lifecycle::{Coordinator, ExecutionContext};
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    let c = Coordinator::new(shared.clone(), limits()).unwrap();
+    let old = c.open().unwrap();
+    let context = old.context();
+    let cancellation = old.cancel_handle();
+    let _installed = context.enter(&shared).unwrap();
+    assert!(matches!(
+        crate::scan_lifecycle::captured(),
+        Some(ExecutionContext::Legacy(_))
+    ));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let co = c.clone();
+    let server = std::thread::spawn(move || {
+        let stream = accept(&listener);
+        let mut tls = StreamOwned::new(ServerConnection::new(config).unwrap(), stream);
+        let mut preface = [0; 24];
+        tls.read_exact(&mut preface).unwrap();
+        tls.write_all(&[0, 0, 0, 4, 0, 0, 0, 0, 0]).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            assert!(Instant::now() < deadline, "H2 fixture frame deadline");
+            let (ty, flags, sid, _) = read_frame(&mut tls);
+            if ty == 4 && flags & 1 == 0 {
+                tls.write_all(&[0, 0, 0, 4, 1, 0, 0, 0, 0]).unwrap();
+            }
+            if ty == 1 && sid == 1 {
+                break;
+            }
+        }
+        cancellation.cancel();
+        drop(old);
+        let _new = co.open().unwrap();
+        sh.scan.stop.store(false, Ordering::SeqCst);
+        tls.write_all(&[0, 0, 4, 3, 0, 0, 0, 0, 1, 0, 0, 0, 7])
+            .unwrap();
+        tls.flush().unwrap();
+        listener
+    });
+    let response = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /refused HTTP/1.1\r\nHost: localhost\r\n\r\n",
+    );
+    assert!(response.resp.is_none());
+    assert!(response.error.unwrap_or_default().contains("context"));
+    let listener = join(server);
+    listener.set_nonblocking(true).unwrap();
+    assert!(listener.accept().is_err());
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+}

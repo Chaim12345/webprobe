@@ -869,6 +869,24 @@ mod tests {
         drop(b);
     }
     #[test]
+    fn installed_guard_is_statically_neither_send_nor_sync() {
+        struct Check<T: ?Sized>(std::marker::PhantomData<T>);
+        trait AmbiguousSend<A> {
+            fn marker() {}
+        }
+        impl<T: ?Sized> AmbiguousSend<()> for Check<T> {}
+        impl<T: ?Sized + Send> AmbiguousSend<u8> for Check<T> {}
+        trait AmbiguousSync<A> {
+            fn marker() {}
+        }
+        impl<T: ?Sized> AmbiguousSync<()> for Check<T> {}
+        impl<T: ?Sized + Sync> AmbiguousSync<u8> for Check<T> {}
+        // If Installed acquires Send/Sync, inference has two applicable impls
+        // and compilation fails. This tests the real guard, not a stand-in.
+        let _ = <Check<Installed> as AmbiguousSend<_>>::marker;
+        let _ = <Check<Installed> as AmbiguousSync<_>>::marker;
+    }
+    #[test]
     fn permit_rejects_other_owner_and_cancel_prevents_callback() {
         let c = Coordinator::new(Shared::new(), limits()).unwrap();
         let b = c.open().unwrap();
