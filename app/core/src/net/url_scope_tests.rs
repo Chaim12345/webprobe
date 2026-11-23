@@ -238,18 +238,22 @@ fn read_request_collects_a_body_split_across_reads() {
 }
 
 #[test]
-fn read_request_returns_read_ahead_including_the_next_pipelined_request() {
+fn read_request_consumes_exactly_one_request_and_keeps_the_pipelined_next() {
     let first = b"POST /p HTTP/1.1\r\nContent-Length: 2\r\n\r\nab";
     let second = b"GET /next HTTP/1.1\r\n\r\n";
     let raw = [first.as_slice(), second.as_slice()].concat();
     let mut stream = Cursor::new(raw.as_slice());
 
-    // read_request returns whole reads, not just the declared body. A reader
-    // that supplies both requests at once has its second request consumed too.
-    let got = read_request(&mut stream).unwrap();
-    assert_eq!(&got[..first.len()], first);
-    assert_eq!(&got[first.len()..], second);
-    assert_eq!(got, raw);
+    // Exact consume (#110): a reader that supplies both requests at once gets
+    // back only the first framed request; the pipelined remainder stays in
+    // the caller-held pending buffer for the next call.
+    let mut pending = Vec::new();
+    let got = read_request_pending(&mut stream, &mut pending).unwrap();
+    assert_eq!(got, first, "head plus declared body only");
+    assert_eq!(pending, second, "the next request was read ahead, not consumed");
+    let got = read_request_pending(&mut stream, &mut pending).unwrap();
+    assert_eq!(got, second, "second request served from pending");
+    assert!(pending.is_empty());
     assert_eq!(stream.position(), raw.len() as u64);
     assert!(read_request(&mut stream).unwrap().is_empty());
 }
