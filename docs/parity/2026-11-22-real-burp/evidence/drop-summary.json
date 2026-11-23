@@ -1,0 +1,17 @@
+{
+  "fixture": "GET /admin-drop through each local proxy, existing demo extension loaded",
+  "origin_request_count": 0,
+  "burp": {
+    "curl_exit": 0,
+    "http_status": 200,
+    "content_type": "text/html; charset=utf-8",
+    "body_meaning": "Local Burp error page stating an extension dropped the request",
+    "response_body_sha256": "ea5e471ed4419135fafd46dc8007d23dd46bd52f9b0927522ab1014e783ecac2"
+  },
+  "webprobe": {
+    "curl_exit": 52,
+    "http_status": null,
+    "body_meaning": "Empty reply from server"
+  },
+  "caveat": "The Burp 200 is not an origin success."
+}
