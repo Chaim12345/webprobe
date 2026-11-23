@@ -20,6 +20,10 @@ pub(crate) struct Admission {
     batch_leases: usize,
     lease_overflow: bool,
     session: Arc<SessionClaims>,
+    #[cfg(test)]
+    pub(crate) protocol: Option<crate::scan_lifecycle::Run>,
+    #[cfg(test)]
+    pub(crate) dispatch: crate::owner_protocol::DispatchState,
 }
 pub struct AttemptScope {
     /// Sticky logical-run identity. Only accepted scope construction makes a
@@ -402,7 +406,6 @@ mod cancellation_identity_tests {
 }
 
 #[cfg(test)]
-pub(crate) fn experimental_scope(shared: &Arc<Shared>) -> Arc<AttemptScope> {
-    let state = shared.host_admission.0.lock().unwrap();
+pub(crate) fn protocol_scope(shared: &Shared, state: &Admission) -> Arc<AttemptScope> {
     AttemptScope::new(crate::scan::scan_dedup_of(shared), state.session.clone())
 }

@@ -79,6 +79,8 @@ type StoredPoint = (usize, InsertionPoint, Vec<u8>, Option<Vec<u8>>);
 
 #[derive(Default)]
 struct Inner {
+    #[cfg(test)]
+    generation: Option<std::sync::Weak<crate::host_probe_state::AttemptScope>>,
     items: Vec<Item>,
     /// (item, point) of each injected token.
     tokens: HashMap<String, usize>,
@@ -496,5 +498,274 @@ mod tests {
         s.close_batch();
         assert!(s.open_batch(), "a new batch clears");
         assert!(s.is_empty());
+    }
+}
+
+#[cfg(test)]
+impl Inner {
+    #[cfg(test)]
+    fn pair_bounded(
+        &self,
+        index: usize,
+        max_bytes: usize,
+        admit: impl FnOnce(usize) -> bool,
+    ) -> Result<Option<Pair>, ()> {
+        fn item_size(item: &Item) -> Option<usize> {
+            let e = &item.entry;
+            [
+                item.req.len(),
+                item.host.len(),
+                e.method.len(),
+                e.host.len(),
+                e.path.len(),
+                e.status.len(),
+                e.note.as_ref().map_or(0, String::len),
+                e.extension.len(),
+                e.title.len(),
+                e.cookies.len(),
+                e.ip.len(),
+            ]
+            .into_iter()
+            .try_fold(std::mem::size_of::<Item>(), usize::checked_add)
+        }
+        fn point_size(p: &InsertionPoint, depth: usize) -> Option<usize> {
+            if depth >= 16 {
+                return None;
+            }
+            let kind = match &p.kind {
+                webprobe_support::insertion::IpKind::Json(v) => {
+                    if v.len() > 256 {
+                        return None;
+                    }
+                    v.iter().try_fold(
+                        v.len().checked_mul(std::mem::size_of::<String>())?,
+                        |n, s| n.checked_add(s.len()),
+                    )?
+                }
+                webprobe_support::insertion::IpKind::Multipart { filename, .. } => {
+                    filename.as_ref().map_or(0, String::len)
+                }
+                _ => 0,
+            };
+            std::mem::size_of::<InsertionPoint>()
+                .checked_add(p.name.len())?
+                .checked_add(p.value.len())?
+                .checked_add(kind)?
+                .checked_add(match &p.parent {
+                    Some(p) => point_size(p, depth + 1)?,
+                    None => 0,
+                })
+        }
+        let g = self;
+        let Some(&(pidx, retrieval)) = g.pairs.get(index) else {
+            return Ok(None);
+        };
+        let Some((item, point, req, resp)) = g.points.get(pidx) else {
+            return Err(());
+        };
+        let Some(injection_item) = g.items.get(*item) else {
+            return Err(());
+        };
+        let Some(retrieval_item) = g.items.get(retrieval) else {
+            return Err(());
+        };
+        let bytes = item_size(injection_item)
+            .and_then(|n| n.checked_add(item_size(retrieval_item)?))
+            .and_then(|n| n.checked_add(point_size(point, 0)?))
+            .and_then(|n| n.checked_add(req.len()))
+            .and_then(|n| n.checked_add(resp.as_ref().map_or(0, Vec::len)))
+            .ok_or(())?;
+        if bytes > max_bytes || !admit(bytes) {
+            return Err(());
+        }
+        Ok(Some(Pair {
+            item: injection_item.clone(),
+            point: point.clone(),
+            retrieval: retrieval_item.clone(),
+            injection: (req.clone(), resp.clone()),
+        }))
+    }
+
+    fn add_item(&mut self, item: Item) -> usize {
+        let g = self;
+        g.items.push(item);
+        g.items.len() - 1
+    }
+    fn item(&mut self, idx: usize) -> Option<Item> {
+        self.items.get(idx).cloned()
+    }
+    fn token(&mut self, item: usize, point: &InsertionPoint) -> String {
+        let g = self;
+        let key = (item, point_key(point));
+        if let Some(t) = g.by_point.get(&key) {
+            return t.clone();
+        }
+        let token = loop {
+            let t = format!(
+                "{TOKEN_PREFIX}{}",
+                webprobe_support::util::rnd_id(TOKEN_BODY)
+            );
+            if !g.tokens.contains_key(&t) {
+                break t;
+            }
+        };
+        g.points.push((item, point.clone(), Vec::new(), None));
+        let idx = g.points.len() - 1;
+        g.tokens.insert(token.clone(), idx);
+        g.by_point.insert(key, token.clone());
+        token
+    }
+    fn note_injection(&mut self, token: &str, request: &[u8], response: Option<&[u8]>) {
+        let g = self;
+        if let Some(&idx) = g.tokens.get(token) {
+            if g.points[idx].2.is_empty() {
+                g.points[idx].2 = request.to_vec();
+                g.points[idx].3 = response.map(<[u8]>::to_vec);
+            }
+        }
+    }
+    fn observe(&mut self, retrieval: usize, request: &[u8], response: &[u8]) -> Vec<Pair> {
+        let found = find_tokens(response);
+        if found.is_empty() {
+            return Vec::new();
+        }
+        let own = find_tokens(request);
+        let g = self;
+        let mut new = Vec::new();
+        for t in found {
+            if own.contains(&t) {
+                continue;
+            }
+            let Some(&pidx) = g.tokens.get(&t) else {
+                continue;
+            };
+            if retrieval >= g.items.len() || !g.seen.insert((pidx, retrieval)) {
+                continue;
+            }
+            g.pairs.push((pidx, retrieval));
+            let (item, point, req, resp) = g.points[pidx].clone();
+            new.push(Pair {
+                item: g.items[item].clone(),
+                point,
+                retrieval: g.items[retrieval].clone(),
+                injection: (req, resp),
+            });
+        }
+        new
+    }
+    fn pairs(&mut self) -> Vec<Pair> {
+        let g = self;
+        g.pairs
+            .iter()
+            .map(|&(pidx, r)| {
+                let (item, point, req, resp) = g.points[pidx].clone();
+                Pair {
+                    item: g.items[item].clone(),
+                    point,
+                    retrieval: g.items[r].clone(),
+                    injection: (req, resp),
+                }
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct StoreGeneration {
+    shared: std::sync::Weak<crate::net::Shared>,
+    owner: std::sync::Arc<crate::host_probe_state::AttemptScope>,
+}
+#[cfg(test)]
+impl StoreGeneration {
+    fn validate(&self, inner: &Inner) -> Result<(), ()> {
+        if inner
+            .generation
+            .as_ref()
+            .is_some_and(|w| w.ptr_eq(&std::sync::Arc::downgrade(&self.owner)))
+        {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+    pub(crate) fn add_item(&self, item: Item) -> Result<usize, ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let mut inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        Ok(inner.add_item(item))
+    }
+    pub(crate) fn item(&self, idx: usize) -> Result<Option<Item>, ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let mut inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        Ok(inner.item(idx))
+    }
+    pub(crate) fn token(&self, item: usize, point: &InsertionPoint) -> Result<String, ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let mut inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        if item >= inner.items.len() {
+            return Err(());
+        }
+        Ok(inner.token(item, point))
+    }
+    pub(crate) fn note_injection(
+        &self,
+        token: &str,
+        request: &[u8],
+        response: Option<&[u8]>,
+    ) -> Result<(), ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let mut inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        inner.note_injection(token, request, response);
+        Ok(())
+    }
+    pub(crate) fn observe(
+        &self,
+        retrieval: usize,
+        request: &[u8],
+        response: &[u8],
+    ) -> Result<Vec<Pair>, ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let mut inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        Ok(inner.observe(retrieval, request, response))
+    }
+    pub(crate) fn pairs(&self) -> Result<Vec<Pair>, ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let mut inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        Ok(inner.pairs())
+    }
+    pub(crate) fn pair_bounded(&self, index: usize, max_bytes: usize) -> Result<Option<Pair>, ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        inner.pair_bounded(index, max_bytes, |_| true)
+    }
+    pub(crate) fn close(&self) -> Result<(), ()> {
+        let shared = self.shared.upgrade().ok_or(())?;
+        let mut inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        inner.generation = None;
+        Ok(())
+    }
+}
+#[cfg(test)]
+impl StoredInputs {
+    pub(crate) fn begin_generation(
+        &self,
+        shared: &std::sync::Arc<crate::net::Shared>,
+        owner: std::sync::Arc<crate::host_probe_state::AttemptScope>,
+    ) -> StoreGeneration {
+        let mut inner = self.inner.lock().unwrap();
+        *inner = Inner::default();
+        inner.generation = Some(std::sync::Arc::downgrade(&owner));
+        StoreGeneration {
+            shared: std::sync::Arc::downgrade(shared),
+            owner,
+        }
     }
 }

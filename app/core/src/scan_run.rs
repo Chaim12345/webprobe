@@ -75,10 +75,26 @@ impl ScanRun {
 /// releases it and wakes everyone waiting for idle.
 pub struct ScanGuard {
     scan: Arc<ScanRun>,
+    #[cfg(test)]
+    released: bool,
 }
 
+#[cfg(test)]
+impl ScanGuard {
+    /// Caller has settled exact-owner terminal/progress before publishing idle.
+    pub(crate) fn release_explicit(&mut self) {
+        if !self.released {
+            self.scan.release();
+            self.released = true;
+        }
+    }
+}
 impl Drop for ScanGuard {
     fn drop(&mut self) {
+        #[cfg(test)]
+        if self.released {
+            return;
+        }
         self.scan.release();
     }
 }
@@ -87,6 +103,8 @@ impl Drop for ScanGuard {
 pub fn try_claim(scan: &Arc<ScanRun>) -> Option<ScanGuard> {
     scan.claim().then(|| ScanGuard {
         scan: Arc::clone(scan),
+        #[cfg(test)]
+        released: false,
     })
 }
 

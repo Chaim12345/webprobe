@@ -8,7 +8,29 @@ use crate::{
     stored::Item,
     sync::Mutex,
 };
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+
+// A lock facade, NOT another mutex: every lifecycle transition owns HostAdmission.0.
+struct OwnerState(std::sync::Weak<Shared>);
+struct OwnerStateGuard<'a>(std::sync::MutexGuard<'a, crate::host_probe_state::Admission>);
+impl Deref for OwnerStateGuard<'_> {
+    type Target = Option<Run>;
+    fn deref(&self) -> &Self::Target {
+        &self.0.protocol
+    }
+}
+impl DerefMut for OwnerStateGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0.protocol
+    }
+}
+impl OwnerState {
+    fn lock_on<'a>(&self, shared: &'a Shared) -> OwnerStateGuard<'a> {
+        debug_assert!(std::ptr::eq(self.0.as_ptr(), shared));
+        OwnerStateGuard(shared.host_admission.0.lock().unwrap())
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AdmissionError {
@@ -67,7 +89,7 @@ impl BudgetedExecution {
         let Some(c) = self.coordinator.upgrade() else {
             return Err(AdmissionError::Busy);
         };
-        let state = c.state.lock().unwrap();
+        let state = c.state.lock_on(&c.shared);
         if !state.as_ref().is_some_and(|r| {
             r.phase == Phase::Finalizing
                 && Arc::ptr_eq(&r.owner, &self.owner)
@@ -114,7 +136,7 @@ impl ExecutionContext {
                 if !std::ptr::eq(shared, c.shared.as_ref()) || l.owner.is_cancelled() {
                     return Err(AdmissionError::Busy);
                 }
-                let state = c.state.lock().unwrap();
+                let state = c.state.lock_on(&c.shared);
                 if state.as_ref().is_some_and(|r| {
                     r.phase == Phase::Open
                         && Arc::ptr_eq(&r.owner, &l.owner)
@@ -155,9 +177,11 @@ impl Drop for Installed {
     }
 }
 
-struct Run {
+pub(crate) struct Run {
     ledger: Arc<Ledger>,
     owner: Arc<AttemptScope>,
+    generation: crate::stored::StoreGeneration,
+    pause: Arc<crate::owner_protocol::PauseState>,
     phase: Phase,
     leases: usize,
     active: bool,
@@ -166,13 +190,13 @@ struct Run {
 pub(crate) struct Coordinator {
     shared: Arc<Shared>,
     limits: Limits,
-    state: Mutex<Option<Run>>,
+    state: OwnerState,
     terminal: Mutex<Option<(Arc<AttemptScope>, Finish)>>,
 }
 pub(crate) struct Batch {
     lease: Arc<std::sync::atomic::AtomicBool>,
     coordinator: Arc<Coordinator>,
-    owner: Arc<AttemptScope>,
+    pub(crate) owner: Arc<AttemptScope>,
     live: bool,
 }
 pub(crate) struct Audit {
@@ -205,17 +229,249 @@ impl Coordinator {
         let owner = Arc::new(Self {
             shared: shared.clone(),
             limits,
-            state: Mutex::new(None),
+            state: OwnerState(Arc::downgrade(&shared)),
             terminal: Mutex::new(None),
         });
         *published = Arc::downgrade(&owner);
         Ok(owner)
     }
-    fn fresh(&self) -> Arc<AttemptScope> {
-        crate::host_probe_state::experimental_scope(&self.shared)
+    fn fresh(&self, admission: &OwnerStateGuard<'_>) -> Arc<AttemptScope> {
+        crate::host_probe_state::protocol_scope(&self.shared, &admission.0)
+    }
+    /// Strict non-routed protocol entry: never adopts an ambient run.
+    pub(crate) fn task_insert(
+        &self,
+        task: crate::tasks::ScanTask,
+    ) -> crate::owner_protocol::TaskIncarnation {
+        let mut tasks = self.shared.tasks.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        let id = task.id;
+        tasks.retain(|t| t.id != id);
+        let key = state.0.dispatch.create(id);
+        tasks.push(task);
+        key
+    }
+    pub(crate) fn task_remove(
+        &self,
+        key: &crate::owner_protocol::TaskIncarnation,
+    ) -> Result<(), crate::owner_protocol::DispatchError> {
+        let mut tasks = self.shared.tasks.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        let r = state
+            .0
+            .dispatch
+            .get(key)
+            .ok_or(crate::owner_protocol::DispatchError::Stale)?;
+        let id = r.id;
+        let control = r.control.clone();
+        if let Some(c) = &control {
+            c.owner.cancel();
+            let mut p = c.pause.predicate.lock().unwrap_or_else(|e| e.into_inner());
+            p.version = p.version.wrapping_add(1);
+        }
+        state.0.dispatch.invalidate(key);
+        tasks.retain(|t| t.id != id);
+        drop(state);
+        drop(tasks);
+        if let Some(c) = control {
+            c.pause.changed.notify_all();
+        }
+        Ok(())
+    }
+    pub(crate) fn tasks_reload(
+        &self,
+        replacement: Vec<crate::tasks::ScanTask>,
+    ) -> Vec<crate::owner_protocol::TaskIncarnation> {
+        let mut tasks = self.shared.tasks.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        let controls = state.0.dispatch.clear();
+        for c in &controls {
+            c.owner.cancel();
+            let mut p = c.pause.predicate.lock().unwrap_or_else(|e| e.into_inner());
+            p.version = p.version.wrapping_add(1);
+        }
+        let old = std::mem::replace(&mut *tasks, replacement);
+        let keys = tasks
+            .iter()
+            .map(|t| state.0.dispatch.create(t.id))
+            .collect();
+        drop(state);
+        drop(tasks);
+        drop(old);
+        for c in controls {
+            c.pause.changed.notify_all();
+        }
+        keys
+    }
+    pub(crate) fn dispatch(
+        self: &Arc<Self>,
+        key: &crate::owner_protocol::TaskIncarnation,
+        available: bool,
+        inject_failure: bool,
+    ) -> Result<Batch, crate::owner_protocol::DispatchError> {
+        use crate::owner_protocol::{Control, DispatchError};
+        use crate::tasks::TaskState;
+        let mut tasks = self.shared.tasks.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        let registration = state.0.dispatch.get(key).ok_or(DispatchError::Stale)?;
+        let id = registration.id;
+        let task = tasks
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or(DispatchError::Stale)?;
+        if task.state == TaskState::Cancelled {
+            return Err(DispatchError::Cancelled);
+        }
+        if task.state != TaskState::Queued || registration.reservation.is_some() {
+            return Err(DispatchError::Busy);
+        }
+        if !available {
+            return Err(DispatchError::Unavailable);
+        }
+        registration.reservation = Some(Arc::new(()));
+        if inject_failure {
+            registration.reservation = None;
+            return Err(DispatchError::Internal);
+        }
+        if state.is_some() {
+            state.0.dispatch.get(key).unwrap().reservation = None;
+            return Err(DispatchError::Busy);
+        }
+        let batch = match self.open_locked(&mut state) {
+            Ok(b) => b,
+            Err(_) => {
+                state.0.dispatch.get(key).unwrap().reservation = None;
+                return Err(DispatchError::Internal);
+            }
+        };
+        let run = state.as_ref().unwrap();
+        let control = Control {
+            coordinator: Arc::downgrade(self),
+            owner: run.owner.clone(),
+            pause: run.pause.clone(),
+        };
+        state.0.dispatch.get(key).unwrap().control = Some(control);
+        task.state = TaskState::Running;
+        Ok(batch)
+    }
+    pub(crate) fn dispatch_cancel(
+        &self,
+        key: &crate::owner_protocol::TaskIncarnation,
+    ) -> Result<crate::owner_protocol::ControlResult, crate::owner_protocol::DispatchError> {
+        use crate::owner_protocol::{ControlResult, DispatchError};
+        let mut tasks = self.shared.tasks.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        let registration = state.0.dispatch.get(key).ok_or(DispatchError::Stale)?;
+        let task = tasks
+            .iter_mut()
+            .find(|t| t.id == registration.id)
+            .ok_or(DispatchError::Stale)?;
+        task.state = crate::tasks::TaskState::Cancelled;
+        let control = registration.control.clone();
+        let result = if let Some(c) = &control {
+            c.owner.cancel();
+            let mut p = c.pause.predicate.lock().unwrap_or_else(|e| e.into_inner());
+            p.version = p.version.wrapping_add(1);
+            ControlResult::Applied
+        } else {
+            ControlResult::Applied
+        };
+        drop(state);
+        drop(tasks);
+        if let Some(c) = control {
+            c.pause.changed.notify_all();
+        }
+        Ok(result)
+    }
+    pub(crate) fn addressed_control(
+        &self,
+        handle: &crate::owner_protocol::Control,
+        operation: Option<bool>,
+    ) -> crate::owner_protocol::ControlResult {
+        use crate::owner_protocol::ControlResult;
+        if !std::ptr::eq(handle.coordinator.as_ptr(), self) {
+            return ControlResult::Stale;
+        }
+        let state = self.state.lock_on(&self.shared);
+        let matching = state
+            .as_ref()
+            .is_some_and(|r| Arc::ptr_eq(&r.owner, &handle.owner));
+        let result = if !matching {
+            if operation == Some(true) {
+                handle.owner.cancel();
+            }
+            ControlResult::Closed
+        } else if operation == Some(true) {
+            handle.owner.cancel();
+            ControlResult::Applied
+        } else if handle.owner.is_cancelled() {
+            ControlResult::Cancelled
+        } else if state.as_ref().is_some_and(|r| r.phase != Phase::Open) {
+            ControlResult::Closed
+        } else {
+            ControlResult::Applied
+        };
+        {
+            let mut p = handle
+                .pause
+                .predicate
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if result == ControlResult::Applied && operation != Some(true) {
+                p.paused = operation == Some(false);
+            }
+            p.version = p.version.wrapping_add(1);
+        }
+        drop(state);
+        handle.pause.changed.notify_all();
+        result
+    }
+    pub(crate) fn control(
+        self: &Arc<Self>,
+        owner: &Arc<AttemptScope>,
+    ) -> Result<crate::owner_protocol::Control, AdmissionError> {
+        let state = self.state.lock_on(&self.shared);
+        let r = state
+            .as_ref()
+            .filter(|r| Arc::ptr_eq(&r.owner, owner))
+            .ok_or(AdmissionError::Busy)?;
+        Ok(crate::owner_protocol::Control {
+            coordinator: Arc::downgrade(self),
+            owner: owner.clone(),
+            pause: r.pause.clone(),
+        })
+    }
+    pub fn open_standalone(self: &Arc<Self>) -> Result<Batch, AdmissionError> {
+        let mut state = self.state.lock_on(&self.shared);
+        if state.is_some() {
+            return Err(AdmissionError::Busy);
+        }
+        self.open_locked(&mut state)
+    }
+    pub fn adopt(self: &Arc<Self>, lease: &Batch) -> Result<Batch, AdmissionError> {
+        if !Arc::ptr_eq(self, &lease.coordinator)
+            || !lease.live
+            || !lease.lease.load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(AdmissionError::Busy);
+        }
+        let mut state = self.state.lock_on(&self.shared);
+        if !state
+            .as_ref()
+            .is_some_and(|r| Arc::ptr_eq(&r.owner, &lease.owner))
+        {
+            return Err(AdmissionError::Busy);
+        }
+        self.open_locked(&mut state)
     }
     pub fn open(self: &Arc<Self>) -> Result<Batch, AdmissionError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        self.open_locked(&mut state)
+    }
+    fn open_locked(
+        self: &Arc<Self>,
+        state: &mut OwnerStateGuard<'_>,
+    ) -> Result<Batch, AdmissionError> {
         let owner = if let Some(run) = state.as_mut() {
             if run.phase != Phase::Open || run.owner.is_cancelled() {
                 return Err(AdmissionError::Busy);
@@ -227,14 +483,19 @@ impl Coordinator {
             let ledger =
                 Arc::new(Ledger::pending(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
             self.shared.stored.open_batch();
-            let owner = self.fresh();
+            let owner = self.fresh(state);
             self.shared
                 .scan
                 .stop
                 .store(false, std::sync::atomic::Ordering::SeqCst);
-            *state = Some(Run {
+            **state = Some(Run {
                 ledger,
+                generation: self
+                    .shared
+                    .stored
+                    .begin_generation(&self.shared, owner.clone()),
                 owner: owner.clone(),
+                pause: Arc::new(Default::default()),
                 phase: Phase::Open,
                 leases: 1,
                 active: false,
@@ -249,11 +510,50 @@ impl Coordinator {
             live: true,
         })
     }
+    pub fn admit_standalone(
+        self: &Arc<Self>,
+        item: Item,
+    ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
+        let mut state = self.state.lock_on(&self.shared);
+        if state.is_some() {
+            return Err(AdmissionError::Busy);
+        }
+        self.admit_locked(item, &mut state)
+    }
+    pub fn admit_in(
+        self: &Arc<Self>,
+        lease: &Batch,
+        item: Item,
+    ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
+        if !Arc::ptr_eq(self, &lease.coordinator)
+            || !lease.live
+            || !lease.lease.load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(AdmissionError::Busy);
+        }
+        let mut state = self.state.lock_on(&self.shared);
+        if !state
+            .as_ref()
+            .is_some_and(|r| Arc::ptr_eq(&r.owner, &lease.owner))
+        {
+            return Err(AdmissionError::Busy);
+        }
+        self.admit_locked(item, &mut state)
+    }
+    // Compatibility adapter for preserved experimental tests only. Strict protocol
+    // callers use admit_standalone/admit_in, never this ambient adoption method.
     pub fn admit(
         self: &Arc<Self>,
         item: Item,
     ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        self.admit_locked(item, &mut state)
+    }
+    fn admit_locked(
+        self: &Arc<Self>,
+        item: Item,
+        state: &mut OwnerStateGuard<'_>,
+    ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
         if state
             .as_ref()
             .is_some_and(|r| r.phase != Phase::Open || r.active || r.owner.is_cancelled())
@@ -265,14 +565,19 @@ impl Coordinator {
             let ledger =
                 Arc::new(Ledger::pending(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
             self.shared.stored.clear();
-            let owner = self.fresh();
+            let owner = self.fresh(state);
             self.shared
                 .scan
                 .stop
                 .store(false, std::sync::atomic::Ordering::SeqCst);
-            *state = Some(Run {
+            **state = Some(Run {
                 ledger,
+                generation: self
+                    .shared
+                    .stored
+                    .begin_generation(&self.shared, owner.clone()),
                 owner,
+                pause: Arc::new(Default::default()),
                 phase: Phase::Open,
                 leases: 0,
                 active: false,
@@ -280,10 +585,13 @@ impl Coordinator {
             });
         }
         let run = state.as_mut().unwrap();
+        let index = run
+            .generation
+            .add_item(item)
+            .map_err(|_| AdmissionError::Internal)?;
         run.active = true;
         let owner = run.owner.clone();
         let lease = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let index = self.shared.stored.add_item(item);
         Ok((
             Audit {
                 lease: lease.clone(),
@@ -301,18 +609,40 @@ impl Coordinator {
         ))
     }
     fn cleanup(&self, owner: &Arc<AttemptScope>) {
-        self.cleanup_outcome(owner, Finish::Incomplete);
+        self.cleanup_outcome(owner, Finish::Incomplete, None);
     }
-    fn cleanup_outcome(&self, owner: &Arc<AttemptScope>, outcome: Finish) {
-        let mut state = self.state.lock().unwrap();
+    fn cleanup_outcome(
+        &self,
+        owner: &Arc<AttemptScope>,
+        outcome: Finish,
+        mut guard: Option<ScanGuard>,
+    ) {
+        let mut state = self.state.lock_on(&self.shared);
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, owner) && !run.active {
                 *owner.terminal.lock().unwrap() = Some(outcome);
                 *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
                 run.owner.cancel();
+                let _ = run.generation.close();
+                {
+                    let mut p = run
+                        .pause
+                        .predicate
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    p.terminal = true;
+                    p.version = p.version.wrapping_add(1);
+                }
+                let pause = run.pause.clone();
                 run.phase = Phase::Closed;
                 self.shared.stored.close_batch();
-                *state = None;
+                if let Some(guard) = guard.as_mut() {
+                    guard.release_explicit();
+                }
+                let retired = state.take();
+                drop(state);
+                pause.changed.notify_all();
+                drop(retired);
             }
         }
     }
@@ -320,8 +650,12 @@ impl Coordinator {
         self: &Arc<Self>,
         owner: Arc<AttemptScope>,
         state: &mut Run,
+        guard: Option<ScanGuard>,
     ) -> Result<Finalizer, AdmissionError> {
-        let guard = crate::scan_run::try_claim(&self.shared.scan).ok_or(AdmissionError::Busy)?;
+        let guard = match guard {
+            Some(guard) => guard,
+            None => crate::scan_run::try_claim(&self.shared.scan).ok_or(AdmissionError::Busy)?,
+        };
         state
             .ledger
             .activate()
@@ -340,6 +674,17 @@ impl Coordinator {
     }
 }
 impl Batch {
+    pub(crate) fn control(&self) -> Result<crate::owner_protocol::Control, AdmissionError> {
+        self.coordinator.control(&self.owner)
+    }
+    pub(crate) fn generation(&self) -> Result<crate::stored::StoreGeneration, AdmissionError> {
+        let state = self.coordinator.state.lock_on(&self.coordinator.shared);
+        let run = state
+            .as_ref()
+            .filter(|r| Arc::ptr_eq(&r.owner, &self.owner) && self.live)
+            .ok_or(AdmissionError::Busy)?;
+        Ok(run.generation.clone())
+    }
     pub fn context(&self) -> ExecutionContext {
         ExecutionContext::Legacy(LegacyScanner {
             coordinator: Arc::downgrade(&self.coordinator),
@@ -352,7 +697,7 @@ impl Batch {
     }
     pub fn finish(mut self) -> Result<Handoff, AdmissionError> {
         let c = self.coordinator.clone();
-        let mut state = c.state.lock().unwrap();
+        let mut state = c.state.lock_on(&c.shared);
         let run = state
             .as_mut()
             .filter(|r| Arc::ptr_eq(&r.owner, &self.owner))
@@ -371,7 +716,7 @@ impl Batch {
             run.incomplete = true;
             return Err(AdmissionError::IncompleteActive);
         }
-        match c.make_finalizer(self.owner.clone(), run) {
+        match c.make_finalizer(self.owner.clone(), run, None) {
             Ok(f) => Ok(Handoff::Finalize(Box::new(f))),
             Err(e) => {
                 run.incomplete = true;
@@ -389,7 +734,7 @@ impl Drop for Batch {
         }
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
-        let mut state = self.coordinator.state.lock().unwrap();
+        let mut state = self.coordinator.state.lock_on(&self.coordinator.shared);
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, &self.owner) && run.phase == Phase::Open {
                 run.incomplete = true;
@@ -398,7 +743,8 @@ impl Drop for Batch {
                     run.phase = Phase::Closing;
                     if !run.active {
                         drop(state);
-                        self.coordinator.cleanup(&self.owner);
+                        self.coordinator
+                            .cleanup_outcome(&self.owner, Finish::Incomplete, None);
                     }
                 }
             }
@@ -407,7 +753,12 @@ impl Drop for Batch {
 }
 impl Audit {
     pub fn mark_incomplete(&self) {
-        if let Some(run) = self.coordinator.state.lock().unwrap().as_mut() {
+        if let Some(run) = self
+            .coordinator
+            .state
+            .lock_on(&self.coordinator.shared)
+            .as_mut()
+        {
             if Arc::ptr_eq(&run.owner, &self.owner) {
                 run.incomplete = true;
             }
@@ -415,25 +766,27 @@ impl Audit {
     }
     pub fn complete(mut self) -> Result<Handoff, AdmissionError> {
         let c = self.coordinator.clone();
-        let mut state = c.state.lock().unwrap();
+        let mut state = c.state.lock_on(&c.shared);
         let run = state
             .as_mut()
             .filter(|r| Arc::ptr_eq(&r.owner, &self.owner))
             .ok_or(AdmissionError::Busy)?;
         run.active = false;
-        drop(self.guard.take());
+        let guard = self.guard.take();
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         if run.phase == Phase::Closing {
             drop(state);
-            c.cleanup(&self.owner);
+            c.cleanup_outcome(&self.owner, Finish::Incomplete, guard);
             return Err(AdmissionError::IncompleteActive);
         }
         if run.leases > 0 {
+            drop(state);
+            drop(guard);
             return Ok(Handoff::Joined);
         }
         run.phase = Phase::Closing;
-        match c.make_finalizer(self.owner.clone(), run) {
+        match c.make_finalizer(self.owner.clone(), run, guard) {
             Ok(f) => Ok(Handoff::Finalize(Box::new(f))),
             Err(e) => {
                 drop(state);
@@ -450,16 +803,19 @@ impl Drop for Audit {
         }
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
-        let mut state = self.coordinator.state.lock().unwrap();
+        let mut state = self.coordinator.state.lock_on(&self.coordinator.shared);
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, &self.owner) {
                 run.active = false;
                 run.incomplete = true;
-                drop(self.guard.take());
                 if run.leases == 0 {
                     run.phase = Phase::Closing;
                     drop(state);
-                    self.coordinator.cleanup(&self.owner);
+                    self.coordinator.cleanup_outcome(
+                        &self.owner,
+                        Finish::Incomplete,
+                        self.guard.take(),
+                    );
                 }
             }
         }
@@ -487,8 +843,7 @@ impl Finalizer {
         let incomplete = self
             .coordinator
             .state
-            .lock()
-            .unwrap()
+            .lock_on(&self.coordinator.shared)
             .as_ref()
             .is_none_or(|r| r.incomplete);
         let complete = result
@@ -496,14 +851,13 @@ impl Finalizer {
             && !self.permit.owner.is_cancelled()
             && self.permit.ledger.reserve(&[]).is_ok()
             && !self.permit.ledger.retention_lost();
-        drop(self.guard.take());
         let outcome = if complete {
             Finish::Complete
         } else {
             Finish::Incomplete
         };
         self.coordinator
-            .cleanup_outcome(&self.permit.owner, outcome);
+            .cleanup_outcome(&self.permit.owner, outcome, self.guard.take());
         self.live = false;
         outcome
     }
@@ -511,8 +865,11 @@ impl Finalizer {
 impl Drop for Finalizer {
     fn drop(&mut self) {
         if self.live {
-            drop(self.guard.take());
-            self.coordinator.cleanup(&self.permit.owner);
+            self.coordinator.cleanup_outcome(
+                &self.permit.owner,
+                Finish::Incomplete,
+                self.guard.take(),
+            );
             self.live = false;
         }
     }
@@ -685,7 +1042,7 @@ mod tests {
         let other = Coordinator::new(shared, limits()).unwrap();
         assert!(Arc::ptr_eq(&c, &other));
         let a = c.open().unwrap();
-        let ledger = c.state.lock().unwrap().as_ref().unwrap().ledger.clone();
+        let ledger = c.state.lock_on(&c.shared).as_ref().unwrap().ledger.clone();
         assert_eq!(
             ledger.reserve(&[]),
             Err(crate::scan_budget::Denied::NotActivated)

@@ -95,3 +95,6 @@ mod scan_resolver;
 
 #[cfg(test)]
 mod scan_lifecycle;
+
+#[cfg(test)]
+mod owner_protocol;
