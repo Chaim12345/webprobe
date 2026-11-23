@@ -73,15 +73,46 @@ pub(crate) trait StoredCheck: Sync {
 }
 
 /// Stage A4 checks, in run order.
-pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[&StoredXss];
+pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[
+    &StoredXss,
+    &LinkManipulationStored,
+    &CssInjectionStored,
+    &HppStored,
+    &FormActionHijackingStored,
+];
 
 /// One pair being audited in stage A4.
 pub(crate) struct PairCtx {
     pub shared: Arc<Shared>,
     pub pair: crate::stored::Pair,
+    g11_hit: std::cell::Cell<bool>,
 }
 
 impl PairCtx {
+    pub(crate) fn new(shared: Arc<Shared>, pair: crate::stored::Pair) -> Self {
+        Self {
+            shared,
+            pair,
+            g11_hit: std::cell::Cell::new(false),
+        }
+    }
+
+    pub(crate) fn g11_allowed(&self) -> bool {
+        let method = self
+            .pair
+            .retrieval
+            .req
+            .split_whitespace()
+            .next()
+            .unwrap_or("");
+        !self.g11_hit.get()
+            && (method.eq_ignore_ascii_case("GET") || method.eq_ignore_ascii_case("HEAD"))
+    }
+
+    pub(crate) fn note_g11_hit(&self) {
+        self.g11_hit.set(true);
+    }
+
     pub(crate) fn stopped(&self) -> bool {
         self.shared.scan.stop.load(Ordering::SeqCst)
     }
@@ -170,6 +201,7 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
         if shared.scan.stop.load(Ordering::SeqCst) {
             break;
         }
+        let cx = PairCtx::new(shared.clone(), pair.clone());
         for check in STORED_CHECKS {
             let runs = (is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst))
                 && config.issue_allowed(check.issue(), true);
@@ -178,10 +210,7 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
                 && config.check_enabled(check.id())
                 && !(check.server_side() && pair.point.skips_server_side())
             {
-                check.run(&PairCtx {
-                    shared: shared.clone(),
-                    pair: pair.clone(),
-                });
+                check.run(&cx);
             }
         }
     }

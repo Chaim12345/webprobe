@@ -82,7 +82,13 @@ fn registry_order_is_pinned() {
     // Stage A4 (burp.Zwp6) runs once per stored-input pair.
     assert_eq!(
         STORED_CHECKS.iter().map(|c| c.id()).collect::<Vec<_>>(),
-        ["active.xss-stored"]
+        [
+            "active.xss-stored",
+            "active.link-manipulation-stored",
+            "active.css-injection-stored",
+            "active.client-side-hpp-stored",
+            "active.form-action-hijacking-stored"
+        ]
     );
     let requests: Vec<(&str, Scope, Option<&str>)> = REQUEST_CHECKS
         .iter()
