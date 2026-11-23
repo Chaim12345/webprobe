@@ -4,7 +4,7 @@ Scope of the landed runtime: one instrumented headless-Chromium probe per
 URL per scan run, shared by every DOM family check through the run-owned
 `ScanDedup.dom_hits` cache. This matrix is the acceptance boundary: only
 the cells marked **covered** are proved by live-browser lab tests.
-Fourteen families wrapped is not blanket DOM analysis; everything below
+Fourteen wrapped families plus addition-only prototype pollution is not blanket DOM analysis; everything below
 the line is explicitly not established.
 
 ## Source
@@ -42,6 +42,7 @@ not reported.
 | Client-side XPath injection (DOM-based) | 00200360 | Low | Firm | `document.evaluate` | `jQuery.parseXML` |
 | Document domain manipulation (DOM-based) | 00501100 | Medium | Firm | `document.domain` setter | - |
 | HTML5 web message manipulation (DOM-based) | 00500e00 | Information | Firm | `postMessage` (the message argument) | - |
+| Client-side prototype pollution | 00200316 | Information | Firm for hash-only, Tentative for query/mixed | new own properties on `Object.prototype` containing a dedicated query/hash token | existing-property overwrites, stored pollution, transient additions missed between polls |
 | Client-side SQL injection (DOM-based) | - | - | - | not ported | `webdatabase.executeSql`: `openDatabase` is gone from current Chromium |
 
 Generic `storage.setItem.*` hits (a Storage object that is neither the
@@ -123,3 +124,19 @@ snapshot, with explicit incomplete/cancelled status and diagnostic in the
 scan record and Scanner UI. Missing source/provenance or missing confirmed
 navigation evidence is withheld. Stop prevents new sends but does not
 interrupt synchronous in-flight transport I/O; no latency bound is claimed.
+## Prototype-pollution boundary
+
+`dom_prototype_pollution_against_a_live_lab` proves query and fragment
+additions and rejects reflection and filtered keys. The multi-family lab
+proves query pollution and fragment DOM-XSS keep separate sources/confidence.
+`dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab`
+proves simultaneous query/hash pollution and stored DOM-XSS with separate
+dedup, stored-only pollution exclusion, reflection/unchanged negatives, and
+one shared operation including the outer submission and resource cap.
+
+The stored-source coverage and reflected/stored variant rules above apply to
+the fourteen wrapped DOM families, not prototype pollution. Pollution uses
+only the base issue name and dedicated URL-part token evidence on new own
+keys. It explicitly excludes the stored token, even when mixed with URL
+tokens. This is addition-only coverage, not an overwrite detector or stored
+pollution detector. Those remain follow-ups.
