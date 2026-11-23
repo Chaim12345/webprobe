@@ -1276,6 +1276,7 @@ pub fn settings_only(data: &ProjectData) -> ProjectData {
     ProjectData {
         history: Vec::new(),
         repeaters: Vec::new(),
+        repeater_groups: Vec::new(),
         issues: Vec::new(),
         websockets: Vec::new(),
         logger: Vec::new(),

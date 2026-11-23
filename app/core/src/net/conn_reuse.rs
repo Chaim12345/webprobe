@@ -453,7 +453,7 @@ pub fn send_tls_inner(
                         if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
                             let mut retry_conn = crate::h2::Conn::new(UpstreamConn::Tls(tls));
                             let r = retry_conn.exchange(&h2req, sink.as_deref_mut());
-                            if r.is_ok() && keep_alive && retry_conn.idle() {
+                            if r.is_ok() && keep_alive && !custom_sni && retry_conn.idle() {
                                 shared.h2_pool.lock().unwrap().insert(h2key, retry_conn);
                             }
                             r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
