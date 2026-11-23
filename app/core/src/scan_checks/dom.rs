@@ -1051,3 +1051,177 @@ fn dom_cancelled_dispatch_preserves_pollution_and_other_families_without_egress(
     );
     assert!(listener.accept().is_err());
 }
+
+#[test]
+fn dom_first_cancel_barrier_blocks_later_cors_direct_and_proxy() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    use std::io::{Read, Write};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Barrier};
+    for proxy in [false, true] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let shared = crate::net::Shared::new();
+        if proxy {
+            *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+                kind: crate::upstream::UpstreamKind::Http,
+                host: "127.0.0.1".into(),
+                port: port.to_string(),
+                ..Default::default()
+            };
+        }
+        let raw = format!("GET /cached HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let baseline =
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<script>void 0</script>".to_vec();
+        let cx = ScanCtx {
+            shared: shared.clone(),
+            entry: HistEntry {
+                method: "GET".into(),
+                host: "127.0.0.1".into(),
+                port,
+                path: "/cached".into(),
+                ..Default::default()
+            },
+            req: raw.clone(),
+            parts: util::parse_http(raw.as_bytes()),
+            host: "127.0.0.1".into(),
+            port,
+            host_hdr: format!("127.0.0.1:{port}"),
+            settings: Settings {
+                speed: ScanSpeed::from_u8(0),
+                accuracy: crate::variations::Accuracy::from_u8(0),
+            },
+            baseline: Baseline {
+                resp: Some(baseline.clone()),
+                raw: baseline,
+                body: "<script>void 0</script>".into(),
+            },
+            oob: vec![],
+            smtp: vec![],
+            item: 0,
+            stored_report: false,
+        };
+        let url = format!("http://127.0.0.1:{port}/cached");
+
+        let captured = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let capture = captured.clone();
+        let server = std::thread::spawn(move || {
+            while capture.lock().unwrap().len() < 2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                    .unwrap();
+                let mut bytes = Vec::new();
+                let mut b = [0; 4096];
+                while let Ok(n) = stream.read(&mut b) {
+                    if n == 0 {
+                        break;
+                    }
+                    bytes.extend_from_slice(&b[..n]);
+                    if bytes.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                if bytes.is_empty() {
+                    continue;
+                }
+                capture
+                    .lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&bytes).into_owned());
+                let body="<html><head><link rel='icon' href='data:,'></head><script>document.write(location.hash);document.cookie='x='+location.hash;</script></html>";
+                write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            }
+            listener
+        });
+        let observed = Arc::new(Barrier::new(2));
+        let resume = Arc::new(Barrier::new(2));
+        shared.tool_state.insert(crate::crawl::DomSnapshotBarrier {
+            observed: observed.clone(),
+            resume: resume.clone(),
+            used: Arc::new(AtomicBool::new(false)),
+        });
+        let stop = shared.clone();
+        let controller = std::thread::spawn(move || {
+            observed.wait();
+            stop.scan.stop.store(true, Ordering::SeqCst);
+            resume.wait();
+        });
+        let mut config = crate::scan_config::ScanConfig::default();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if ![
+                "active.dom-xss",
+                "active.dom-cookie-manipulation",
+                "active.cors",
+            ]
+            .contains(&id)
+            {
+                config.disabled_checks.insert(id.into());
+            }
+        }
+        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+        run_request_checks(&cx);
+        controller.join().unwrap();
+        let listener = server.join().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let requests = captured.lock().unwrap();
+        assert_eq!(
+            requests.len(),
+            2,
+            "submission + navigation only: {requests:?}"
+        );
+        assert!(
+            !requests
+                .iter()
+                .any(|r| r.to_ascii_lowercase().contains("\r\norigin:")),
+            "no CORS after cancellation"
+        );
+        while let Ok((mut stream, _)) = listener.accept() {
+            stream.set_nonblocking(true).unwrap();
+            let mut b = [0; 1];
+            assert_ne!(
+                stream.read(&mut b).unwrap_or(0),
+                1,
+                "new post-stop wire request"
+            );
+        }
+        let issues = shared.issues.lock().unwrap();
+        for name in [
+            "Cross-site scripting (DOM-based)",
+            "Cookie manipulation (DOM-based)",
+        ] {
+            assert!(
+                issues
+                    .iter()
+                    .any(|i| i.name == name && i.detail.contains("incomplete")),
+                "missing {name}"
+            );
+        }
+        assert!(shared
+            .scan
+            .dom_outcomes
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|r| r.cancelled && !r.complete && r.proven_hits.len() >= 2));
+        assert!(
+            cx.state()
+                .dom_hits
+                .lock()
+                .unwrap()
+                .get(&url)
+                .unwrap()
+                .get()
+                .unwrap()
+                .cancelled
+        );
+        // Explicit bypass paths also deny a fresh send after stop.
+        assert!(burp_send(&cx, b"GET /bypass HTTP/1.1\r\nHost: h\r\n\r\n").is_none());
+        assert!(cx
+            .send(b"GET /context HTTP/1.1\r\nHost: h\r\n\r\n")
+            .is_none());
+        assert!(listener.accept().is_err());
+    }
+}

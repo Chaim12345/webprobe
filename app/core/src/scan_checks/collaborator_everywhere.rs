@@ -358,6 +358,9 @@ pub(crate) fn run_request_checks(cx: &ScanCtx) {
         .unwrap()
         .clone();
     for check in REQUEST_CHECKS {
+        if cx.stopped() && !check.consumes_cached_dom_after_stop() {
+            continue;
+        }
         if !config.check_enabled(check.id()) || !cx.runs(check.issue()) {
             continue;
         }

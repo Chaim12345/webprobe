@@ -11,7 +11,8 @@ pub fn send_one(
     port: u16,
     raw: &[u8],
 ) -> Option<Vec<u8>> {
-    crate::tasks::wait_while_paused(shared);
+    let _scanner = net::tool_scope("Scanner");
+    net::scanner_send_admission(shared).ok()?;
     let up = if https {
         net::send_tls_raw(shared, host, port, raw)
     } else {

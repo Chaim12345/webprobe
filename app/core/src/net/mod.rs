@@ -39,6 +39,18 @@ thread_local! {
     static LISTENER_PORT: std::cell::Cell<Option<u16>> = const { std::cell::Cell::new(None) };
 }
 
+/// Scanner-only fresh-attempt admission. Other tools keep their own lifecycle.
+/// Rechecked at each entry/retry boundary, not an interruption of in-flight I/O.
+pub(crate) fn scanner_send_admission(shared: &Shared) -> Result<(), String> {
+    if TOOL.with(|t| t.get()) == Some("Scanner") {
+        crate::tasks::wait_while_paused(shared);
+        if shared.scan.stop.load(Ordering::SeqCst) {
+            return Err("scanner send cancelled before fresh attempt".into());
+        }
+    }
+    Ok(())
+}
+
 mod types;
 pub use types::*;
 
@@ -136,3 +148,6 @@ mod hist_tests;
 
 #[cfg(test)]
 mod tool_state_tests;
+
+#[cfg(test)]
+mod scanner_admission_tests;

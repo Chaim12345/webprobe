@@ -4348,3 +4348,58 @@ fn connect_tunnel_inner_request_dropped_by_extension_has_zero_egress() {
         "a dropped request is not an origin exchange"
     );
 }
+
+#[test]
+fn scanner_stop_on_refused_h2_stream_prevents_retry_connection() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    let stop = shared.clone();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let mut tls = StreamOwned::new(ServerConnection::new(config).unwrap(), stream);
+        let mut preface = [0; 24];
+        tls.read_exact(&mut preface).unwrap();
+        tls.write_all(&[0, 0, 0, 4, 0, 0, 0, 0, 0]).unwrap();
+        loop {
+            let (ty, flags, sid, _) = read_frame(&mut tls);
+            if ty == 4 && flags & 1 == 0 {
+                tls.write_all(&[0, 0, 0, 4, 1, 0, 0, 0, 0]).unwrap();
+            }
+            if ty == 1 && sid == 1 {
+                break;
+            }
+        }
+        // Stop is observed before the retryable refusal arrives. No sleep/order guess.
+        stop.scan.stop.store(true, Ordering::SeqCst);
+        tls.write_all(&[0, 0, 4, 3, 0, 0, 0, 0, 1, 0, 0, 0, 7])
+            .unwrap();
+        tls.flush().unwrap();
+        listener
+    });
+    let _scanner = tool_scope("Scanner");
+    let response = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /refused HTTP/1.1\r\nHost: localhost\r\n\r\n",
+    );
+    assert!(response.resp.is_none());
+    assert!(response.error.unwrap_or_default().contains("cancelled"));
+    let listener = server.join().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    assert!(
+        listener.accept().is_err(),
+        "retry connection must not be opened"
+    );
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+}

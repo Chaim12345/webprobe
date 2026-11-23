@@ -678,6 +678,14 @@ pub(crate) fn dom_complete_final_response(response: &[u8]) -> bool {
     }
 }
 
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct DomSnapshotBarrier {
+    pub observed: std::sync::Arc<std::sync::Barrier>,
+    pub resume: std::sync::Arc<std::sync::Barrier>,
+    pub used: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
 /// Monotonic bounded evidence union: later successful empty/reset snapshots
 /// cannot erase independently confirmed evidence. Stable fields form the key.
 pub(crate) fn dom_merge_confirmed_hits(
@@ -2626,6 +2634,15 @@ fn dom_probe_with_binary(
                 None => {
                     evaluation_failed = true;
                     break;
+                }
+            }
+            #[cfg(test)]
+            if !hits.is_empty() {
+                if let Some(hook) = shared.tool_state.get::<DomSnapshotBarrier>() {
+                    if !hook.used.swap(true, Ordering::SeqCst) {
+                        hook.observed.wait();
+                        hook.resume.wait();
+                    }
                 }
             }
         }

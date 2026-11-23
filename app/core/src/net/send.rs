@@ -21,6 +21,12 @@ pub fn send_raw_with(
     request: &[u8],
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Upstream {
+    if let Err(error) = scanner_send_admission(shared) {
+        return Upstream {
+            resp: None,
+            error: Some(error),
+        };
+    }
     let request = jar_request(shared, host, false, request);
     let request = match session_request(shared, port, false, request) {
         Ok(request) => request,
