@@ -61,3 +61,16 @@ no new cache cell. A live-browser regression retains both pollution and XSS
 snapshots after cancellation. These targeted tests pass locally, but 94eb2a9
 is not accepted: the runtime must retain a monotonic union across shrinking
 or empty later snapshots. The corrected reviewed pin remains awaited.
+
+## Source-approved dependency refresh
+
+Final vehicle base: 03caee2b7df119c9f84cfc46e820eda60c8fff49 (#186),
+source-approved as a dependency pin. Existing #180 remains unchanged at
+cc0f5dfd7c4871ad225272abaca2af1317c71db7. The pending adaptation vehicle
+owns only pollution instrumentation, its dedicated check, registration,
+fixtures and these coverage/ownership notes. The inherited runtime owns
+monotonic snapshot retention, partial outcomes, safe stop/cache dispatch,
+response completeness and Scanner UI status records. Formatting-only changes
+to inherited runtime/status files are separated from semantic adaptation.
+No parser integration, UI-pixel verification, full-suite acceptance, parity
+landing or historical-source closure is claimed by this refresh.
