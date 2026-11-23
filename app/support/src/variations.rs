@@ -325,19 +325,16 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
             fp.insert(Attr::ContentTypeCharset, crc_of(&cs));
         }
     }
-    if let Some(link) = first("Link") {
-        if link.to_ascii_lowercase().contains("rel=\"canonical\"")
-            || link.to_ascii_lowercase().contains("rel=canonical")
-        {
-            if let Some(u) = link
+    if let Some(link) = first("Link")
+        && (link.to_ascii_lowercase().contains("rel=\"canonical\"")
+            || link.to_ascii_lowercase().contains("rel=canonical"))
+            && let Some(u) = link
                 .split('>')
                 .next()
                 .and_then(|x| x.trim().strip_prefix('<'))
             {
                 fp.insert(Attr::CanonicalLink, crc_of(u));
             }
-        }
-    }
 
     // raw-body attributes (ZJ)
     let mut bc = Crc::default();
@@ -389,7 +386,7 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
     // HTML attributes (Zr), only for real markup (Zx33.ZU)
     let html: String = body.iter().map(|b| *b as char).collect();
     let toks = tokenize(&html);
-    let markup = !toks.is_empty() && !(toks.len() == 1 && matches!(toks[0], Tok::Text(_)));
+    let markup = !(toks.is_empty() || toks.len() == 1 && matches!(toks[0], Tok::Text(_)));
     if markup {
         html_attributes(&toks, &mut fp);
     }

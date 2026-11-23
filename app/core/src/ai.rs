@@ -174,11 +174,10 @@ fn complete(
     let chunked = util::get_header(&parts.headers, "Transfer-Encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    if chunked {
-        if let Some((d, _)) = crate::codec::decode_chunked(&b) {
+    if chunked
+        && let Some((d, _)) = crate::codec::decode_chunked(&b) {
             b = d;
         }
-    }
     let status = parts
         .first
         .split_whitespace()

@@ -199,11 +199,10 @@ fn store_dir() -> Option<PathBuf> {
 
 impl Store {
     fn segment(&mut self, need: usize) -> std::io::Result<(Arc<Segment>, usize)> {
-        if let Some((seg, used, cap)) = &self.current {
-            if cap - used >= need {
+        if let Some((seg, used, cap)) = &self.current
+            && cap - used >= need {
                 return Ok((seg.clone(), *used));
             }
-        }
         let dir = self
             .dir
             .clone()

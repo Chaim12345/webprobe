@@ -679,31 +679,24 @@ fn smart_decode(input: &str) -> Result<String, String> {
         && cleaned
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='));
-    if b64_shaped {
-        if let Ok(bytes) = util::b64_decode(&cleaned) {
-            if let Ok(text) = String::from_utf8(bytes.clone()) {
-                if !text.is_empty() && text != input && util::b64_encode(&bytes) == cleaned {
+    if b64_shaped
+        && let Ok(bytes) = util::b64_decode(&cleaned)
+            && let Ok(text) = String::from_utf8(bytes.clone())
+                && !text.is_empty() && text != input && util::b64_encode(&bytes) == cleaned {
                     return Ok(text);
                 }
-            }
-        }
-    }
 
     if input.len() >= 2
         && input.len().is_multiple_of(2)
         && input.bytes().all(|b| b.is_ascii_hexdigit())
-    {
-        if let Ok(bytes) = util::hex_decode(input) {
-            if let Ok(text) = String::from_utf8(bytes.clone()) {
-                if !text.is_empty()
+        && let Ok(bytes) = util::hex_decode(input)
+            && let Ok(text) = String::from_utf8(bytes.clone())
+                && !text.is_empty()
                     && text != input
                     && util::hex_encode(&bytes) == input.to_ascii_lowercase()
                 {
                     return Ok(text);
                 }
-            }
-        }
-    }
 
     Err(format!("no decoder layer recognised in {input:?}"))
 }

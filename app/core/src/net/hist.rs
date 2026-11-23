@@ -51,14 +51,13 @@ pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
             let body = String::from_utf8_lossy(resp.get(rp.head_len..).unwrap_or(&[]));
             // The closing tag is searched after the opening one, so the
             // range is never reversed ("</title>x<title>" has no title).
-            if let Some(a) = body.find("<title") {
-                if let Some(b) = body[a..].find("</title>").map(|b| a + b) {
+            if let Some(a) = body.find("<title")
+                && let Some(b) = body[a..].find("</title>").map(|b| a + b) {
                     let inner = &body[a..b];
                     if let Some(gt) = inner.find('>') {
                         title = inner[gt + 1..].trim().to_string();
                     }
                 }
-            }
         }
         let set = rp
             .headers
@@ -225,15 +224,14 @@ pub fn record_entry_verbatim(
     shared.push_history(e.clone());
     // Live passive crawl (Dashboard task 1): "Add links. Add item itself, same
     // domain and URLs in suite scope."
-    if shared.crawl_capture.load(Ordering::SeqCst) {
-        if let (Some(resp), Some(hooks)) = (&e.resp_raw, scan_hooks()) {
+    if shared.crawl_capture.load(Ordering::SeqCst)
+        && let (Some(resp), Some(hooks)) = (&e.resp_raw, scan_hooks()) {
             let origin = history_host(&e);
             let mut links = shared.site_links.lock().unwrap();
             for path in hooks.crawl_links(&origin, &e.path, resp) {
                 links.insert((origin.clone(), path));
             }
         }
-    }
     // live passive audit (AuditDefaults.json: scan_type_passive enabled),
     // bounded by the crawler's unique-location cap (CrawlDefaults.json: 1500)
     let hooks = if scan && shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico" {

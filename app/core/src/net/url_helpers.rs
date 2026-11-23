@@ -4,11 +4,10 @@
 use super::*;
 
 pub fn split_host_port(authority: &str, default_port: u16) -> (String, u16) {
-    if let Some(i) = authority.rfind(':') {
-        if let Ok(p) = authority[i + 1..].parse::<u16>() {
+    if let Some(i) = authority.rfind(':')
+        && let Ok(p) = authority[i + 1..].parse::<u16>() {
             return (authority[..i].to_string(), p);
         }
-    }
     (authority.to_string(), default_port)
 }
 

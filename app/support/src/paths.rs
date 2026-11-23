@@ -454,11 +454,10 @@ impl Lookup {
     /// the embedded catalogue written out under the data directory.
     pub fn extensions_dir(&self) -> std::io::Result<PathBuf> {
         let mut cands: Vec<PathBuf> = self.var("WEBPROBE_EXTENSIONS_DIR").into_iter().collect();
-        if self.system {
-            if let Ok(exe) = std::env::current_exe() {
+        if self.system
+            && let Ok(exe) = std::env::current_exe() {
                 cands.extend(exe.parent().map(|d| d.join("extensions")));
             }
-        }
         if let Some(d) = cands
             .into_iter()
             .find(|d| d.join("catalogue.json").is_file())

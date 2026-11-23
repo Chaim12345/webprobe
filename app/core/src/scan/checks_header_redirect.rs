@@ -219,8 +219,8 @@ pub fn run_open_redirect_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     }
     // ZR
     let lv = value.to_lowercase();
-    if lv.starts_with("http:") || lv.starts_with("https://") {
-        if let Some((proto, rest)) = value.split_once("://") {
+    if (lv.starts_with("http:") || lv.starts_with("https://"))
+        && let Some((proto, rest)) = value.split_once("://") {
             let (host, file) = rest
                 .find('/')
                 .map(|i| (&rest[..i], &rest[i..]))
@@ -231,7 +231,6 @@ pub fn run_open_redirect_check<F: FnMut(&str) -> Option<Vec<u8>>>(
                 return Some(h);
             }
         }
-    }
     // ZV
     for prefix in ["//a", "/\\a", "\\\\a"] {
         for enc in [false, true] {

@@ -168,12 +168,11 @@ impl StoredInputs {
     /// stored-input issue).
     pub(crate) fn note_injection(&self, token: &str, request: &[u8], response: Option<&[u8]>) {
         let mut g = self.inner.lock().unwrap();
-        if let Some(&idx) = g.tokens.get(token) {
-            if g.points[idx].2.is_empty() {
+        if let Some(&idx) = g.tokens.get(token)
+            && g.points[idx].2.is_empty() {
                 g.points[idx].2 = request.to_vec();
                 g.points[idx].3 = response.map(<[u8]>::to_vec);
             }
-        }
     }
 
     /// Search one response to item `retrieval` for tokens of other points

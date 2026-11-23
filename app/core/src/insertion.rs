@@ -35,11 +35,10 @@ pub(crate) use webprobe_support::insertion::*;
 fn allowed(p: &InsertionPoint, config: &ScanConfig) -> bool {
     match &p.parent {
         None => {
-            if let Some(key) = insertion_type(&p.kind) {
-                if !config.insertion_enabled(key) {
+            if let Some(key) = insertion_type(&p.kind)
+                && !config.insertion_enabled(key) {
                     return false;
                 }
-            }
         }
         Some(parent) => {
             if !config.insertion_enabled(crate::scan_config::NESTED_KEY) || !allowed(parent, config)

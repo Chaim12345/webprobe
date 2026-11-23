@@ -138,8 +138,8 @@ impl RequestCheck for TraceEnabled {
                     .collect()
             };
             let probe = bc::trace_probe(cx.req.as_bytes(), &token);
-            if let Some(resp) = burp_send(cx, &probe) {
-                if bc::trace_hit(&resp, &token) {
+            if let Some(resp) = burp_send(cx, &probe)
+                && bc::trace_hit(&resp, &token) {
                     let mut e = cx.entry.clone();
                     e.path = "/".into();
                     let mut i = mk(
@@ -153,7 +153,6 @@ impl RequestCheck for TraceEnabled {
                         i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))])
                     ]);
                 }
-            }
         }
     }
 }
@@ -449,12 +448,10 @@ impl RequestCheck for CsrfTokenNotEnforced {
         let (req, parts) = (&cx.req, &cx.parts);
         let req_ct = request_ct(cx);
         let req_body = request_body(cx);
-        if !(csrf_applicable(&parts.method, &req_ct, &parts.headers)
-            && req_ct
-                .to_ascii_lowercase()
-                .contains("x-www-form-urlencoded")
-            && !req_body.trim().is_empty()
-            && !cx.stopped())
+        if !csrf_applicable(&parts.method, &req_ct, &parts.headers)
+            || !req_ct.to_ascii_lowercase().contains("x-www-form-urlencoded")
+            || req_body.trim().is_empty()
+            || cx.stopped()
         {
             return;
         }

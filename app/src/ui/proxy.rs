@@ -88,14 +88,13 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
                 .size(12.0)
                 .color(theme::ink_faint()),
         );
-        if ui.button("Restart listener").clicked() {
-            if let Ok(p) = app.port_txt.trim().parse::<u16>() {
+        if ui.button("Restart listener").clicked()
+            && let Ok(p) = app.port_txt.trim().parse::<u16>() {
                 app.shared.proxy_port.store(p, Ordering::SeqCst);
                 app.shared.listener_restart.store(true, Ordering::SeqCst);
                 app.shared
                     .log(&format!("Restarting listener on 127.0.0.1:{p}"));
             }
-        }
     });
     ui.add_space(8.0);
     crate::proxy_settings::listeners_table(app, ui);
@@ -454,8 +453,8 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
     };
     if app.intercept_cur != Some(id) {
         // Switching rows keeps the edit made to the previous message.
-        if let Some(prev) = app.intercept_cur {
-            if let Some(item) = app
+        if let Some(prev) = app.intercept_cur
+            && let Some(item) = app
                 .shared
                 .queue
                 .lock()
@@ -465,7 +464,6 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
             {
                 item.edited = app.intercept_text.clone();
             }
-        }
         app.intercept_cur = Some(id);
         app.intercept_text = edited;
     }
@@ -554,9 +552,9 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
 /// Intercept on/off. Turning it off releases every held message unchanged
 /// except for edits already made, as Burp forwards automatically while off.
 pub(crate) fn set_intercept(app: &mut App, on: bool) {
-    if !on {
-        if let Some(id) = app.intercept_cur.take() {
-            if let Some(item) = app
+    if !on
+        && let Some(id) = app.intercept_cur.take()
+            && let Some(item) = app
                 .shared
                 .queue
                 .lock()
@@ -566,7 +564,5 @@ pub(crate) fn set_intercept(app: &mut App, on: bool) {
             {
                 item.edited = app.intercept_text.clone();
             }
-        }
-    }
     net::set_intercept(&app.shared, on);
 }

@@ -200,8 +200,7 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
         if ui
             .add_enabled(extra.is_some(), egui::Button::new("Remove"))
             .clicked()
-        {
-            if let Some(index) = extra {
+            && let Some(index) = extra {
                 let mut specs = net::listener_specs(&app.shared);
                 if index < specs.len() {
                     specs.remove(index);
@@ -209,7 +208,6 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
                     selected = None;
                 }
             }
-        }
     });
     // Redirect to host / port for the selected listener (Burp: Edit listener
     // > Request handling).
@@ -259,11 +257,9 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
         if ui
             .add_enabled(selected_port.is_some(), egui::Button::new("Clear redirect"))
             .clicked()
-        {
-            if let Some(lp) = selected_port {
+            && let Some(lp) = selected_port {
                 app.shared.listener_redirects.lock().unwrap().remove(&lp);
             }
-        }
     });
     ui.data_mut(|d| {
         d.insert_temp(sel_id, selected);
@@ -560,33 +556,27 @@ pub fn intercept_rules_table(app: &mut App, ui: &mut Ui) {
         if ui
             .add_enabled(sel.is_some(), egui::Button::new("Remove"))
             .clicked()
-        {
-            if let Some(i) = sel {
+            && let Some(i) = sel {
                 rules.remove(i);
                 selected = None;
             }
-        }
         if ui
             .add_enabled(sel.is_some_and(|i| i > 0), egui::Button::new("Up"))
             .clicked()
-        {
-            if let Some(i) = sel {
+            && let Some(i) = sel {
                 rules.swap(i, i - 1);
                 selected = Some(i - 1);
             }
-        }
         if ui
             .add_enabled(
                 sel.is_some_and(|i| i + 1 < rules.len()),
                 egui::Button::new("Down"),
             )
             .clicked()
-        {
-            if let Some(i) = sel {
+            && let Some(i) = sel {
                 rules.swap(i, i + 1);
                 selected = Some(i + 1);
             }
-        }
         if ui.button("Restore defaults").clicked() {
             rules = crate::intercept_rules::defaults();
             selected = None;

@@ -331,11 +331,10 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
                 .map(|x| s + x + 1)
                 .unwrap_or(body_low.len());
             let (lt, t) = (&body_low[s..e], &body[s..e]);
-            if attr(lt, t, "type").is_some_and(|ty| ty.trim().eq_ignore_ascii_case("password")) {
-                if let Some(n) = attr(lt, t, "name") {
+            if attr(lt, t, "type").is_some_and(|ty| ty.trim().eq_ignore_ascii_case("password"))
+                && let Some(n) = attr(lt, t, "name") {
                     passwords.push(n);
                 }
-            }
             j = e;
         }
         out.push(Form {
@@ -870,15 +869,14 @@ fn server_version(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 }
 
 fn x_powered_by(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    if cx.ok_status && cx.html {
-        if let Some(xpb) = util::get_header(&cx.p.headers, "X-Powered-By") {
+    if cx.ok_status && cx.html
+        && let Some(xpb) = util::get_header(&cx.p.headers, "X-Powered-By") {
             v.push(mk_check(
                 CH_XPB,
                 cx.e,
                 format!("X-Powered-By header: {xpb}"),
             ));
         }
-    }
 }
 
 fn aspnet_version(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
@@ -961,11 +959,10 @@ fn cors(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
     } else {
         None
     };
-    if let Some((c, detail)) = found {
-        if c.id == which.id {
+    if let Some((c, detail)) = found
+        && c.id == which.id {
             v.push(mk_check(c, cx.e, detail));
         }
-    }
 }
 
 /// A redirect that hands a session cookie to a different host.

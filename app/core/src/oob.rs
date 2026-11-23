@@ -229,8 +229,7 @@ impl OobState {
                 if let Some(p) = pending
                     .iter()
                     .find(|p| &p.id == token && p.kind == Some("CNAME"))
-                {
-                    if (kind == "DNS" || kind == "HTTP")
+                    && (kind == "DNS" || kind == "HTTP")
                         && reported.insert(format!("{token}|{kind}"))
                     {
                         let mut issue = p.issue.clone();
@@ -241,7 +240,6 @@ impl OobState {
                         issue.detail = interaction_detail(kind, &p.delivery, it);
                         issues.push(issue);
                     }
-                }
                 continue;
             };
             if pending[pos].kind.is_some() {

@@ -292,8 +292,8 @@ pub fn key_events(key: &str) -> Vec<egui::Event> {
     // Text: a single character also presses its key, as a keyboard would.
     let mut events = Vec::new();
     let mut chars = key.chars();
-    if let (Some(c), None) = (chars.next(), chars.next()) {
-        if let Some(k) = egui::Key::from_name(&c.to_ascii_uppercase().to_string())
+    if let (Some(c), None) = (chars.next(), chars.next())
+        && let Some(k) = egui::Key::from_name(&c.to_ascii_uppercase().to_string())
             .filter(|_| c.is_ascii_alphanumeric())
         {
             let modifiers = if c.is_ascii_uppercase() {
@@ -318,7 +318,6 @@ pub fn key_events(key: &str) -> Vec<egui::Event> {
             });
             return events;
         }
-    }
     vec![egui::Event::Text(key.to_string())]
 }
 

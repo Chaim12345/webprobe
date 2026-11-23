@@ -186,11 +186,10 @@ pub fn send_inner(
     } else {
         None
     };
-    if let Some(conn) = pooled.as_mut() {
-        if !conn.writable() {
+    if let Some(conn) = pooled.as_mut()
+        && !conn.writable() {
             pooled = None;
         }
-    }
     let reused = pooled.is_some();
     let mut stream = match pooled {
         Some(conn) => conn,
@@ -343,11 +342,10 @@ pub fn send_tls_inner(
     } else {
         None
     };
-    if let Some(c) = h2conn.as_mut() {
-        if !c.idle() || !c.get_mut().writable() {
+    if let Some(c) = h2conn.as_mut()
+        && (!c.idle() || !c.get_mut().writable()) {
             h2conn = None;
         }
-    }
     if let Some(mut conn) = h2conn {
         LAST_PROTOCOL.with(|p| p.set("HTTP/2"));
         let mut h2req =
@@ -384,11 +382,10 @@ pub fn send_tls_inner(
     } else {
         shared.tls_pool.lock().unwrap().remove(&key)
     };
-    if let Some(conn) = pooled.as_mut() {
-        if !conn.writable() {
+    if let Some(conn) = pooled.as_mut()
+        && !conn.writable() {
             pooled = None;
         }
-    }
     let reused = pooled.is_some();
     let mut stream = match pooled {
         Some(conn) => conn,

@@ -1060,8 +1060,8 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
         if pick.is_some() {
             app.intr_row_sel = pick;
         }
-        if let Some((i, code)) = action {
-            if let Some(r) = rows.get(i).cloned() {
+        if let Some((i, code)) = action
+            && let Some(r) = rows.get(i).cloned() {
                 let (host, port, https) = state.target.clone();
                 match code {
                     0 => send_row_to_repeater(app, &r, &state.target),
@@ -1091,7 +1091,6 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                         .copy_text(run::curl_command(&r.request, https, &host, port)),
                 }
             }
-        }
         let chosen = app
             .intr_row_sel
             .and_then(|n| rows.iter().find(|r| r.number == n).cloned());

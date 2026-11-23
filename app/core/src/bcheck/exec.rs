@@ -360,15 +360,14 @@ fn eval_path(cx: &mut Context, segs: &[String]) -> Result<String, ExecError> {
 /// A `differs from` operand: a bare `{x.response}` compares without its
 /// volatile headers; everything else evaluates as usual.
 fn eval_diff_operand(cx: &mut Context, e: &Expr) -> Result<String, ExecError> {
-    if let Expr::Path(segs) = e {
-        if segs.len() == 2 && segs[1] == "response" {
+    if let Expr::Path(segs) = e
+        && segs.len() == 2 && segs[1] == "response" {
             let ex = cx
                 .exchanges
                 .get(&segs[0])
                 .ok_or_else(|| ExecError(format!("unknown request `{}`", segs[0])))?;
             return Ok(ex.response.comparable());
         }
-    }
     eval_expr(cx, e)
 }
 

@@ -316,11 +316,10 @@ fn gunzip(data: &[u8]) -> Option<Vec<u8>> {
 
 fn inflate(data: &[u8]) -> Option<Vec<u8>> {
     // Some servers send raw deflate without the zlib wrapper; try both.
-    if let Some(out) = read_inflated(flate2::read::ZlibDecoder::new(data)) {
-        if !out.is_empty() {
+    if let Some(out) = read_inflated(flate2::read::ZlibDecoder::new(data))
+        && !out.is_empty() {
             return Some(out);
         }
-    }
     read_inflated(flate2::read::DeflateDecoder::new(data))
 }
 

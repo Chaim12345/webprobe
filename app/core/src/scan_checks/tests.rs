@@ -676,11 +676,10 @@ fn cache_lab(cache: bool) -> u16 {
     >::new()));
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     lab_serve(l, move |_method, target, raw| {
-        if cache {
-            if let Some(hit) = store.lock().unwrap().get(target) {
+        if cache
+            && let Some(hit) = store.lock().unwrap().get(target) {
                 return hit.clone();
             }
-        }
         let xfh = raw
             .lines()
             .find_map(|l| {

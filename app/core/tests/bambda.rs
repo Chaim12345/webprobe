@@ -332,11 +332,10 @@ fn parent_loss_watchdog_stops_an_orphaned_looping_jvm() {
     };
     let start = std::time::Instant::now();
     let pid = loop {
-        if let Ok(text) = std::fs::read_to_string(&marker) {
-            if let Ok(pid) = text.trim().parse::<u32>() {
+        if let Ok(text) = std::fs::read_to_string(&marker)
+            && let Ok(pid) = text.trim().parse::<u32>() {
                 break pid;
             }
-        }
         assert!(
             cleanup.child.try_wait().unwrap().is_none(),
             "surrogate parent exited before running Java"

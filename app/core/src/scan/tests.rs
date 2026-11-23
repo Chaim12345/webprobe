@@ -456,13 +456,12 @@ fn pct_decode(s: &str) -> Vec<u8> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
-        if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+        if b[i] == b'%' && i + 2 < b.len()
+            && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
                 out.push(v);
                 i += 3;
                 continue;
             }
-        }
         out.push(b[i]);
         i += 1;
     }
@@ -2445,8 +2444,7 @@ fn characterisation_server() -> u16 {
                         .replace('<', "&lt;");
                     let tpl = param("tpl").unwrap_or_default();
                     // A naive template engine: {{a*b}} renders the product.
-                    let tpl = regex::Regex::new(r"\{\{(\d+)\*(\d+)\}\}")
-                        .unwrap()
+                    let tpl = { static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"\{\{(\d+)\*(\d+)\}\}").unwrap()); &RE }
                         .replace_all(&tpl, |c: &regex::Captures| {
                             (c[1].parse::<u64>().unwrap_or(0) * c[2].parse::<u64>().unwrap_or(0))
                                 .to_string()
@@ -2474,8 +2472,7 @@ fn characterisation_server() -> u16 {
                     let b = if id.matches('\'').count() % 2 == 1 {
                         "<html><body><p>You have an error in your SQL syntax near '' at line 1</p></body></html>"
                     } else {
-                        let cond = regex::Regex::new(r"or (\d+)=(\d+)")
-                            .unwrap()
+                        let cond = { static RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"or (\d+)=(\d+)").unwrap()); &RE }
                             .captures(&id.replace('\'', ""))
                             .map(|c| c[1].parse::<u64>().ok() == c[2].parse::<u64>().ok());
                         match cond {

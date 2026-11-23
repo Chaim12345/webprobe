@@ -524,15 +524,14 @@ fn collect_param_edits(
                 }
             };
 
-            if range.end > range.start {
-                if let Some(replaced) = replace_target(&pairs[range.clone()], engine, replacement) {
+            if range.end > range.start
+                && let Some(replaced) = replace_target(&pairs[range.clone()], engine, replacement) {
                     edits.push(Edit {
                         start: base_offset + range.start,
                         end: base_offset + range.end,
                         replacement: replaced,
                     });
                 }
-            }
         }
 
         if end >= pairs.len() {
@@ -656,11 +655,10 @@ fn header_value<'a>(bytes: &'a [u8], parts: &HttpParts, name: &[u8]) -> Option<&
     while pos < parts.header_end {
         let (content_end, next) = line_bounds(bytes, pos, parts.header_end);
         let line = &bytes[pos..content_end];
-        if let Some(colon) = line.iter().position(|&b| b == b':') {
-            if trim_ascii_ws(&line[..colon]).eq_ignore_ascii_case(name) {
+        if let Some(colon) = line.iter().position(|&b| b == b':')
+            && trim_ascii_ws(&line[..colon]).eq_ignore_ascii_case(name) {
                 return Some(trim_ascii_ws(&line[colon + 1..]));
             }
-        }
         pos = next;
     }
     None

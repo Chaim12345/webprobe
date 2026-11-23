@@ -99,13 +99,12 @@ pub fn static_reference_corpus(items: &[HistEntry]) -> String {
     for e in items {
         let ext = e.extension.as_str();
         let mime = crate::net::burp_mime_of(e);
-        if matches!(ext, "js" | "mjs" | "css") || matches!(mime, "script" | "CSS" | "HTML") {
-            if let Some(r) = &e.resp_raw {
+        if (matches!(ext, "js" | "mjs" | "css") || matches!(mime, "script" | "CSS" | "HTML"))
+            && let Some(r) = &e.resp_raw {
                 let p = util::parse_http(r);
                 out.push_str(&String::from_utf8_lossy(&r[p.head_len.min(r.len())..]));
                 out.push('\n');
             }
-        }
     }
     out
 }
@@ -306,13 +305,12 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
             &path,
             shared.next_crawl_id.fetch_add(1, Ordering::SeqCst),
         );
-        if depth < limits.max_depth {
-            if let Some(resp) = &e.resp_raw {
+        if depth < limits.max_depth
+            && let Some(resp) = &e.resp_raw {
                 for link in crawl_links(&origin, &path, resp) {
                     push(link, depth + 1, &mut seen, &mut queue);
                 }
             }
-        }
         out.push(e);
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
@@ -760,11 +758,10 @@ pub fn form_plan(f: &FormSpec, filled: bool, origin: &str) -> Vec<(usize, String
                 }
             }
             "select" | "select-one" | "select-multiple" => {
-                if fl.value.is_empty() {
-                    if let Some(o) = fl.opts.iter().find(|o| !o.is_empty()) {
+                if fl.value.is_empty()
+                    && let Some(o) = fl.opts.iter().find(|o| !o.is_empty()) {
                         out.push((i, o.clone(), false));
                     }
-                }
             }
             _ => {
                 if fl.value.is_empty() {
@@ -1418,11 +1415,10 @@ pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
     let p = crate::util::parse_http(resp);
     let mut out = Vec::new();
     let status: u16 = p.status.trim().parse().unwrap_or(0);
-    if (300..400).contains(&status) {
-        if let Some(l) = crate::util::get_header(&p.headers, "location") {
+    if (300..400).contains(&status)
+        && let Some(l) = crate::util::get_header(&p.headers, "location") {
             out.push(l.trim().to_string());
         }
-    }
     let after_url = |s: &str| -> Option<String> {
         let low = s.to_ascii_lowercase();
         low.find("url=").map(|i| {
@@ -1442,13 +1438,11 @@ pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
         let end = low[m..].find('>').map(|x| x + m).unwrap_or(low.len());
         let tag = &body[m..end];
         let tl = &low[m..end];
-        if tl.contains("http-equiv") && tl.contains("refresh") {
-            if let Some(ci) = tl.find("content") {
-                if let Some(u) = after_url(&tag[ci..]) {
+        if tl.contains("http-equiv") && tl.contains("refresh")
+            && let Some(ci) = tl.find("content")
+                && let Some(u) = after_url(&tag[ci..]) {
                     out.push(u.trim_end_matches(['"', '\'', '/', ' ']).to_string());
                 }
-            }
-        }
         i = end.max(m + 5);
     }
     out
