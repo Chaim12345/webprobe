@@ -187,6 +187,25 @@ impl Ledger {
     pub fn retention_lost(&self) -> bool {
         self.state.lock().unwrap().retention_lost
     }
+    /// Same activated absolute deadline, never recomputed from a timeout.
+    pub fn deadline(&self) -> Result<Instant, Denied> {
+        self.reserve(&[])?;
+        self.state
+            .lock()
+            .unwrap()
+            .deadline
+            .ok_or(Denied::NotActivated)
+    }
+    /// Advisory preallocation cap. Actual I/O must still atomically reserve
+    /// its charge before growth/emission; concurrent users can spend this.
+    pub fn available(&self, resource: Resource) -> Result<u64, Denied> {
+        self.reserve(&[])?;
+        let state = self.state.lock().unwrap();
+        if let Some(reason) = state.denied {
+            return Err(reason);
+        }
+        Ok(self.ceilings[resource.index()].saturating_sub(state.used[resource.index()]))
+    }
     pub fn used(&self, resource: Resource) -> u64 {
         self.state.lock().unwrap().used[resource.index()]
     }
@@ -328,6 +347,21 @@ mod tests {
         std::thread::sleep(Duration::from_millis(30));
         l.activate().unwrap();
         assert_eq!(l.reserve(&[]), Err(Denied::Expired));
+    }
+    #[test]
+    fn absolute_deadline_and_remaining_capacity_are_validated_and_nonresetting() {
+        let l = Ledger::pending(limits()).unwrap();
+        assert_eq!(l.deadline(), Err(Denied::NotActivated));
+        assert_eq!(l.available(Resource::Response), Err(Denied::NotActivated));
+        l.activate().unwrap();
+        let deadline = l.deadline().unwrap();
+        l.activate().unwrap();
+        assert_eq!(l.deadline().unwrap(), deadline);
+        l.reserve(&[(Resource::Response, 3)]).unwrap();
+        assert_eq!(l.available(Resource::Response), Ok(7));
+        assert!(l.reserve(&[(Resource::Response, 8)]).is_err());
+        assert!(l.deadline().is_err());
+        assert!(l.available(Resource::Outgoing).is_err());
     }
     #[test]
     fn all_resource_domains_are_independent_and_finite() {
