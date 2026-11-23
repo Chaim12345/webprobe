@@ -185,6 +185,24 @@ impl Ledger {
         }
         Ok(ordinary_limit.min(left))
     }
+    /// CPU-side bounded evidence copies may finish after I/O closes. This
+    /// cannot admit network work or clear any terminal denial.
+    pub fn retain_input(&self, bytes: u64) -> Result<(), Denied> {
+        let mut state = self.state.lock().unwrap();
+        if state.deadline.is_none() {
+            return Err(Denied::NotActivated);
+        }
+        let at = Resource::Input.index();
+        let Some(next) = state.used[at]
+            .checked_add(bytes)
+            .filter(|n| *n <= self.ceilings[at])
+        else {
+            state.retention_lost = true;
+            return Err(Denied::Exhausted(Resource::Input));
+        };
+        state.used[at] = next;
+        Ok(())
+    }
     /// Sticky operational failure, not a resource exhaustion or cancellation.
     /// It forbids further admission and cannot erase an earlier denial.
     pub fn mark_incomplete(&self) {

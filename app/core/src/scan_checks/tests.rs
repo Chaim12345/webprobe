@@ -1351,6 +1351,10 @@ fn real_a4_oversize_json_continues_to_valid_finding() {
 fn real_a4_retention_exhaustion_never_claims_complete() {
     real_a4_case(5);
 }
+#[test]
+fn real_a4_truncated_valid_payload_preserves_positive_incomplete() {
+    real_a4_case(6);
+}
 fn real_a4_case(mode: u8) {
     use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
     let remembered = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
@@ -1369,7 +1373,7 @@ fn real_a4_case(mode: u8) {
                 *saved.lock().unwrap() = value;
             }
             let body = format!("<a href=\"{}\">saved</a>", saved.lock().unwrap());
-            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()+if mode==6 && path=="/retrieve"{20}else{0})
         },
     );
     let port = if mode == 2 { 0 } else { port };
@@ -1485,14 +1489,14 @@ fn real_a4_case(mode: u8) {
         assert_eq!(wire.load(Ordering::SeqCst), 0);
         assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
     }
-    if mode == 0 || mode == 4 {
+    if mode == 0 || mode == 4 || mode == 6 {
         assert!(counts.3 > 0);
     }
     if mode == 5 {
         assert_eq!(counts.3, 0);
     }
     assert_eq!(
-        mode == 0 || mode == 4,
+        mode == 0 || mode == 4 || mode == 6,
         shared
             .issues
             .lock()

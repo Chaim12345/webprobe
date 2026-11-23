@@ -141,6 +141,49 @@ impl PairCtx {
             if self.stopped() {
                 break;
             }
+            #[cfg(test)]
+            let resp = match crate::scan_lifecycle::captured() {
+                Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) => {
+                    use crate::net::scanner_io::{send_budgeted, ExchangeStatus};
+                    let outcome = send_budgeted(
+                        &self.shared,
+                        &p,
+                        item.https,
+                        &item.host,
+                        item.port,
+                        req.as_bytes(),
+                    );
+                    if outcome.status == ExchangeStatus::Complete {
+                        Some(outcome.response)
+                    } else {
+                        self.incomplete.set(true);
+                        // Only a strict valid final identity response's payload
+                        // prefix may reach positive-only stored detectors. No
+                        // redirect or completed-negative claim follows partial.
+                        let raw = outcome.response;
+                        let qualified = host_response::assess(&raw, "GET")
+                            .is_some_and(|a| a.status >= 200 && !a.body.is_empty())
+                            && !raw
+                                .windows(18)
+                                .any(|w| w.eq_ignore_ascii_case(b"Transfer-Encoding:"))
+                            && !raw.starts_with(b"HTTP/1.1 1")
+                            && !raw.starts_with(b"HTTP/1.0 1");
+                        if qualified {
+                            Some(raw)
+                        } else {
+                            None
+                        }
+                    }
+                }
+                _ => send_one(
+                    &self.shared,
+                    item.https,
+                    &item.host,
+                    item.port,
+                    req.as_bytes(),
+                ),
+            };
+            #[cfg(not(test))]
             let resp = send_one(
                 &self.shared,
                 item.https,
@@ -148,15 +191,6 @@ impl PairCtx {
                 item.port,
                 req.as_bytes(),
             );
-            #[cfg(test)]
-            if resp.is_none() {
-                if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) =
-                    crate::scan_lifecycle::captured()
-                {
-                    p.mark_incomplete();
-                    self.incomplete.set(true);
-                }
-            }
             bump_progress(&self.shared);
             let next = resp
                 .as_deref()
@@ -171,6 +205,10 @@ impl PairCtx {
                 })
                 .map(|p| get_request_like(&item.req, &p));
             out.push((req, resp));
+            #[cfg(test)]
+            if self.incomplete.get() {
+                break;
+            }
             match next {
                 Some(n) => req = n,
                 None => break,
@@ -194,10 +232,7 @@ impl PairCtx {
             let bytes = std::mem::size_of::<ScanEvidence>()
                 .checked_add(request.len().min(cap))?
                 .checked_add(response.map_or(0, |r| r.len().min(cap)))?;
-            if p.ledger()
-                .reserve(&[(crate::scan_budget::Resource::Input, bytes as u64)])
-                .is_err()
-            {
+            if p.ledger().retain_input(bytes as u64).is_err() {
                 self.incomplete.set(true);
                 return None;
             }
