@@ -28,13 +28,7 @@ pub fn run_single_connection(
     let _tool = crate::net::tool_scope("Repeater");
     let conn = match send_group::open_conn(shared, &first.host, first.port, first.https, true) {
         Ok(c) => c,
-        Err(e) => {
-            on_result(
-                0,
-                send_group::finish_item(shared, first, &first.request, Err(e), None),
-            );
-            return SequenceEnd::Cancelled(0);
-        }
+        Err(e) => return report_open_failure(shared, items, cancel, e, on_result),
     };
     let UpstreamConn::Tls(_) = conn else {
         // h2 without TLS (h2c) is not a Repeater group case.
@@ -76,6 +70,41 @@ pub fn run_single_connection(
             return SequenceEnd::UnknownHost(n);
         }
     }
+    SequenceEnd::Completed
+}
+
+/// The connection attempt failed, not a user cancellation. As in the H1
+/// ordered mode, retain the first error and mark later items unavailable
+/// without reconnecting. Hooks remain source-compatible and may do traffic;
+/// cancellation observed between results prevents their later invocation.
+fn report_open_failure(
+    shared: &Shared,
+    items: &[GroupItem],
+    cancel: &AtomicBool,
+    error: String,
+    mut on_result: impl FnMut(usize, GroupResult),
+) -> SequenceEnd {
+    let unknown = send_group::unknown_host(&error);
+    for (n, item) in items.iter().enumerate() {
+        // Report the actual attempted first failure even if stop arrived
+        // during connect; only later items are suppressed by observed stop.
+        if n > 0 && cancel.load(Ordering::SeqCst) {
+            return SequenceEnd::Cancelled(n);
+        }
+        let message = if n == 0 {
+            error.clone()
+        } else {
+            "the group's connection is unavailable after an open error".into()
+        };
+        on_result(
+            n,
+            send_group::finish_item(shared, item, &item.request, Err(message), None),
+        );
+        if unknown {
+            return SequenceEnd::UnknownHost(n);
+        }
+    }
+    // Completed means all result positions processed, not successful I/O.
     SequenceEnd::Completed
 }
 
@@ -310,3 +339,7 @@ mod tests {
             .all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == N)));
     }
 }
+
+#[cfg(test)]
+#[path = "h2_group_open_failure_tests.rs"]
+mod open_failure_tests;
