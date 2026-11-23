@@ -965,6 +965,8 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                 let w = match i {
                     0 => 70.0,
                     _ if l.starts_with("Payload") && !l.ends_with("reflected") => 200.0,
+                    // "Response received" is clipped at the default width.
+                    _ if l == "Response received" => 135.0,
                     _ => 95.0,
                 };
                 crate::table::Column::new(intern(l), w)

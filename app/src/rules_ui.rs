@@ -165,7 +165,5 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
 }
 
 fn grey(text: impl Into<String>, size: f32) -> egui::RichText {
-    egui::RichText::new(text)
-        .size(size)
-        .color(theme::c(theme::MONO6))
+    egui::RichText::new(text).size(size).color(theme::ink_dim())
 }

@@ -3582,9 +3582,10 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     org.next_id = org.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
     drop(org);
     app.org_sel = None;
-    // Logger: restore the rows and mark the restored history as mirrored,
-    // so the per-frame mirror does not add every row a second time.
-    if !data.logger.is_empty() {
+    // Logger: replace even an empty saved list, otherwise rows from the
+    // previous project survive. Reset body-retention bookkeeping as well.
+    {
+        app.logger = crate::logger::Logger::new(app.logger.cap);
         app.logger.entries = data
             .logger
             .iter()
