@@ -537,7 +537,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             Tab::Sessions => crate::tools::sessions(app, ui),
             Tab::Decoder => decoder(app, ui),
             Tab::Search => crate::tools::search(app, ui),
-            Tab::Collaborator => crate::collaborator_ui::show(&mut app.collab_state, ui),
+            Tab::Collaborator => {
+                crate::collaborator_ui::show(&mut app.collab_state, ui, &app.shared)
+            }
             Tab::Extensions => crate::tools::extensions(app, ui),
             Tab::BurpAi => burp_ai(app, ui),
             Tab::Discover => discover(app, ui),

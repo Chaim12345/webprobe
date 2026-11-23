@@ -17,8 +17,22 @@
 //!   128-bit counter; verified live — a CFB decrypt is right only for the
 //!   first block, which both modes share)
 //! * deregister: `POST /deregister` with `{"correlation-id","secret-key"}`
+//!
+//! Routing: every control-server connection (register, poll, deregister)
+//! follows the effective upstream route for the server's host (per-
+//! destination rules, then the global setting) via
+//! `upstream::connect_tls_target` — direct only when that route says
+//! direct, an HTTP CONNECT or SOCKS5 tunnel when a proxy is configured.
+//! A custom OOB server is an intended distinct destination but is not
+//! exempt from a configured proxy. A route that cannot be established
+//! fails the operation with its diagnostic (registration fails, a poll
+//! round errors) — never a silent direct fallback. The TLS verification
+//! name and the Host header stay the OOB server, distinct from the
+//! transport endpoint the route dials; with a proxy, the proxy resolves
+//! the server name (CONNECT authority / SOCKS5 remote DNS).
 
 use std::io::Write;
+#[cfg(test)]
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
@@ -156,6 +170,7 @@ const MAX_RESPONSE: usize = 16 * 1024 * 1024;
 fn https_request(
     host: &str,
     port: u16,
+    route: &crate::upstream::UpstreamConfig,
     auth: Option<&str>,
     method: &str,
     path: &str,
@@ -163,16 +178,29 @@ fn https_request(
 ) -> Result<(u16, Vec<u8>), String> {
     let mut cfg = (*crate::tls::verified_client_config()).clone();
     cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
+    https_request_with(host, port, route, Arc::new(cfg), auth, method, path, body)
+}
+
+/// `https_request` with the TLS client config supplied (tests inject a
+/// fixture root; production uses the verified system roots).
+#[allow(clippy::too_many_arguments)] // one request's worth of parameters
+fn https_request_with(
+    host: &str,
+    port: u16,
+    route: &crate::upstream::UpstreamConfig,
+    cfg: Arc<rustls::ClientConfig>,
+    auth: Option<&str>,
+    method: &str,
+    path: &str,
+    body: Option<&str>,
+) -> Result<(u16, Vec<u8>), String> {
     let name = rustls::pki_types::ServerName::try_from(host.to_string())
         .map_err(|e| format!("server name: {e}"))?;
-    let conn =
-        rustls::ClientConnection::new(Arc::new(cfg), name).map_err(|e| format!("tls: {e}"))?;
-    let addr = std::net::ToSocketAddrs::to_socket_addrs(&(host, port))
-        .map_err(|e| format!("resolve {host}: {e}"))?
-        .next()
-        .ok_or_else(|| format!("resolve {host}: no address"))?;
-    let sock = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
-        .map_err(|e| format!("connect {host}: {e}"))?;
+    let conn = rustls::ClientConnection::new(cfg, name).map_err(|e| format!("tls: {e}"))?;
+    // The transport follows the effective route; a failed route fails the
+    // request, it never falls back to a direct connection.
+    let sock = crate::upstream::connect_tls_target(route, host, port)
+        .map_err(|e| format!("route to {host} ({:?}): {e}", route.kind))?;
     sock.set_read_timeout(Some(Duration::from_secs(20))).ok();
     sock.set_write_timeout(Some(Duration::from_secs(10))).ok();
     let mut tls = rustls::StreamOwned::new(conn, sock);
@@ -224,6 +252,10 @@ pub struct Session {
     secret: String,
     token: Option<String>,
     key: rsa::RsaPrivateKey,
+    /// The upstream route every control-server connection follows,
+    /// captured at registration; a route change applies to the next
+    /// registration.
+    route: crate::upstream::UpstreamConfig,
 }
 
 /// Split a server setting (`host`, `host:port`, optionally with `https://`
@@ -250,14 +282,21 @@ pub fn parse_server(server: &str) -> Result<(String, u16), String> {
 }
 
 impl Session {
-    /// Generate an RSA key pair and register a correlation id.
-    pub fn register(server: &str) -> Result<Self, String> {
-        Self::register_with(server, None)
+    /// Generate an RSA key pair and register a correlation id, dialing
+    /// over `route` (direct only when the route says direct).
+    pub fn register(server: &str, route: &crate::upstream::UpstreamConfig) -> Result<Self, String> {
+        Self::register_with(server, None, route)
     }
 
     /// Register on a server that may be private: `server` is `host` or
-    /// `host:port`, `token` its auth token when it requires one.
-    pub fn register_with(server: &str, token: Option<&str>) -> Result<Self, String> {
+    /// `host:port`, `token` its auth token when it requires one. All
+    /// control-server traffic of the session (this registration, polls,
+    /// deregistration) transports over `route`.
+    pub fn register_with(
+        server: &str,
+        token: Option<&str>,
+        route: &crate::upstream::UpstreamConfig,
+    ) -> Result<Self, String> {
         use rsa::pkcs8::EncodePublicKey;
         let (server, port) = parse_server(server)?;
         let key = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 2048)
@@ -277,6 +316,7 @@ impl Session {
             cid: random_lower_alnum(CID_LEN),
             secret: random_uuid(),
             key,
+            route: route.clone(),
         };
         let body = serde_json::json!({
             "public-key": B64.encode(pem.as_bytes()),
@@ -304,6 +344,7 @@ impl Session {
         https_request(
             &self.server,
             self.port,
+            &self.route,
             self.token.as_deref(),
             method,
             path,
@@ -374,6 +415,7 @@ impl Session {
 mod tests {
     use super::*;
     use std::io::Read;
+    use std::net::TcpListener;
 
     #[test]
     fn server_settings_parse_host_and_port() {
@@ -422,7 +464,11 @@ mod tests {
     #[test]
     #[ignore]
     fn live_round_trip_on_public_server() {
-        let s = Session::register(DEFAULT_SERVERS[0]).expect("register");
+        let s = Session::register(
+            DEFAULT_SERVERS[0],
+            &crate::upstream::UpstreamConfig::default(),
+        )
+        .expect("register");
         let (id, host) = s.new_payload();
         // An HTTP hit on the payload host, exactly as a vulnerable target would make.
         let addr = std::net::ToSocketAddrs::to_socket_addrs(&(host.as_str(), 80u16))
@@ -467,7 +513,11 @@ mod tests {
     #[test]
     #[ignore]
     fn live_smtp_recipient_forms() {
-        let s = Session::register(DEFAULT_SERVERS[0]).expect("register");
+        let s = Session::register(
+            DEFAULT_SERVERS[0],
+            &crate::upstream::UpstreamConfig::default(),
+        )
+        .expect("register");
         let (id_a, _) = s.new_payload();
         let (id_b, host_b) = s.new_payload();
         let mut sock = TcpStream::connect((s.server.as_str(), 25)).unwrap();
@@ -505,6 +555,251 @@ mod tests {
             .collect();
         eprintln!("smtp unique ids: {smtp:?}  a={id_a}  b={id_b}");
         assert!(!smtp.is_empty(), "no SMTP interaction reported");
+    }
+
+    // ---- routing fixtures (register/poll over the effective route) ----
+
+    /// The full request helper with an injectable client config, so the
+    /// fixture can trust its own root instead of the system roots.
+    fn request_with_roots(
+        host: &str,
+        port: u16,
+        route: &crate::upstream::UpstreamConfig,
+        root: rustls::pki_types::CertificateDer<'static>,
+        method: &str,
+        path: &str,
+        body: Option<&str>,
+    ) -> Result<(u16, Vec<u8>), String> {
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(root).map_err(|e| format!("root: {e}"))?;
+        let mut cfg = rustls::ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
+        https_request_with(host, port, route, Arc::new(cfg), None, method, path, body)
+    }
+
+    fn tls_server_config(
+        names: &[&str],
+    ) -> (
+        Arc<rustls::ServerConfig>,
+        rustls::pki_types::CertificateDer<'static>,
+    ) {
+        let rcgen::CertifiedKey { cert, key_pair } = rcgen::generate_simple_self_signed(
+            names.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let config = Arc::new(
+            rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(
+                    vec![cert.der().clone()],
+                    rustls::pki_types::PrivateKeyDer::Pkcs8(key_pair.serialize_der().into()),
+                )
+                .unwrap(),
+        );
+        (config, cert.der().clone())
+    }
+
+    fn read_head(r: &mut impl std::io::Read) -> String {
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            match r.read(&mut byte) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => head.push(byte[0]),
+            }
+        }
+        String::from_utf8_lossy(&head).into_owned()
+    }
+
+    /// A listener that only counts connections: any direct fallback shows
+    /// up here.
+    fn counting_bait() -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hits2 = hits.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                hits2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                drop(stream);
+            }
+        });
+        (port, hits)
+    }
+
+    /// Register-shaped and poll-shaped requests must travel through the
+    /// configured HTTP proxy's CONNECT tunnel (verification name the OOB
+    /// server, transport endpoint the proxy); the "target" port counts
+    /// direct dials and must stay at zero.
+    #[test]
+    fn control_requests_route_through_an_http_connect_proxy() {
+        let (server_config, cert) = tls_server_config(&["localhost"]);
+        let (target_port, bait_hits) = counting_bait();
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy.local_addr().unwrap().port();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let proxy_thread = std::thread::spawn(move || {
+            for stream in proxy.incoming().take(2).flatten() {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut stream = stream;
+                let head = read_head(&mut stream);
+                tx.send(head).unwrap();
+                stream
+                    .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                    .unwrap();
+                let mut server = rustls::StreamOwned::new(
+                    rustls::ServerConnection::new(server_config.clone()).unwrap(),
+                    stream,
+                );
+                let req_head = read_head(&mut server);
+                let len: usize = req_head
+                    .split("\r\n")
+                    .find_map(|l| l.strip_prefix("Content-Length: "))
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0);
+                // Read the body before answering: closing a socket with
+                // unread data can RST the response away.
+                let mut left = len;
+                let mut buf = [0u8; 4096];
+                while left > 0 {
+                    let take = left.min(buf.len());
+                    let n = server.read(&mut buf[..take]).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    left -= n;
+                }
+                let body = if req_head.contains("/register") {
+                    "{}"
+                } else {
+                    "{\"data\":[]}"
+                };
+                tx.send(req_head).unwrap();
+                server
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    )
+                    .unwrap();
+                let _ = server.flush();
+            }
+        });
+        let route = crate::upstream::UpstreamConfig {
+            kind: crate::upstream::UpstreamKind::Http,
+            host: "127.0.0.1".into(),
+            port: proxy_port.to_string(),
+            ..Default::default()
+        };
+        let (status, _) = request_with_roots(
+            "localhost",
+            target_port,
+            &route,
+            cert.clone(),
+            "POST",
+            "/register",
+            Some("{\"public-key\":\"x\"}"),
+        )
+        .expect("register over the tunnel");
+        assert_eq!(status, 200);
+        let (status, _) = request_with_roots(
+            "localhost",
+            target_port,
+            &route,
+            cert,
+            "GET",
+            "/poll?id=x&secret=y",
+            None,
+        )
+        .expect("poll over the tunnel");
+        assert_eq!(status, 200);
+        let connect1 = rx.recv().unwrap();
+        let req1 = rx.recv().unwrap();
+        let connect2 = rx.recv().unwrap();
+        let req2 = rx.recv().unwrap();
+        for head in [&connect1, &connect2] {
+            assert!(
+                head.starts_with(&format!("CONNECT localhost:{target_port} HTTP/1.1\r\n")),
+                "{head}"
+            );
+        }
+        assert!(req1.starts_with("POST /register HTTP/1.1\r\n"), "{req1}");
+        assert!(
+            req1.contains(&format!("\r\nHost: localhost:{target_port}\r\n")),
+            "{req1}"
+        );
+        assert!(
+            req2.starts_with("GET /poll?id=x&secret=y HTTP/1.1\r\n"),
+            "{req2}"
+        );
+        proxy_thread.join().unwrap();
+        assert_eq!(
+            bait_hits.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "zero direct connections to the control server"
+        );
+    }
+
+    /// Registration fails closed when the route fails (proxy rejects the
+    /// CONNECT): the error names the route and the target sees nothing.
+    #[test]
+    fn register_fails_closed_when_the_route_fails() {
+        let (target_port, bait_hits) = counting_bait();
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            if let Some(Ok(mut stream)) = proxy.incoming().next() {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let _ = read_head(&mut stream);
+                stream
+                    .write_all(
+                        b"HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n",
+                    )
+                    .unwrap();
+            }
+        });
+        let route = crate::upstream::UpstreamConfig {
+            kind: crate::upstream::UpstreamKind::Http,
+            host: "127.0.0.1".into(),
+            port: proxy_port.to_string(),
+            ..Default::default()
+        };
+        let err = Session::register_with(&format!("localhost:{target_port}"), None, &route)
+            .err()
+            .expect("a rejected CONNECT must fail the registration");
+        assert!(err.contains("407"), "{err}");
+        assert!(err.contains("route"), "diagnostic names the route: {err}");
+        assert_eq!(
+            bait_hits.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "zero direct connections on route failure"
+        );
+    }
+
+    /// An unusable route (HTTP kind with no proxy configured) also fails
+    /// closed before anything is dialed.
+    #[test]
+    fn register_fails_closed_on_an_unusable_route() {
+        let (target_port, bait_hits) = counting_bait();
+        let route = crate::upstream::UpstreamConfig {
+            kind: crate::upstream::UpstreamKind::Http,
+            host: String::new(),
+            port: String::new(),
+            ..Default::default()
+        };
+        let err = Session::register_with(&format!("localhost:{target_port}"), None, &route)
+            .err()
+            .expect("an unusable route must fail closed");
+        assert!(err.contains("upstream proxy"), "{err}");
+        assert_eq!(bait_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[test]

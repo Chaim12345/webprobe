@@ -163,7 +163,7 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
         }
         SettingsPane::Collaborator => {
             title(ui, "Collaborator");
-            crate::collaborator_ui::settings_panel(&mut app.collab_state, ui);
+            crate::collaborator_ui::settings_panel(&mut app.collab_state, ui, &app.shared);
         }
         SettingsPane::Tasks => {
             title(ui, "Tasks");
