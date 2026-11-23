@@ -13,10 +13,19 @@
 //! reports only flagged certificates, so the severities in use are High
 //! (hostname/trust) and Medium (dates); the unflagged informational case
 //! is not reported.
+//!
+//! Routing: the configured upstream route (Settings > Network > Upstream
+//! proxy servers, per-destination rules then the global setting) is a
+//! network/privacy boundary, so the capture's transport always follows it
+//! through `upstream::connect_tls_target` — direct only when the effective
+//! route says direct, an HTTP CONNECT tunnel or SOCKS5 negotiation when a
+//! proxy is configured. A route that cannot be established fails closed
+//! with its diagnostic as `Err`; there is never a silent direct fallback.
+//! The TLS verification name (and the hostname analysis) always use the
+//! target host, distinct from the transport endpoint the route dials.
 
 #[cfg(test)]
 use std::io::Read as _;
-use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -34,7 +43,14 @@ use x509_parser::prelude::X509Certificate;
 pub enum VerifyKind {
     Hostname,
     Validity,
+    /// The chain did not lead to a configured trust anchor
+    /// (`UnknownIssuer`): the only error that establishes a trust-chain
+    /// failure.
     Trust,
+    /// Anything else the verifier reported (bad signature, encoding,
+    /// application-level rejection, a non-certificate handshake error):
+    /// kept with its diagnostic, never read as a trust failure.
+    Inconclusive,
 }
 
 /// What the recording verifier saw during one handshake: the presented
@@ -102,7 +118,10 @@ fn classify(error: &rustls::Error) -> VerifyKind {
         }
         rustls::Error::InvalidCertificate(Ce::Expired)
         | rustls::Error::InvalidCertificate(Ce::NotValidYet) => VerifyKind::Validity,
-        _ => VerifyKind::Trust,
+        rustls::Error::InvalidCertificate(Ce::UnknownIssuer) => VerifyKind::Trust,
+        // Bad signatures, encoding problems, application-level rejections and
+        // non-certificate errors say nothing certain about the trust chain.
+        _ => VerifyKind::Inconclusive,
     }
 }
 
@@ -177,16 +196,20 @@ impl ServerCertVerifier for RecordingVerifier {
     }
 }
 
-/// One TLS handshake against `host:port`, recording the presented chain.
-/// The handshake's own outcome is discarded: a failed verification is the
-/// interesting case, and the chain is captured either way. Returns None
-/// when no TLS handshake happened at all (connection refused, reset).
+/// One TLS handshake against `host:port` over the configured `route`,
+/// recording the presented chain. The handshake's own outcome is discarded:
+/// a failed verification is the interesting case, and the chain is captured
+/// either way. `Err` means the route itself failed (bad proxy config,
+/// unreachable proxy, a rejected CONNECT): the failure is explicit and
+/// nothing was sent to the target. `Ok(None)` means the transport came up
+/// but no TLS handshake happened at all (a plain-HTTP service, a reset).
 pub fn capture(
     host: &str,
     port: u16,
+    route: &crate::upstream::UpstreamConfig,
     roots: &RootCertStore,
     timeout: Duration,
-) -> Option<TlsCapture> {
+) -> Result<Option<TlsCapture>, String> {
     let seen: Arc<Mutex<TlsCapture>> = Arc::new(Mutex::new(TlsCapture::default()));
     let inner = match WebPkiServerVerifier::builder_with_provider(
         Arc::new(roots.clone()),
@@ -205,27 +228,23 @@ pub fn capture(
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(verifier))
         .with_no_client_auth();
-    let name = ServerName::try_from(host.to_string()).ok()?;
-    let mut conn = ClientConnection::new(Arc::new(config), name).ok()?;
-    // Try each resolved address: a name can map to families the server
-    // does not listen on (localhost -> ::1 with an IPv4-only server).
-    let mut tcp = None;
-    for addr in (host, port).to_socket_addrs().ok()? {
-        if let Ok(s) = TcpStream::connect_timeout(&addr, timeout) {
-            tcp = Some(s);
-            break;
-        }
-    }
-    let mut tcp = tcp?;
-    tcp.set_read_timeout(Some(timeout)).ok()?;
-    tcp.set_write_timeout(Some(timeout)).ok()?;
+    let name = ServerName::try_from(host.to_string())
+        .map_err(|e| format!("invalid TLS verification name {host}: {e}"))?;
+    let mut conn = ClientConnection::new(Arc::new(config), name).map_err(|e| e.to_string())?;
+    // The transport follows the effective route; fail closed, never fall
+    // back to a direct connection.
+    let mut tcp = crate::upstream::connect_tls_target(route, host, port)?;
+    tcp.set_read_timeout(Some(timeout))
+        .map_err(|e| e.to_string())?;
+    tcp.set_write_timeout(Some(timeout))
+        .map_err(|e| e.to_string())?;
     // Drive the handshake; the capture is recorded during it either way.
     let _ = conn.complete_io(&mut tcp);
     let seen = seen.lock().unwrap().clone();
     if seen.chain.is_empty() {
-        return None;
+        return Ok(None);
     }
-    Some(seen)
+    Ok(Some(seen))
 }
 
 /// One hostname against one certificate dNSName/CN pattern: exact match,
@@ -317,6 +336,8 @@ pub fn analyze(capture: &TlsCapture, host: &str, now: SystemTime) -> Vec<CertFla
         Some(VerifyKind::Hostname) => push(CertFlag::HostnameMismatch),
         Some(VerifyKind::Validity) if !parsed => push(CertFlag::ValidityUnknown),
         Some(VerifyKind::Trust) => push(CertFlag::Untrusted),
+        // Inconclusive stays unflagged: the diagnostic travels in
+        // `verify_error`, and no trust failure is claimed without proof.
         _ => {}
     }
     flags
@@ -454,6 +475,32 @@ mod tests {
     }
 
     #[test]
+    fn unexpected_verifier_errors_are_inconclusive_not_trust() {
+        // A certificate-error outside hostname/validity/UnknownIssuer (here:
+        // a bad signature) must not read as "not issued by a trusted
+        // authority": no flag is claimed and the diagnostic is kept.
+        let cap = cap_for(
+            leaf_der(&["example.com"], (2020, 1, 1), (2030, 1, 1)),
+            Some(VerifyKind::Inconclusive),
+        );
+        assert!(analyze(&cap, "example.com", SystemTime::now()).is_empty());
+        assert_eq!(cap.verify_error.as_deref(), Some("Inconclusive"));
+        // classify() itself: BadSignature is not a trust-chain failure.
+        assert_eq!(
+            classify(&rustls::Error::InvalidCertificate(
+                rustls::CertificateError::BadSignature
+            )),
+            VerifyKind::Inconclusive
+        );
+        assert_eq!(
+            classify(&rustls::Error::InvalidCertificate(
+                rustls::CertificateError::UnknownIssuer
+            )),
+            VerifyKind::Trust
+        );
+    }
+
+    #[test]
     fn verifier_kinds_fill_in_and_dedup() {
         let cap = cap_for(
             leaf_der(&["other.com"], (2020, 1, 1), (2030, 1, 1)),
@@ -473,14 +520,17 @@ mod tests {
         );
     }
 
-    /// A capture against a local TLS server with a self-signed
-    /// certificate: the chain arrives and an empty root store leaves the
-    /// certificate untrusted.
-    #[test]
-    fn capture_records_the_chain_through_a_failing_handshake() {
-        let CertifiedKey { cert, key_pair } =
-            rcgen::generate_simple_self_signed(["localhost".to_string()]).unwrap();
-        let server_config = Arc::new(
+    fn tls_server_config(
+        names: &[&str],
+    ) -> (
+        Arc<ServerConfig>,
+        rustls::pki_types::CertificateDer<'static>,
+    ) {
+        let CertifiedKey { cert, key_pair } = rcgen::generate_simple_self_signed(
+            names.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let config = Arc::new(
             ServerConfig::builder()
                 .with_no_client_auth()
                 .with_single_cert(
@@ -489,38 +539,295 @@ mod tests {
                 )
                 .unwrap(),
         );
+        (config, cert.der().clone())
+    }
+
+    fn serve_tls_on(stream: std::net::TcpStream, config: Arc<ServerConfig>) {
+        std::thread::spawn(move || {
+            let mut server = StreamOwned::new(ServerConnection::new(config).unwrap(), stream);
+            let mut buf = [0u8; 64];
+            let _ = server.read(&mut buf);
+            let _ = server.flush();
+        });
+    }
+
+    /// A port nothing listens on: any direct connection to it is refused.
+    fn unbound_port() -> u16 {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        drop(l);
+        port
+    }
+
+    /// Read one HTTP head (CONNECT request) off a mock proxy stream.
+    fn read_connect_head(stream: &mut std::net::TcpStream) -> String {
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            stream.read_exact(&mut byte).unwrap();
+            head.push(byte[0]);
+        }
+        String::from_utf8_lossy(&head).into_owned()
+    }
+
+    /// A capture against a local TLS server with a self-signed
+    /// certificate: the chain arrives and an empty root store leaves the
+    /// certificate untrusted.
+    #[test]
+    fn capture_records_the_chain_through_a_failing_handshake() {
+        let (server_config, cert) = tls_server_config(&["localhost"]);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             // Two handshakes: the untrusted probe, then the trusted one.
             for stream in listener.incoming().take(2) {
                 let Ok(stream) = stream else { return };
-                let config = server_config.clone();
-                std::thread::spawn(move || {
-                    let mut server =
-                        StreamOwned::new(ServerConnection::new(config).unwrap(), stream);
-                    let mut buf = [0u8; 64];
-                    let _ = server.read(&mut buf);
-                    let _ = server.flush();
-                });
+                serve_tls_on(stream, server_config.clone());
             }
         });
+        let route = crate::upstream::UpstreamConfig::default(); // direct
         let cap = capture(
             "localhost",
             port,
+            &route,
             &RootCertStore::empty(),
             Duration::from_secs(10),
         )
-        .unwrap();
+        .expect("direct route")
+        .expect("chain captured through the failing handshake");
         assert_eq!(cap.chain.len(), 1);
         assert_eq!(cap.error_kind, Some(VerifyKind::Trust));
         assert!(analyze(&cap, "localhost", SystemTime::now()).contains(&CertFlag::Untrusted));
         // Trust the self-signed certificate and the handshake verifies;
         // no flags remain.
         let mut roots = RootCertStore::empty();
-        roots.add(cert.der().clone()).unwrap();
-        let cap = capture("localhost", port, &roots, Duration::from_secs(10)).unwrap();
+        roots.add(cert).unwrap();
+        let cap = capture("localhost", port, &route, &roots, Duration::from_secs(10))
+            .expect("direct route")
+            .expect("chain captured");
         assert!(cap.verify_error.is_none(), "{:?}", cap.verify_error);
         assert!(analyze(&cap, "localhost", SystemTime::now()).is_empty());
+    }
+
+    /// A plain-TCP service: the transport comes up but no TLS handshake
+    /// happens, reported as `Ok(None)` (transient, retried) and not as a
+    /// route failure.
+    #[test]
+    fn capture_reports_no_handshake_on_a_plain_tcp_service() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().take(1).flatten() {
+                drop(stream); // accept, then hang up without speaking TLS
+            }
+        });
+        let route = crate::upstream::UpstreamConfig::default();
+        let res = capture(
+            "localhost",
+            port,
+            &route,
+            &RootCertStore::empty(),
+            Duration::from_secs(10),
+        )
+        .expect("the route itself works");
+        assert!(res.is_none(), "no handshake, no capture");
+    }
+
+    /// The effective route is an HTTP proxy: the capture must CONNECT
+    /// through it (verification name `localhost`, transport endpoint the
+    /// proxy), never dial the target directly. The target port is unbound,
+    /// so a direct connection would be refused.
+    #[test]
+    fn capture_routes_through_an_http_connect_proxy() {
+        let (server_config, cert) = tls_server_config(&["localhost"]);
+        let target_port = unbound_port();
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy.local_addr().unwrap().port();
+        let (seen_tx, seen_rx) = std::sync::mpsc::channel();
+        let proxy_thread = std::thread::spawn(move || {
+            let (mut stream, _) = proxy.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let head = read_connect_head(&mut stream);
+            seen_tx.send(head).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                .unwrap();
+            serve_tls_on(stream, server_config);
+        });
+        let mut roots = RootCertStore::empty();
+        roots.add(cert).unwrap();
+        let route = crate::upstream::UpstreamConfig {
+            kind: crate::upstream::UpstreamKind::Http,
+            host: "127.0.0.1".into(),
+            port: proxy_port.to_string(),
+            ..Default::default()
+        };
+        let cap = capture(
+            "localhost",
+            target_port,
+            &route,
+            &roots,
+            Duration::from_secs(10),
+        )
+        .expect("proxy route")
+        .expect("chain captured through the CONNECT tunnel");
+        assert!(cap.verify_error.is_none(), "{:?}", cap.verify_error);
+        assert!(analyze(&cap, "localhost", SystemTime::now()).is_empty());
+        let head = seen_rx.recv().unwrap();
+        assert!(
+            head.starts_with(&format!("CONNECT localhost:{target_port} HTTP/1.1\r\n")),
+            "{head}"
+        );
+        proxy_thread.join().unwrap();
+    }
+
+    /// Same for a SOCKS5 route (no auth, remote DNS): the proxy receives
+    /// the target name and port, and the capture runs over the tunnel.
+    #[test]
+    fn capture_routes_through_a_socks5_proxy() {
+        let (server_config, cert) = tls_server_config(&["localhost"]);
+        let target_port = unbound_port();
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy.local_addr().unwrap().port();
+        let (seen_tx, seen_rx) = std::sync::mpsc::channel();
+        let proxy_thread = std::thread::spawn(move || {
+            let (mut stream, _) = proxy.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut greeting = [0u8; 3];
+            stream.read_exact(&mut greeting).unwrap();
+            assert_eq!(greeting, [5u8, 1, 0]);
+            stream.write_all(&[5u8, 0]).unwrap();
+            let mut head = [0u8; 4];
+            stream.read_exact(&mut head).unwrap();
+            assert_eq!(&head[..3], &[5u8, 1, 0]);
+            let host = match head[3] {
+                1 => {
+                    let mut a = [0u8; 4];
+                    stream.read_exact(&mut a).unwrap();
+                    std::net::Ipv4Addr::from(a).to_string()
+                }
+                3 => {
+                    let mut l = [0u8; 1];
+                    stream.read_exact(&mut l).unwrap();
+                    let mut h = vec![0u8; l[0] as usize];
+                    stream.read_exact(&mut h).unwrap();
+                    String::from_utf8(h).unwrap()
+                }
+                other => panic!("unexpected address type {other}"),
+            };
+            let mut port_b = [0u8; 2];
+            stream.read_exact(&mut port_b).unwrap();
+            seen_tx.send((host, u16::from_be_bytes(port_b))).unwrap();
+            stream
+                .write_all(&[5u8, 0, 0, 1, 127, 0, 0, 1, 0, 0])
+                .unwrap();
+            serve_tls_on(stream, server_config);
+        });
+        let mut roots = RootCertStore::empty();
+        roots.add(cert).unwrap();
+        let route = crate::upstream::UpstreamConfig {
+            kind: crate::upstream::UpstreamKind::Socks5,
+            host: "127.0.0.1".into(),
+            port: proxy_port.to_string(),
+            ..Default::default()
+        };
+        let cap = capture(
+            "localhost",
+            target_port,
+            &route,
+            &roots,
+            Duration::from_secs(10),
+        )
+        .expect("proxy route")
+        .expect("chain captured through the SOCKS5 tunnel");
+        assert!(cap.verify_error.is_none(), "{:?}", cap.verify_error);
+        let (host, port) = seen_rx.recv().unwrap();
+        assert_eq!((host.as_str(), port), ("localhost", target_port));
+        proxy_thread.join().unwrap();
+    }
+
+    /// A route that fails (the proxy rejects the CONNECT) fails closed
+    /// with the diagnostic; the target sees zero direct connections.
+    #[test]
+    fn capture_fails_closed_when_the_proxy_rejects_connect() {
+        let (server_config, _cert) = tls_server_config(&["localhost"]);
+        let target = TcpListener::bind("127.0.0.1:0").unwrap();
+        let target_port = target.local_addr().unwrap().port();
+        let direct_hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hits = direct_hits.clone();
+        std::thread::spawn(move || {
+            for stream in target.incoming().flatten() {
+                hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                serve_tls_on(stream, server_config.clone());
+            }
+        });
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = proxy.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let _ = read_connect_head(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+        });
+        let route = crate::upstream::UpstreamConfig {
+            kind: crate::upstream::UpstreamKind::Http,
+            host: "127.0.0.1".into(),
+            port: proxy_port.to_string(),
+            ..Default::default()
+        };
+        let err = capture(
+            "localhost",
+            target_port,
+            &route,
+            &RootCertStore::empty(),
+            Duration::from_secs(10),
+        )
+        .expect_err("a rejected CONNECT must fail closed");
+        assert!(err.contains("403"), "{err}");
+        assert_eq!(
+            direct_hits.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "no direct target connection after a route failure"
+        );
+    }
+
+    /// An unusable route (HTTP kind with no proxy configured) also fails
+    /// closed before anything is dialed.
+    #[test]
+    fn capture_fails_closed_on_an_unusable_route() {
+        let target = TcpListener::bind("127.0.0.1:0").unwrap();
+        let target_port = target.local_addr().unwrap().port();
+        let direct_hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hits = direct_hits.clone();
+        std::thread::spawn(move || {
+            for stream in target.incoming().flatten() {
+                hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                drop(stream);
+            }
+        });
+        let route = crate::upstream::UpstreamConfig {
+            kind: crate::upstream::UpstreamKind::Http,
+            host: String::new(),
+            port: String::new(),
+            ..Default::default()
+        };
+        let err = capture(
+            "localhost",
+            target_port,
+            &route,
+            &RootCertStore::empty(),
+            Duration::from_secs(10),
+        )
+        .expect_err("an unusable route must fail closed");
+        assert!(err.contains("upstream proxy"), "{err}");
+        assert_eq!(direct_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 }
