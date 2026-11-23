@@ -250,7 +250,10 @@ fn read_request_consumes_exactly_one_request_and_keeps_the_pipelined_next() {
     let mut pending = Vec::new();
     let got = read_request_pending(&mut stream, &mut pending).unwrap();
     assert_eq!(got, first, "head plus declared body only");
-    assert_eq!(pending, second, "the next request was read ahead, not consumed");
+    assert_eq!(
+        pending, second,
+        "the next request was read ahead, not consumed"
+    );
     let got = read_request_pending(&mut stream, &mut pending).unwrap();
     assert_eq!(got, second, "second request served from pending");
     assert!(pending.is_empty());
