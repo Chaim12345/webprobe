@@ -108,11 +108,16 @@ mod tests {
                 tabs: vec![0],
             });
         crate::tools::apply_project(&mut app, &data, true);
-        let path = std::env::temp_dir().join(format!(
-            "webprobe-group-autosave-{}-{}.json",
+        let dir = std::env::temp_dir().join(format!(
+            "webprobe-group-autosave-{}-{}",
             std::process::id(),
-            app.shared.rep.new_tab_id()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("project.json");
         app.project_path = path.to_string_lossy().into_owned();
         let now = Instant::now();
         app.autosave_at = now;
@@ -136,5 +141,6 @@ mod tests {
             .repeater_groups
             .is_empty());
         std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 }
