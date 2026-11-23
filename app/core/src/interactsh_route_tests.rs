@@ -318,7 +318,7 @@ fn poll_and_deregister_use_the_selected_route() {
         route: http_route(&proxy),
     };
     let _ = session.poll();
-    let _ = session.deregister();
+    session.deregister();
     for what in ["poll", "deregister"] {
         let (head, _) = proxy
             .served
