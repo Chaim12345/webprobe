@@ -1887,13 +1887,32 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
   window.__wpDomAnalysis = true;
   window.__wpDomHits = [];
   var CANARY = "%CANARY%";
+  // The canary is a qs-style payload (e.g. `__proto__[token]=token`);
+  // the random token inside it is what attributes a value to this probe.
+  var TOKEN = (function () { var m = /\[([^\]]+)\]/.exec(CANARY); return m ? m[1] : CANARY; })();
+  // The query-string payload carries its OWN run-owned token (the
+  // fragment payload carries TOKEN): a value carrying TOKEN came from
+  // location.hash, QTOKEN from location.search, both from both. A probe
+  // that runs one token in both URL parts cannot attribute: provenance
+  // is honestly "unknown", never guessed.
+  var QTOKEN = "%CANARY2%";
+  function provenance(s) {
+    var h = s.indexOf(TOKEN) >= 0;
+    var q = QTOKEN.length > 0 && s.indexOf(QTOKEN) >= 0;
+    if (!h && !q) { return null; }
+    if (TOKEN === QTOKEN) { return "unknown"; }
+    if (h && q) { return "location.hash+location.search"; }
+    return h ? "location.hash" : "location.search";
+  }
   function record(sink, value) {
     try {
       var s = String(value);
-      if (s.indexOf(CANARY) >= 0 && window.__wpDomHits.length < 50) {
+      var src = provenance(s);
+      if (src !== null && window.__wpDomHits.length < 50) {
         // Evidence caps: values and the page URL are bounded so a hostile
         // page cannot grow a run's stored hits without limit.
-        window.__wpDomHits.push({ source: "location.hash", sink: sink, sourceValue: String(location.hash).slice(0, 300), sinkValue: s.slice(0, 300), pageUrl: String(location.href).slice(0, 500) });
+        var sv = src === "location.hash" ? String(location.hash) : src === "location.search" ? String(location.search) : String(location.search) + " " + String(location.hash);
+        window.__wpDomHits.push({ source: src, sink: sink, sourceValue: sv.slice(0, 300), sinkValue: s.slice(0, 300), pageUrl: String(location.href).slice(0, 500) });
       }
     } catch (e) {}
   }
@@ -2030,6 +2049,31 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
 })();
 "#;
 
+/// The first `[...]` group's content, the token slot of the qs-style
+/// probe payloads.
+fn bracket_token(s: &str) -> Option<&str> {
+    let i = s.find('[')? + 1;
+    let j = s[i..].find(']')? + i;
+    (j > i).then(|| &s[i..j])
+}
+
+/// The instrumentation with both probe tokens substituted. TOKEN (from
+/// `canary`) marks the fragment payload; QTOKEN marks the query payload
+/// and is read back out of the probe URL's query string. A probe whose
+/// URL carries no query payload reuses the fragment token for both, and
+/// attribution then reports "unknown" rather than guessing a source.
+pub(crate) fn dom_instrument_js(url: &str, canary: &str) -> String {
+    let fragment_token = bracket_token(canary).unwrap_or(canary).to_string();
+    let query_token = url
+        .split_once('?')
+        .and_then(|(_, q)| bracket_token(q))
+        .unwrap_or(&fragment_token)
+        .to_string();
+    DOM_INSTRUMENT_JS
+        .replace("%CANARY%", canary)
+        .replace("%CANARY2%", &query_token)
+}
+
 /// R-13 option (b) vertical slice: navigate to `url` with `#{canary}` in a
 /// headless browser (locked to the target host, like the crawl) and
 /// return the source-to-sink hits the instrumentation recorded. The
@@ -2060,11 +2104,15 @@ pub fn dom_analysis_probe(
         .to_string();
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
     let authority = rest.split('/').next().unwrap_or("");
-    let target_host = authority
-        .rsplit_once(':')
-        .map(|x| x.0)
-        .unwrap_or(authority)
-        .to_string();
+    let target_host = if let Some(rest) = authority.strip_prefix('[') {
+        rest.split(']').next().unwrap_or(rest).to_string()
+    } else {
+        authority
+            .rsplit_once(':')
+            .map(|x| x.0)
+            .unwrap_or(authority)
+            .to_string()
+    };
     let dport = std::net::TcpListener::bind("127.0.0.1:0")
         .map_err(|e| e.to_string())?
         .local_addr()
@@ -2158,7 +2206,7 @@ pub fn dom_analysis_probe(
         )?;
         cdp.call(
             "Page.addScriptToEvaluateOnNewDocument",
-            serde_json::json!({"source": DOM_INSTRUMENT_JS.replace("%CANARY%", canary)}),
+            serde_json::json!({"source": dom_instrument_js(url, canary)}),
         )?;
         let base = url.split('#').next().unwrap_or(url);
         cdp.call(

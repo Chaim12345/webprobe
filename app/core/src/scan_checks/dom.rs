@@ -84,11 +84,21 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
         .or_default()
         .clone();
     cell.get_or_init(|| {
-        let canary = format!("wp{}", rnd_letters(10));
-        let origin = crate::crawl::origin_of(&url).unwrap_or_default();
+        // Two distinct run-owned tokens: the query-string payload
+        // (tok_s) and the fragment payload (tok_h) ride the SAME single
+        // navigation, so one probe covers both URL-part sources with no
+        // extra browser run. The instrumentation attributes a hit by
+        // which token the evidence contains; a transformed value that
+        // loses the tokens is conservatively not reported.
+        let tok_s = format!("wp{}", rnd_letters(10));
+        let tok_h = format!("wp{}", rnd_letters(10));
+        let canary = format!("__proto__[{tok_h}]={tok_h}");
+        let sep = if url.contains('?') { "&" } else { "?" };
+        let probe_url = format!("{url}{sep}__proto__[{tok_s}]={tok_s}");
+        let origin = crate::crawl::origin_of(&probe_url).unwrap_or_default();
         crate::crawl::dom_analysis_probe(
             &cx.shared,
-            &url,
+            &probe_url,
             &canary,
             &cx.req,
             &cx.host,
@@ -132,6 +142,12 @@ macro_rules! dom_family_check {
                     if !seen.insert(hit.sink.as_str()) {
                         continue;
                     }
+                    let provenance_note = match hit.source.as_str() {
+                        "location.hash" => "location.hash",
+                        "location.search" => "location.search",
+                        "location.hash+location.search" => "location.hash and location.search",
+                        _ => "the URL (query or fragment; part not attributable)",
+                    };
                     let mut i = mk(
                         $severity,
                         self.issue(),
@@ -139,13 +155,21 @@ macro_rules! dom_family_check {
                         format!(
                             "The application may be vulnerable to {}. Data is read from <b>{}</b> and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
                             $family,
-                            util::html_encode(&hit.source),
+                            util::html_encode(provenance_note),
                             util::html_encode(&hit.sink),
                             util::html_encode(&hit.source_value),
                             util::html_encode(&hit.sink_value)
                         ),
                     );
-                    i.confidence = $confidence.into();
+                    // burp.Zwf8's confidence mapping is established for a
+                    // location.hash source only. Search-only, mixed or
+                    // unattributable provenance is reported conservatively
+                    // as Tentative rather than inheriting it.
+                    i.confidence = if hit.source == "location.hash" {
+                        $confidence.into()
+                    } else {
+                        "Tentative".into()
+                    };
                     cx.report(vec![i]);
                 }
             }
@@ -292,4 +316,32 @@ fn dom_family_sinks_are_wrapped() {
             );
         }
     }
+}
+
+/// Token drift: the instrumentation keeps both token placeholders and
+/// the provenance labels the Rust side reasons about, and
+/// dom_instrument_js substitutes them distinctly.
+#[test]
+fn dom_probe_tokens_are_distinct_and_substituted() {
+    let js = crate::crawl::DOM_INSTRUMENT_JS;
+    for needle in [
+        "%CANARY%",
+        "%CANARY2%",
+        "location.hash",
+        "location.search",
+        "location.hash+location.search",
+        "unknown",
+    ] {
+        assert!(js.contains(needle), "instrumentation lost {needle}");
+    }
+    let out =
+        crate::crawl::dom_instrument_js("http://h/p?__proto__[wpSs]=wpSs", "__proto__[wpHh]=wpHh");
+    assert!(!out.contains("%CANARY%") && !out.contains("%CANARY2%"));
+    assert!(out.contains("wpSs") && out.contains("wpHh"));
+    // A probe URL without a query payload falls back to one token, which
+    // the instrumentation reads as unattributable provenance.
+    let legacy = crate::crawl::dom_instrument_js("http://h/p", "wpT0k");
+    assert!(
+        legacy.contains("var QTOKEN = \"wpT0k\";") && legacy.contains("var CANARY = \"wpT0k\";")
+    );
 }

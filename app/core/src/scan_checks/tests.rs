@@ -1093,7 +1093,9 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     let count = visits.clone();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(listener, move |_, path, _| {
-        if path == "/cache" {
+        // The DOM navigation carries the probe payload in the query
+        // string ("/cache?..."); the baseline is the bare "/cache".
+        if path == "/cache" || path.starts_with("/cache?") {
             count.fetch_add(1, Ordering::SeqCst);
         }
         let body = if enabled.load(Ordering::SeqCst) {
@@ -1160,4 +1162,115 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
         4,
         "next run gets a fresh DOM probe"
     );
+}
+
+/// Two-token source provenance matrix: hash-only
+/// evidence keeps the family confidence; search-only and mixed evidence
+/// are reported conservatively as Tentative; a reflected token that never
+/// reaches a wrapped sink, a pre-existing unrelated Object.prototype
+/// property and a benign page report nothing. Live Chromium, skipped when
+/// no browser is available.
+#[test]
+fn dom_source_provenance_matrix_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/hashonly") {
+            "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>"
+        } else if path.starts_with("/searchonly") {
+            "<html><body><script>document.write('<p>' + location.search.slice(1) + '</p>');</script></body></html>"
+        } else if path.starts_with("/both") {
+            "<html><body><script>document.write('<p>' + location.search.slice(1) + '|' + location.hash.slice(1) + '</p>');</script></body></html>"
+        } else if path.starts_with("/reflect") {
+            // The tokens reach the page but no wrapped sink: no finding.
+            "<html><body><script>var d=document.createElement('div'); d.textContent=location.search+location.hash; document.body.appendChild(d);</script></body></html>"
+        } else if path.starts_with("/preexisting") {
+            // An unrelated pre-existing prototype property is not a finding.
+            "<html><body><script>Object.prototype.wpPreExisting123='x';</script></body></html>"
+        } else {
+            "<html><body><p>hello</p><script>void 0</script></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let shared = crate::net::Shared::new();
+    let mut config = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if !id.starts_with("active.dom-") {
+            config.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    let scan = |path: &str| {
+        shared.issues.lock().unwrap().clear();
+        let entry = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        crate::scan::start_active_scan(shared.clone(), entry, &[], &[]);
+        let start = std::time::Instant::now();
+        while shared.scan.is_busy() && start.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy());
+        shared.issues.lock().unwrap().clone()
+    };
+    let names = |issues: &[webprobe_support::issues::ScanIssue]| {
+        issues
+            .iter()
+            .map(|i| format!("{}|{}|{}", i.name, i.sev, i.confidence))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    let xss = |issues: &[webprobe_support::issues::ScanIssue]| {
+        issues
+            .iter()
+            .filter(|i| i.name == "Cross-site scripting (DOM-based)")
+            .count()
+    };
+    let hit = |issues: &[webprobe_support::issues::ScanIssue]| {
+        assert_eq!(xss(issues), 1, "{}", names(issues));
+        issues
+            .iter()
+            .find(|i| i.name == "Cross-site scripting (DOM-based)")
+            .unwrap()
+            .clone()
+    };
+    let hash = scan("/hashonly");
+    let h = hit(&hash);
+    assert_eq!(h.confidence, "Firm", "{}", names(&hash));
+    assert!(
+        h.detail.contains("read from <b>location.hash</b>"),
+        "{}",
+        h.detail
+    );
+    let search = scan("/searchonly");
+    let h = hit(&search);
+    assert_eq!(h.confidence, "Tentative", "{}", names(&search));
+    assert!(
+        h.detail.contains("read from <b>location.search</b>"),
+        "{}",
+        h.detail
+    );
+    let both = scan("/both");
+    let h = hit(&both);
+    assert_eq!(h.confidence, "Tentative", "{}", names(&both));
+    assert!(
+        h.detail
+            .contains("read from <b>location.hash and location.search</b>"),
+        "{}",
+        h.detail
+    );
+    for page in ["/reflect", "/preexisting", "/benignp"] {
+        let got = scan(page);
+        assert!(got.is_empty(), "{page}: {}", names(&got));
+    }
 }

@@ -9,10 +9,19 @@ explicitly not established.
 
 ## Source
 
-| Source | Status |
-| --- | --- |
-| `location.hash` (canary) | **covered** - the only injected source; labs prove detection per family |
-| `location.search`, `document.URL`, `document.referrer`, `window.name`, `localStorage`/`sessionStorage` reads, `postMessage` | not covered - no instrumentation emits them as sources |
+One navigation carries two distinct run-owned tokens: the query-string
+payload `__proto__[tok_s]=tok_s` and the fragment payload
+`__proto__[tok_h]=tok_h`. A hit is attributed by which token the
+recorded evidence contains; a transformed value that loses the tokens is
+not reported.
+
+| Source | Status | Confidence mapping |
+| --- | --- | --- |
+| `location.hash` (fragment token) | **covered** - labs prove detection and attribution per family | the family's burp.Zwf8 mapping (Firm for the wrapped families, Tentative for open redirection) |
+| `location.search` (query token) | **covered** - same sinks, proved by the provenance lab | Tentative: the Zwf8 mapping is established for the hash source only, so search provenance is reported conservatively |
+| both tokens in one value | **covered** | Tentative (mixed provenance) |
+| token present but part not attributable (single-token probe) | reported as source `unknown` | Tentative (inconclusive, never guessed) |
+| `document.URL`, `document.referrer`, `window.name`, `localStorage`/`sessionStorage` reads, `postMessage` | not covered - no instrumentation emits them as sources | - |
 
 ## Families and sinks (burp.Zcwh dynamic decoder, docs/specs/R-13 section 6)
 
@@ -36,6 +45,12 @@ local nor the session area) are recorded but reported by no family.
 - One browser probe per URL per run; all families read the same result
   (`dom_families_share_one_probe_and_refresh_on_the_next_run`: 8 issues,
   1 baseline + 1 DOM navigation; a fresh run re-probes).
+- Source provenance: `dom_source_provenance_matrix_against_a_live_lab`
+  proves hash-only (Firm), search-only (Tentative), mixed (Tentative),
+  and the negatives: reflected token without a sink, a pre-existing
+  unrelated Object.prototype property, and a benign page.
+- `dom_probe_tokens_are_distinct_and_substituted` pins the two-token
+  substitution (drift test).
 - Budgets: at most `DOM_MAX_CONCURRENT_BROWSERS` (2) live Chromium
   instances per run and `DOM_MAX_PROBES_PER_RUN` (100) navigations; over
   budget fails closed (no browser, no hits). Unit-tested in
