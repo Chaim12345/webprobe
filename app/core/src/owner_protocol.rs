@@ -65,6 +65,7 @@ impl Control {
         }
     }
     pub(crate) fn cancel_and_notify(&self) {
+        self.owner.record_reason(Reason::UserCancelled);
         {
             let mut p = self
                 .pause
@@ -869,6 +870,65 @@ mod tests {
         assert!(reasons.contains(&Reason::UserCancelled));
         assert!(reasons.contains(&Reason::InternalOrStoreFailure));
         assert!(reasons.contains(&Reason::AdmissionRejected));
+    }
+    #[test]
+    fn strict_retirement_clears_batch_fences_invalidation_and_freezes_aggregate() {
+        for mode in 0..4 {
+            let shared = crate::net::Shared::new();
+            let c = Coordinator::new(shared.clone(), limits()).unwrap();
+            let b = c.open_standalone().unwrap();
+            let g = b.generation().unwrap();
+            let control = b.control().unwrap();
+            let retained = b.context().cancel_handle();
+            if mode == 2 {
+                g.close().unwrap();
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| shared
+                        .stored
+                        .clear()))
+                    .is_err()
+                );
+            }
+            if mode == 3 {
+                let gate = Arc::new(std::sync::Barrier::new(2));
+                let release = gate.clone();
+                let stale = g.clone();
+                let worker = std::thread::spawn(move || {
+                    release.wait();
+                    stale.close().unwrap();
+                });
+                gate.wait();
+                worker.join().unwrap();
+            }
+            if mode == 1 {
+                drop(b);
+            } else {
+                let Handoff::Finalize(f) = b.finish().unwrap() else {
+                    panic!("finalizer")
+                };
+                assert_eq!(
+                    f.run(|_| Finish::Complete),
+                    if mode >= 2 {
+                        Finish::Incomplete
+                    } else {
+                        Finish::Complete
+                    }
+                );
+            }
+            assert!(!shared.stored.in_batch());
+            assert!(!shared.scan.is_busy());
+            let frozen = retained.aggregate().unwrap();
+            retained.cancel();
+            control.cancel();
+            control.owner.record_reason(Reason::AdmissionRejected);
+            assert_eq!(retained.aggregate().unwrap(), frozen);
+            assert!(!frozen.reasons.contains(&Reason::UserCancelled));
+            // Legacy standalone now sees no open batch, so it owns the A4 obligation.
+            assert!(!shared.stored.in_batch());
+            let (audit, _, _) = c.admit(item()).unwrap();
+            assert!(matches!(audit.complete().unwrap(), Handoff::Finalize(_)));
+            assert!(!shared.stored.in_batch());
+        }
     }
     fn task(id: u64) -> crate::tasks::ScanTask {
         crate::tasks::ScanTask {

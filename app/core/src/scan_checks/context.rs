@@ -140,7 +140,7 @@ impl ScanCtx {
         if self
             .store_generation
             .as_ref()
-            .is_some_and(|g| g.item(self.item).is_err())
+            .is_some_and(|g| !matches!(g.item(self.item), Ok(Some(_))))
         {
             self.host_scope
                 .record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);

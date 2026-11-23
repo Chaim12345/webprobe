@@ -27,7 +27,10 @@ pub(crate) struct Admission {
 }
 pub struct AttemptScope {
     #[cfg(test)]
-    reasons: Mutex<Vec<crate::owner_protocol::Reason>>,
+    reasons: Mutex<(
+        Vec<crate::owner_protocol::Reason>,
+        Option<crate::owner_protocol::Aggregate>,
+    )>,
     /// Sticky logical-run identity. Only accepted scope construction makes a
     /// new false value; resetting legacy UI state cannot revive this owner.
     #[cfg(test)] // Experimental token until unified production lifecycle wiring.
@@ -42,13 +45,28 @@ impl AttemptScope {
     #[cfg(test)]
     pub(crate) fn record_reason(&self, reason: crate::owner_protocol::Reason) {
         let mut r = self.reasons.lock().unwrap();
-        if !r.contains(&reason) {
-            r.push(reason);
+        if r.1.is_none() && !r.0.contains(&reason) {
+            r.0.push(reason);
         }
     }
     #[cfg(test)]
     pub(crate) fn reasons(&self) -> Vec<crate::owner_protocol::Reason> {
-        self.reasons.lock().unwrap().clone()
+        self.reasons.lock().unwrap().0.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn publish_aggregate(&self, outcome: crate::scan_lifecycle::Finish) {
+        let mut r = self.reasons.lock().unwrap();
+        if r.1.is_none() {
+            r.1 = Some(crate::owner_protocol::Aggregate {
+                outcome,
+                reasons: r.0.clone(),
+            });
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn aggregate(&self) -> Option<crate::owner_protocol::Aggregate> {
+        self.reasons.lock().unwrap().1.clone()
     }
 
     /// Cancel this exact logical owner. Safe to retain on bounded resolver
@@ -69,7 +87,7 @@ impl AttemptScope {
     fn new(dedup: Arc<ScanDedup>, session: Arc<SessionClaims>) -> Arc<Self> {
         Arc::new(Self {
             #[cfg(test)]
-            reasons: Mutex::new(Vec::new()),
+            reasons: Mutex::new((Vec::new(), None)),
             #[cfg(test)]
             cancelled: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]

@@ -128,11 +128,7 @@ impl CancelHandle {
         self.0.cancel();
     }
     pub(crate) fn aggregate(&self) -> Option<crate::owner_protocol::Aggregate> {
-        let outcome = (*self.0.terminal.lock().unwrap())?;
-        Some(crate::owner_protocol::Aggregate {
-            outcome,
-            reasons: self.0.reasons(),
-        })
+        self.0.aggregate()
     }
     pub fn cancel(&self) {
         self.0
@@ -302,6 +298,8 @@ impl Coordinator {
         let id = r.id;
         let control = r.control.clone();
         if let Some(c) = &control {
+            c.owner
+                .record_reason(crate::owner_protocol::Reason::UserCancelled);
             c.owner.cancel();
             let mut p = c.pause.predicate.lock().unwrap_or_else(|e| e.into_inner());
             p.version = p.version.wrapping_add(1);
@@ -323,6 +321,8 @@ impl Coordinator {
         let mut state = self.state.lock_on(&self.shared);
         let controls = state.0.dispatch.clear();
         for c in &controls {
+            c.owner
+                .record_reason(crate::owner_protocol::Reason::UserCancelled);
             c.owner.cancel();
             let mut p = c.pause.predicate.lock().unwrap_or_else(|e| e.into_inner());
             p.version = p.version.wrapping_add(1);
@@ -374,18 +374,13 @@ impl Coordinator {
             state.0.dispatch.get(key).unwrap().reservation = None;
             return Err(DispatchError::Busy);
         }
-        let batch = match self.open_locked(&mut state) {
+        let batch = match self.open_locked(&mut state, true) {
             Ok(b) => b,
             Err(_) => {
                 state.0.dispatch.get(key).unwrap().reservation = None;
                 return Err(DispatchError::Internal);
             }
         };
-        state.as_mut().unwrap().strict = true;
-        self.shared
-            .stored
-            .set_generation_strict(&state.as_ref().unwrap().generation)
-            .map_err(|_| DispatchError::Internal)?;
         let run = state.as_ref().unwrap();
         let control = Control {
             coordinator: Arc::downgrade(self),
@@ -545,12 +540,7 @@ impl Coordinator {
         if state.is_some() {
             return Err(AdmissionError::Busy);
         }
-        let batch = self.open_locked(&mut state)?;
-        state.as_mut().unwrap().strict = true;
-        self.shared
-            .stored
-            .set_generation_strict(&state.as_ref().unwrap().generation)
-            .map_err(|_| AdmissionError::Internal)?;
+        let batch = self.open_locked(&mut state, true)?;
         Ok(batch)
     }
     pub fn adopt(self: &Arc<Self>, lease: &Batch) -> Result<Batch, AdmissionError> {
@@ -567,18 +557,19 @@ impl Coordinator {
         {
             return Err(AdmissionError::Busy);
         }
-        self.open_locked(&mut state)
+        self.open_locked(&mut state, false)
     }
     pub fn open(self: &Arc<Self>) -> Result<Batch, AdmissionError> {
         let mut state = self.state.lock_on(&self.shared);
         if state.as_ref().is_some_and(|r| r.strict) {
             return Err(AdmissionError::Busy);
         }
-        self.open_locked(&mut state)
+        self.open_locked(&mut state, false)
     }
     fn open_locked(
         self: &Arc<Self>,
         state: &mut OwnerStateGuard<'_>,
+        strict: bool,
     ) -> Result<Batch, AdmissionError> {
         let owner = if let Some(run) = state.as_mut() {
             if run.phase != Phase::Open || run.owner.is_cancelled() {
@@ -597,12 +588,13 @@ impl Coordinator {
                 .stop
                 .store(false, std::sync::atomic::Ordering::SeqCst);
             **state = Some(Run {
-                strict: false,
+                strict,
                 ledger,
-                generation: self
-                    .shared
-                    .stored
-                    .begin_generation(&self.shared, owner.clone()),
+                generation: self.shared.stored.begin_generation_mode(
+                    &self.shared,
+                    owner.clone(),
+                    strict,
+                ),
                 owner: owner.clone(),
                 pause: Arc::new(Default::default()),
                 phase: Phase::Open,
@@ -627,12 +619,7 @@ impl Coordinator {
         if state.is_some() {
             return Err(AdmissionError::Busy);
         }
-        let accepted = self.admit_locked(item, &mut state)?;
-        state.as_mut().unwrap().strict = true;
-        self.shared
-            .stored
-            .set_generation_strict(&state.as_ref().unwrap().generation)
-            .map_err(|_| AdmissionError::Internal)?;
+        let accepted = self.admit_locked(item, &mut state, true)?;
         Ok(accepted)
     }
     pub fn admit_in(
@@ -653,7 +640,7 @@ impl Coordinator {
         {
             return Err(AdmissionError::Busy);
         }
-        self.admit_locked(item, &mut state)
+        self.admit_locked(item, &mut state, false)
     }
     // Compatibility adapter for preserved experimental tests only. Strict protocol
     // callers use admit_standalone/admit_in, never this ambient adoption method.
@@ -665,7 +652,7 @@ impl Coordinator {
         if state.as_ref().is_some_and(|r| r.strict) {
             return Err(AdmissionError::Busy);
         }
-        self.admit_locked(item, &mut state)
+        self.admit_locked(item, &mut state, false)
     }
     pub(crate) fn fail_published_batch_child_registration(
         self: &Arc<Self>,
@@ -684,6 +671,7 @@ impl Coordinator {
         self: &Arc<Self>,
         item: Item,
         state: &mut OwnerStateGuard<'_>,
+        strict: bool,
     ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
         if state
             .as_ref()
@@ -702,12 +690,13 @@ impl Coordinator {
                 .stop
                 .store(false, std::sync::atomic::Ordering::SeqCst);
             **state = Some(Run {
-                strict: false,
+                strict,
                 ledger,
-                generation: self
-                    .shared
-                    .stored
-                    .begin_generation(&self.shared, owner.clone()),
+                generation: self.shared.stored.begin_generation_mode(
+                    &self.shared,
+                    owner.clone(),
+                    strict,
+                ),
                 owner,
                 pause: Arc::new(Default::default()),
                 phase: Phase::Open,
@@ -758,6 +747,7 @@ impl Coordinator {
         let mut state = self.state.lock_on(&self.shared);
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, owner) && !run.active {
+                // Seal writes but retain strict owner fencing until terminal publication.
                 let store_valid = run.generation.close().is_ok();
                 if !store_valid {
                     owner.record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
@@ -780,6 +770,10 @@ impl Coordinator {
                 } else {
                     Finish::Incomplete
                 };
+                if outcome == Finish::Incomplete && owner.reasons().is_empty() {
+                    owner.record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
+                }
+                owner.publish_aggregate(outcome);
                 *owner.terminal.lock().unwrap() = Some(outcome);
                 *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
                 run.owner.cancel();
@@ -794,7 +788,7 @@ impl Coordinator {
                 }
                 let pause = run.pause.clone();
                 run.phase = Phase::Closed;
-                run.generation.retire_owner();
+                let _ = run.generation.retire_owner();
                 if let Some(guard) = guard.as_mut() {
                     guard.release_explicit();
                 }
@@ -920,6 +914,8 @@ impl Drop for Batch {
 }
 impl Audit {
     pub fn mark_incomplete(&self) {
+        self.owner
+            .record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
         if let Some(run) = self
             .coordinator
             .state

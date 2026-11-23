@@ -123,14 +123,6 @@ impl StoredInputs {
         }
         inner
     }
-    #[cfg(test)]
-    pub(crate) fn set_generation_strict(&self, generation: &StoreGeneration) -> Result<(), ()> {
-        let mut inner = self.inner.lock().unwrap();
-        generation.validate(&inner).map_err(|_| ())?;
-        inner.strict = true;
-        Ok(())
-    }
-
     /// Forget everything (a new scan run).
     pub fn clear(&self) {
         *self.raw_inner() = Inner::default();
@@ -865,11 +857,13 @@ impl StoreGeneration {
             .pair_bounded(index, max_bytes, admit)
             .map_err(|_| StoreAccessError::PairLimitOrAdmission)
     }
-    pub(crate) fn retire_owner(&self) {
-        let Some(shared) = self.shared.upgrade() else {
-            return;
-        };
+    pub(crate) fn retire_owner(&self) -> Result<(), StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
+        let valid = self.validate(&inner);
         if inner
             .generation
             .as_ref()
@@ -879,6 +873,7 @@ impl StoreGeneration {
             inner.strict = false;
             shared.stored.batch.store(false, Ordering::SeqCst);
         }
+        valid
     }
     pub(crate) fn close(&self) -> Result<(), StoreAccessError> {
         let shared = self
@@ -887,8 +882,8 @@ impl StoreGeneration {
             .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
-        inner.generation = None;
-        inner.strict = false;
+        // Explicit invalidation seam. Keep owner/fence until authoritative retirement.
+        inner.generation.as_mut().unwrap().1 = std::sync::Weak::new();
         Ok(())
     }
 }
@@ -899,8 +894,16 @@ impl StoredInputs {
         shared: &std::sync::Arc<crate::net::Shared>,
         owner: std::sync::Arc<crate::host_probe_state::AttemptScope>,
     ) -> StoreGeneration {
+        self.begin_generation_mode(shared, owner, false)
+    }
+    pub(crate) fn begin_generation_mode(
+        &self,
+        shared: &std::sync::Arc<crate::net::Shared>,
+        owner: std::sync::Arc<crate::host_probe_state::AttemptScope>,
+        strict: bool,
+    ) -> StoreGeneration {
         let mut inner = self.inner.lock().unwrap();
-        let strict = inner.strict;
+        let strict = strict || inner.strict;
         *inner = Inner::default();
         inner.strict = strict;
         let identity = std::sync::Arc::new(());
