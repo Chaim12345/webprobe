@@ -3,8 +3,8 @@
 //! pipeline wiring land in the next slice.
 
 use super::exec::{
-    apply_mod, eval_condition, resolve_value, Collaborator, Context, Exchange, ExecError,
-    RequestData, ResponseData,
+    Collaborator, Context, Exchange, ExecError, RequestData, ResponseData, apply_mod,
+    eval_condition, resolve_value,
 };
 use super::{Definition, GivenMode, InsertionPointKind, Stmt, Value};
 
@@ -450,7 +450,7 @@ pub fn given_mode(def: &Definition) -> &GivenMode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bcheck::{parse, InteractionKind};
+    use crate::bcheck::{InteractionKind, parse};
     use std::sync::Mutex;
 
     struct Lab {
@@ -536,9 +536,11 @@ mod tests {
             responder: Box::new(ok200),
         };
         let b = base("http://lab.local/", "", 200);
-        assert!(run_definition(&def, &b, None, &lab, None)
-            .unwrap()
-            .is_empty());
+        assert!(
+            run_definition(&def, &b, None, &lab, None)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     struct Collab {
@@ -583,10 +585,12 @@ mod tests {
         assert_eq!(issues[0].severity, "high");
         // the probe request carried the collaborator referer
         let sent = lab.sent.lock().unwrap();
-        assert!(sent[0]
-            .headers
-            .iter()
-            .any(|(k, v)| k == "Referer" && v == "xyz.oast.test"));
+        assert!(
+            sent[0]
+                .headers
+                .iter()
+                .any(|(k, v)| k == "Referer" && v == "xyz.oast.test")
+        );
 
         let lab2 = Lab {
             sent: Mutex::new(Vec::new()),
@@ -712,10 +716,12 @@ mod tests {
         assert_eq!(sent[0].method, "GET");
         // the raw request's own Host header wins over the base authority
         assert_eq!(sent[0].url, "https://lab.local/raw-path?x=1");
-        assert!(sent[0]
-            .headers
-            .iter()
-            .any(|(k, v)| k == "X-Test" && v == "yes"));
+        assert!(
+            sent[0]
+                .headers
+                .iter()
+                .any(|(k, v)| k == "X-Test" && v == "yes")
+        );
         assert_eq!(sent[0].body, "body-text");
     }
 

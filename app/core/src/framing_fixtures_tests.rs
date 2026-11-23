@@ -2,8 +2,8 @@
 //! (used by the proxy, Burp-compatible) does today AND what the opt-in
 //! strict path says. A change to either column must be deliberate.
 
-use crate::codec::{response_body_kind as lenient, response_body_kind_strict as strict};
 use crate::codec::{BodyKind, FramingError};
+use crate::codec::{response_body_kind as lenient, response_body_kind_strict as strict};
 
 type Case = (
     &'static str,

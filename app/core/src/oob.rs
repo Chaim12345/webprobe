@@ -230,16 +230,16 @@ impl OobState {
                     .iter()
                     .find(|p| &p.id == token && p.kind == Some("CNAME"))
                     && (kind == "DNS" || kind == "HTTP")
-                        && reported.insert(format!("{token}|{kind}"))
-                    {
-                        let mut issue = p.issue.clone();
-                        issue.name = format!("External service interaction ({kind})");
-                        issue.sev = "high".into();
-                        issue.confidence = "Certain".into();
-                        issue.type_id = 0;
-                        issue.detail = interaction_detail(kind, &p.delivery, it);
-                        issues.push(issue);
-                    }
+                    && reported.insert(format!("{token}|{kind}"))
+                {
+                    let mut issue = p.issue.clone();
+                    issue.name = format!("External service interaction ({kind})");
+                    issue.sev = "high".into();
+                    issue.confidence = "Certain".into();
+                    issue.type_id = 0;
+                    issue.detail = interaction_detail(kind, &p.delivery, it);
+                    issues.push(issue);
+                }
                 continue;
             };
             if pending[pos].kind.is_some() {

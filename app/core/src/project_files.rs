@@ -142,16 +142,20 @@ mod tests {
         assert!(check(&cut).is_err());
         let other = d.join("other.json");
         std::fs::write(&other, "SOMETHING ELSE 2\n{}").unwrap();
-        assert!(check(&other)
-            .unwrap_err()
-            .contains("not a WebProbe project file"));
+        assert!(
+            check(&other)
+                .unwrap_err()
+                .contains("not a WebProbe project file")
+        );
         // Headerless JSON is the older project format and still opens.
         let legacy = d.join("legacy.json");
         std::fs::write(&legacy, "{\"version\":2}").unwrap();
         assert_eq!(check(&legacy).unwrap().history, 0);
-        assert!(check(&d.join("missing.json"))
-            .unwrap_err()
-            .contains("cannot open"));
+        assert!(
+            check(&d.join("missing.json"))
+                .unwrap_err()
+                .contains("cannot open")
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 }

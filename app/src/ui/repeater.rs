@@ -160,9 +160,10 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                     ui.label("Port:");
                     let mut p = r.port.to_string();
                     if ui.text_edit_singleline(&mut p).changed()
-                        && let Ok(v) = p.trim().parse() {
-                            r.port = v;
-                        }
+                        && let Ok(v) = p.trim().parse()
+                    {
+                        r.port = v;
+                    }
                     ui.end_row();
                     ui.label("");
                     let mut h = r.https;
@@ -443,11 +444,7 @@ pub(crate) fn repeater_send(app: &mut App) {
                 return;
             }
             let default_port = if r.port == 0 {
-                if r.https {
-                    443
-                } else {
-                    80
-                }
+                if r.https { 443 } else { 80 }
             } else {
                 r.port
             };

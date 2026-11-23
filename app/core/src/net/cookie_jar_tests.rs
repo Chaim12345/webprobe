@@ -99,8 +99,10 @@ fn jar_is_applied_to_covered_tools_and_fed_by_monitored_ones() {
     // Defaults: the Scanner gets the jar's cookies; Repeater does not.
     {
         let _t = tool_scope("Scanner");
-        assert!(body(&send_raw(&shared, "127.0.0.1", port, req))
-            .contains("got [Cookie: sid=jar-value]"));
+        assert!(
+            body(&send_raw(&shared, "127.0.0.1", port, req))
+                .contains("got [Cookie: sid=jar-value]")
+        );
     }
     {
         let _t = tool_scope("Repeater");
@@ -133,8 +135,10 @@ fn jar_is_applied_to_covered_tools_and_fed_by_monitored_ones() {
     // ...and the Scanner sends the updated value; the logged request shows it.
     {
         let _t = tool_scope("Scanner");
-        assert!(body(&send_raw(&shared, "127.0.0.1", port, req))
-            .contains("got [Cookie: sid=from-origin]"));
+        assert!(
+            body(&send_raw(&shared, "127.0.0.1", port, req))
+                .contains("got [Cookie: sid=from-origin]")
+        );
     }
     let log = shared.tool_log.lock().unwrap();
     assert!(

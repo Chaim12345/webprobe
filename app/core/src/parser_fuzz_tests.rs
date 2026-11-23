@@ -4,7 +4,7 @@
 //! failure reproduces; every loop is bounded so the suite stays fast.
 
 use crate::h2::{self, FLAG_PADDED, FLAG_PRIORITY};
-use crate::net::{parse_ws_frame, ws_frame as ws_build, MAX_WS_FRAME};
+use crate::net::{MAX_WS_FRAME, parse_ws_frame, ws_frame as ws_build};
 
 struct Rng(u64);
 impl Rng {
@@ -124,7 +124,7 @@ fn ws_declared_64_bit_length_does_not_allocate_or_overflow() {
 
 #[test]
 fn ws_inflate_stops_a_decompression_bomb() {
-    use flate2::{write::DeflateEncoder, Compression};
+    use flate2::{Compression, write::DeflateEncoder};
     use std::io::Write;
     let mut enc = DeflateEncoder::new(Vec::new(), Compression::best());
     let zeros = vec![0u8; 1 << 20];
@@ -512,7 +512,7 @@ fn parse_http_head_len_stays_inside_the_buffer() {
 
 #[test]
 fn transfer_encoding_beats_content_length_when_both_are_present() {
-    use crate::codec::{response_body_kind, BodyKind};
+    use crate::codec::{BodyKind, response_body_kind};
     let both = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n";
     assert!(matches!(response_body_kind(both, "GET"), BodyKind::Chunked));
     let upper = b"HTTP/1.1 200 OK\r\ntransfer-encoding: CHUNKED\r\nContent-Length: 5\r\n\r\n";

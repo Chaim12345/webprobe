@@ -411,10 +411,10 @@ fn proxy_decodes_chunked_gzip_response_for_history() {
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     write!(
-            client,
-            "GET http://127.0.0.1:{upstream_port}/x HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\n\r\n"
-        )
-        .unwrap();
+        client,
+        "GET http://127.0.0.1:{upstream_port}/x HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\n\r\n"
+    )
+    .unwrap();
     let mut wire = Vec::new();
     // The proxy keeps the connection open for the next request; half-close ends it.
     client.shutdown(std::net::Shutdown::Write).unwrap();
@@ -737,11 +737,12 @@ Host: x
         "sink saw no 101 head"
     );
     assert_eq!(sink.ended, Some(true));
-    assert!(one
-        .resp
-        .as_deref()
-        .unwrap_or_default()
-        .starts_with(b"HTTP/1.1 101"));
+    assert!(
+        one.resp
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with(b"HTTP/1.1 101")
+    );
     assert!(
         two.resp.as_deref().unwrap_or_default().ends_with(b"hi"),
         "{:?}",
@@ -799,11 +800,12 @@ fn switching_protocols_streams_the_head_to_a_stream_sink() {
         Some(&mut sink),
     );
     t.join().unwrap();
-    assert!(one
-        .resp
-        .as_deref()
-        .unwrap_or_default()
-        .starts_with(b"HTTP/1.1 101"));
+    assert!(
+        one.resp
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with(b"HTTP/1.1 101")
+    );
     assert_eq!(
         sink.wired,
         b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n",
@@ -1006,12 +1008,13 @@ fn keep_alive_pool_reuses_upstream_socket() {
     eprintln!("one error: {:?}", one.error);
     eprintln!("two error: {:?}", two.error);
     t.join().unwrap();
-    assert!(one
-        .resp
-        .as_deref()
-        .map(|r| r.to_vec())
-        .unwrap_or_default()
-        .ends_with(b"ok0"));
+    assert!(
+        one.resp
+            .as_deref()
+            .map(|r| r.to_vec())
+            .unwrap_or_default()
+            .ends_with(b"ok0")
+    );
     assert!(two.resp.as_ref().unwrap().ends_with(b"ok1"));
     assert_eq!(
         shared.conns_opened.load(Ordering::SeqCst),
@@ -2384,14 +2387,16 @@ fn listener_validation() {
     let shared = Shared::new();
     assert!(set_listeners(&shared, vec![ListenerSpec::new("", 8081)]).is_err());
     assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 0)]).is_err());
-    assert!(set_listeners(
-        &shared,
-        vec![
-            ListenerSpec::new("127.0.0.1", 8081),
-            ListenerSpec::new("127.0.0.1", 8081),
-        ]
-    )
-    .is_err());
+    assert!(
+        set_listeners(
+            &shared,
+            vec![
+                ListenerSpec::new("127.0.0.1", 8081),
+                ListenerSpec::new("127.0.0.1", 8081),
+            ]
+        )
+        .is_err()
+    );
     assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 8081)]).is_ok());
     let status = listener_status(&shared);
     // primary + one extra

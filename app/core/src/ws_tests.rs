@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use crate::net::{build_ws_frame, parse_ws_frame, ws_relay_chunk, Shared, WsStream};
+use crate::net::{Shared, WsStream, build_ws_frame, parse_ws_frame, ws_relay_chunk};
 
 fn frames(bytes: &[u8]) -> Vec<(u8, Vec<u8>, bool)> {
     let mut out = Vec::new();
@@ -106,15 +106,17 @@ fn out_of_place_fragments_and_oversize_frames_close_cleanly() {
         (Some(1009), Some(1009))
     );
     // Nothing more passes once closed.
-    assert!(ws_relay_chunk(
-        &shared,
-        "h",
-        &build_ws_frame(0x81, b"late", false),
-        &mut st,
-        false
-    )
-    .forward
-    .is_empty());
+    assert!(
+        ws_relay_chunk(
+            &shared,
+            "h",
+            &build_ws_frame(0x81, b"late", false),
+            &mut st,
+            false
+        )
+        .forward
+        .is_empty()
+    );
     // A message growing past the limit in fragments: 1009 too.
     let mut st = WsStream::new(&None, 1, None);
     let piece = vec![0u8; 9 << 20];
@@ -274,12 +276,14 @@ fn interception_edits_and_drops_in_both_directions() {
         let mut st = WsStream::new(&None, 1, None);
         let answer = |reply: Option<String>| {
             let shared = shared.clone();
-            std::thread::spawn(move || loop {
-                if let Some(item) = shared.queue.lock().unwrap().pop() {
-                    let _ = item.tx.send(reply);
-                    return;
+            std::thread::spawn(move || {
+                loop {
+                    if let Some(item) = shared.queue.lock().unwrap().pop() {
+                        let _ = item.tx.send(reply);
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(5));
                 }
-                std::thread::sleep(std::time::Duration::from_millis(5));
             })
         };
         let t = answer(Some("edited".into()));

@@ -67,14 +67,15 @@ impl PointCheck for ExternalInteraction {
         // Collaborator served for this id (Ze2n.Zt): the server fetched the
         // URL and returned its content in-band.
         if let Some(r) = resp.as_deref()
-            && inband_hit(r, token) {
-                cx.report(vec![oob_resource_load_issue(
-                    &cx.entry,
-                    &crate::oob::delivery_sentence("The payload", domain, &point, ""),
-                    &new_req,
-                    r,
-                )]);
-            }
+            && inband_hit(r, token)
+        {
+            cx.report(vec![oob_resource_load_issue(
+                &cx.entry,
+                &crate::oob::delivery_sentence("The payload", domain, &point, ""),
+                &new_req,
+                r,
+            )]);
+        }
         cx.progress();
         cx.pace(50);
     }
@@ -184,9 +185,27 @@ impl PointCheck for JwtAttacks {
         let place = ip.describe_short(true);
         // Zwfx.Zf detail texts; Zmir.ZL: High, Tentative (Zs_2.java:48).
         let attacks: Vec<(&str, Vec<String>, String)> = vec![
-            ("JWT signature not verified", vec![crate::jwt::corrupt_signature(&token)], format!("The signature of the JWT within the {place} does not appear to be verified correctly by the application.")),
-            ("JWT none algorithm supported", crate::jwt::none_variants(&token), format!("The JWT within the {place} appears to be trusted by the application even when using the \"none\" algorithm with an empty signature.")),
-            ("JWT self-signed JWK header supported", crate::jwt::jwk_variant(&token).into_iter().collect(), format!("The JWT within the {place} appears to use an arbitrary key embedded in the \"jwk\" header to validate the token.")),
+            (
+                "JWT signature not verified",
+                vec![crate::jwt::corrupt_signature(&token)],
+                format!(
+                    "The signature of the JWT within the {place} does not appear to be verified correctly by the application."
+                ),
+            ),
+            (
+                "JWT none algorithm supported",
+                crate::jwt::none_variants(&token),
+                format!(
+                    "The JWT within the {place} appears to be trusted by the application even when using the \"none\" algorithm with an empty signature."
+                ),
+            ),
+            (
+                "JWT self-signed JWK header supported",
+                crate::jwt::jwk_variant(&token).into_iter().collect(),
+                format!(
+                    "The JWT within the {place} appears to use an arbitrary key embedded in the \"jwk\" header to validate the token."
+                ),
+            ),
         ];
         for (name, variants, detail) in attacks {
             if !cx.runs(name)
@@ -198,19 +217,11 @@ impl PointCheck for JwtAttacks {
                 continue;
             }
             if let Some(v) = variants.iter().find(|v| accepted(v)) {
-                cx.report(vec![mk_point(
-                    name,
-                    "high",
-                    "Tentative",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(evidence([
-                    rec.last(v),
-                    rec.last(&token.raw),
-                    rec.last(&control),
-                ]))]);
+                cx.report(vec![
+                    mk_point(name, "high", "Tentative", &cx.entry, ip, detail).with_evidence(
+                        evidence([rec.last(v), rec.last(&token.raw), rec.last(&control)]),
+                    ),
+                ]);
             }
         }
         // Zs83: jku / x5u at a Collaborator URL; Zmir.Zl: High, Certain,
@@ -383,18 +394,17 @@ impl PointCheck for ExpressionLanguageInjection {
                     ip.describe_short(false),
                     util::html_encode(&expected)
                 );
-                cx.report(vec![mk_point(
-                    "Expression Language injection",
-                    "high",
-                    "Certain",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    new_req.as_bytes(),
-                    Some(&resp),
-                )])]);
+                cx.report(vec![
+                    mk_point(
+                        "Expression Language injection",
+                        "high",
+                        "Certain",
+                        &cx.entry,
+                        ip,
+                        detail,
+                    )
+                    .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp))]),
+                ]);
             }
         }
         cx.progress();
@@ -570,18 +580,10 @@ impl PointCheck for XPathInjection {
                 } else {
                     "<br><br>The application appears to be using the Java XPath APIs."
                 });
-                cx.report(vec![mk_point(
-                    "XPath injection",
-                    "high",
-                    "Firm",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    new_req.as_bytes(),
-                    Some(&resp),
-                )])]);
+                cx.report(vec![
+                    mk_point("XPath injection", "high", "Firm", &cx.entry, ip, detail)
+                        .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp))]),
+                ]);
                 reported = true;
                 break;
             }
@@ -675,7 +677,15 @@ impl RequestCheck for HttpPutEnabled {
         if find_sub(status_body(&r2).1, marker.as_bytes()) {
             let mut e = cx.entry.clone();
             e.path = path.clone();
-            let i = mk("high", "HTTP PUT method is enabled", &e, format!("The server allowed a file to be created with PUT: the file {} was uploaded and its contents were then retrieved.", util::html_encode(&path)));
+            let i = mk(
+                "high",
+                "HTTP PUT method is enabled",
+                &e,
+                format!(
+                    "The server allowed a file to be created with PUT: the file {} was uploaded and its contents were then retrieved.",
+                    util::html_encode(&path)
+                ),
+            );
             let mut i = i.with_evidence(vec![
                 ScanEvidence::new(&put, Some(&r1)),
                 ScanEvidence::new(&get, Some(&r2)),
@@ -796,8 +806,14 @@ impl RequestCheck for AspNetDebugging {
         };
         let (st, body) = status_body(&resp);
         let verdict = match st {
-            500 if find_sub(body, b"DebugSessionID corrupted or not provided.") => Some(("medium", "The user context used to scan the application appears to be permitted to perform debugging, so this is potentially an important issue.")),
-            401 if find_sub(body, b"Debug access denied to '/Default.aspx'.") => Some(("info", "The user context used to scan the application does not appear to be permitted to perform debugging, so this is not an immediately exploitable issue. However, if you were able to obtain or guess appropriate platform-level credentials, you may be able to perform debugging.")),
+            500 if find_sub(body, b"DebugSessionID corrupted or not provided.") => Some((
+                "medium",
+                "The user context used to scan the application appears to be permitted to perform debugging, so this is potentially an important issue.",
+            )),
+            401 if find_sub(body, b"Debug access denied to '/Default.aspx'.") => Some((
+                "info",
+                "The user context used to scan the application does not appear to be permitted to perform debugging, so this is not an immediately exploitable issue. However, if you were able to obtain or guess appropriate platform-level credentials, you may be able to perform debugging.",
+            )),
             _ => None,
         };
         if let Some((sev, more)) = verdict {

@@ -794,11 +794,12 @@ impl<S: Read + Write> Conn<S> {
         sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
     ) -> Result<(), StreamError> {
         if let Some(cs) = self.cont_stream
-            && !(f.ty == FRAME_CONTINUATION && f.stream == cs) {
-                return Err(StreamError::fatal(
-                    "h2: header block interrupted before CONTINUATION",
-                ));
-            }
+            && !(f.ty == FRAME_CONTINUATION && f.stream == cs)
+        {
+            return Err(StreamError::fatal(
+                "h2: header block interrupted before CONTINUATION",
+            ));
+        }
         match f.ty {
             FRAME_SETTINGS
                 if f.flags & FLAG_ACK == 0 => {
@@ -1264,10 +1265,9 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
     let chunked = crate::util::get_header(&parts.headers, "Transfer-Encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    if chunked
-        && let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
-            body = decoded;
-        }
+    if chunked && let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
+        body = decoded;
+    }
     Some(H2Request {
         method: parts.method.clone(),
         scheme: scheme.to_string(),

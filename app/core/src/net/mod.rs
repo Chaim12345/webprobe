@@ -6,13 +6,13 @@ use crate::util;
 pub use crate::ws_history::WsEntry;
 
 // Marker parsing moved to intruder (L8, #38); keep the old net path working.
-pub use crate::intruder::{parse_markers, MarkerSeg};
+pub use crate::intruder::{MarkerSeg, parse_markers};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 thread_local! {

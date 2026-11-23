@@ -328,13 +328,13 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
     if let Some(link) = first("Link")
         && (link.to_ascii_lowercase().contains("rel=\"canonical\"")
             || link.to_ascii_lowercase().contains("rel=canonical"))
-            && let Some(u) = link
-                .split('>')
-                .next()
-                .and_then(|x| x.trim().strip_prefix('<'))
-            {
-                fp.insert(Attr::CanonicalLink, crc_of(u));
-            }
+        && let Some(u) = link
+            .split('>')
+            .next()
+            .and_then(|x| x.trim().strip_prefix('<'))
+    {
+        fp.insert(Attr::CanonicalLink, crc_of(u));
+    }
 
     // raw-body attributes (ZJ)
     let mut bc = Crc::default();
@@ -825,7 +825,10 @@ mod tests {
 
     #[test]
     fn fingerprint_reads_burp_attributes() {
-        let r = resp(200, "<html><head><title>Hi there</title></head><body><h1>Top</h1><div id=\"d\" class=\"x\">one two</div><!--c--><form><button type=\"submit\">Go</button></form></body></html>");
+        let r = resp(
+            200,
+            "<html><head><title>Hi there</title></head><body><h1>Top</h1><div id=\"d\" class=\"x\">one two</div><!--c--><form><button type=\"submit\">Go</button></form></body></html>",
+        );
         let fp = fingerprint(&r);
         assert_eq!(fp[&Attr::StatusCode], 200);
         assert_eq!(

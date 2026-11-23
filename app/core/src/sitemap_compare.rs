@@ -489,7 +489,10 @@ mod tests {
         let req = if body.is_empty() {
             format!("{method} {path} HTTP/1.1\r\nHost: app\r\n\r\n")
         } else {
-            format!("{method} {path} HTTP/1.1\r\nHost: app\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+            format!(
+                "{method} {path} HTTP/1.1\r\nHost: app\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
         };
         HistEntry {
             method: method.into(),

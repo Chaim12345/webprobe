@@ -4,10 +4,10 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
-use crate::h2::{parse_frame, write_frame, Frame, PREFACE};
+use crate::h2::{Frame, PREFACE, parse_frame, write_frame};
 use crate::net::Shared;
 
 const DATA: u8 = 0x0;
@@ -594,12 +594,14 @@ fn hostile_frames_close_the_connection_with_goaway() {
         )),
         Some(0x9)
     );
-    assert!(goaway_code(&raw(
-        b"\x00\x00\x08\x06\x00\x00\x00\x00\x01garbage!",
-        calls.clone(),
-        false
-    ))
-    .is_some());
+    assert!(
+        goaway_code(&raw(
+            b"\x00\x00\x08\x06\x00\x00\x00\x00\x01garbage!",
+            calls.clone(),
+            false
+        ))
+        .is_some()
+    );
     // A client cannot push.
     assert_eq!(
         goaway_code(&raw(

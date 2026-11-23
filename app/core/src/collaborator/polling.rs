@@ -6,8 +6,8 @@
 //! thread for the current request's gate, then deregisters the session.
 
 use crate::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::Notify;
 
@@ -200,9 +200,11 @@ mod tests {
         assert!(cleaned_rx.recv_timeout(Duration::from_millis(50)).is_err());
         release_tx.send(()).unwrap();
         cleaned_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        assert!(published_rx
-            .recv_timeout(Duration::from_millis(50))
-            .is_err());
+        assert!(
+            published_rx
+                .recv_timeout(Duration::from_millis(50))
+                .is_err()
+        );
         assert!(started_rx.recv_timeout(Duration::from_millis(50)).is_err());
     }
 
@@ -293,11 +295,12 @@ mod tests {
             || {},
             Duration::from_millis(10),
         );
-        assert!(rx
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap_err()
-            .contains("timed out"));
+        assert!(
+            rx.recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .unwrap_err()
+                .contains("timed out")
+        );
         assert_eq!(
             rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap(),
             vec![42]
@@ -378,11 +381,12 @@ mod tests {
             },
             || {},
         );
-        assert!(rx
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap_err()
-            .contains("worker failed"));
+        assert!(
+            rx.recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .unwrap_err()
+                .contains("worker failed")
+        );
         task.poll_now();
         assert_eq!(
             rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap(),

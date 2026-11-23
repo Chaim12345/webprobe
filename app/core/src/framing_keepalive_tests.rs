@@ -7,7 +7,7 @@
 
 use crate::codec::read_message;
 use crate::net::{exchange, read_request, read_request_pending, response_headers_allow_reuse};
-use crate::strict_request::{scan_request_head, RequestFramingError as E, StrictRequest as S};
+use crate::strict_request::{RequestFramingError as E, StrictRequest as S, scan_request_head};
 use std::io::{Cursor, Read, Write};
 
 /// Delivers the script in reads of at most `step` bytes, as a socket would.
@@ -158,7 +158,7 @@ fn tolerant_response_framing_where_strict_will_close() {
     // DIVERGES: tolerant reads these with a body framing and keeps the
     // connection; strict (response_body_kind_strict) errors, so a wired
     // strict mode must close instead.
-    use crate::codec::{response_body_kind_strict as strict, FramingError as F};
+    use crate::codec::{FramingError as F, response_body_kind_strict as strict};
     for (name, wire, want_body, strict_err) in [
         (
             "space before colon",

@@ -363,19 +363,20 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
         // Raw-text elements: everything up to their close tag is text,
         // never markup, so a '<' in script or style text is not a tag.
         if let Some(top) = open.last()
-            && (top == "script" || top == "style") {
-                let close = format!("</{top}");
-                match body[i..].to_ascii_lowercase().find(&close) {
-                    // Already at the close tag: parse it normally below.
-                    Some(0) => {}
-                    // Re-check the loop condition: the jump may pass pos.
-                    Some(rel) => {
-                        i += rel;
-                        continue;
-                    }
-                    None => break,
+            && (top == "script" || top == "style")
+        {
+            let close = format!("</{top}");
+            match body[i..].to_ascii_lowercase().find(&close) {
+                // Already at the close tag: parse it normally below.
+                Some(0) => {}
+                // Re-check the loop condition: the jump may pass pos.
+                Some(rel) => {
+                    i += rel;
+                    continue;
                 }
+                None => break,
             }
+        }
         if b[i] != b'<' {
             i += 1;
             continue;

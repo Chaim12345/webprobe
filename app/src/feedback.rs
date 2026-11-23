@@ -15,7 +15,7 @@ pub const TOAST_TTL: Duration = Duration::from_secs(6);
 /// Maximum toasts kept at once; older ones drop off.
 pub const TOAST_MAX: usize = 4;
 
-pub use crate::notice::{toast, Level};
+pub use crate::notice::{Level, toast};
 
 /// The colour a notice level is drawn in (the level itself is engine data).
 pub fn level_colour(level: Level) -> egui::Color32 {

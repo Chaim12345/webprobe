@@ -269,8 +269,10 @@ mod tests {
         assert!(report.bits.is_empty());
         assert_eq!(report.effective_entropy, [0; 5]);
         assert_eq!(report.rating, "extremely poor");
-        assert!(summary(&report)
-            .contains("1%, the amount of effective entropy is estimated to be: 0 bits."));
+        assert!(
+            summary(&report)
+                .contains("1%, the amount of effective entropy is estimated to be: 0 bits.")
+        );
         println!(
             "constant manual load: {} samples, {:?} effective bits, {}",
             report.samples, report.effective_entropy, report.rating

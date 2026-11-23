@@ -206,16 +206,17 @@ impl RequestCheck for CollaboratorEverywhere {
                     .oob
                     .register_delivered(token.clone(), None, issue, delivery);
                 if let Some(r) = resp.as_deref()
-                    && inband_hit(r, &token) {
-                        let mut i = oob_resource_load_issue(
-                            &cx.entry,
-                            &crate::oob::delivery_sentence("The payload", shown, label, ""),
-                            &probe.request,
-                            r,
-                        );
-                        i.path = "/".into();
-                        cx.report(vec![i]);
-                    }
+                    && inband_hit(r, &token)
+                {
+                    let mut i = oob_resource_load_issue(
+                        &cx.entry,
+                        &crate::oob::delivery_sentence("The payload", shown, label, ""),
+                        &probe.request,
+                        r,
+                    );
+                    i.path = "/".into();
+                    cx.report(vec![i]);
+                }
             }
         }
     }

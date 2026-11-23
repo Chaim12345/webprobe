@@ -583,10 +583,11 @@ pub fn ws_message(
             client_to_server,
             binary,
             &payload,
-        ) {
-            payload = new;
-            changed = true;
-        }
+        )
+    {
+        payload = new;
+        changed = true;
+    }
     if hold {
         let id = shared.next_queue_item_id();
         let (tx, rx) = mpsc::channel::<Option<String>>();
@@ -808,7 +809,7 @@ pub fn write_nonblocking<W: Write>(stream: &mut W, mut bytes: &[u8]) -> std::io:
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::WriteZero,
                     "socket write returned zero",
-                ))
+                ));
             }
             Ok(n) => bytes = &bytes[n..],
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {

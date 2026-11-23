@@ -1,4 +1,5 @@
 // Split from ui.rs (L5, issue #35): ui/ is now a module directory.
+use crate::App;
 use crate::feedback;
 use crate::intruder;
 use crate::net;
@@ -9,7 +10,6 @@ use crate::scan;
 use crate::table;
 use crate::theme::{self, c};
 use crate::util;
-use crate::App;
 use eframe::egui::{self, RichText, Ui};
 use std::sync::atomic::Ordering;
 

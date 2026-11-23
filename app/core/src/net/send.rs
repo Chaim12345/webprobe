@@ -28,7 +28,7 @@ pub fn send_raw_with(
             return Upstream {
                 resp: None,
                 error: Some(error),
-            }
+            };
         }
     };
     let mut tool_sink = tool_sink(shared, host, port, false, &request);

@@ -361,13 +361,15 @@ fn eval_path(cx: &mut Context, segs: &[String]) -> Result<String, ExecError> {
 /// volatile headers; everything else evaluates as usual.
 fn eval_diff_operand(cx: &mut Context, e: &Expr) -> Result<String, ExecError> {
     if let Expr::Path(segs) = e
-        && segs.len() == 2 && segs[1] == "response" {
-            let ex = cx
-                .exchanges
-                .get(&segs[0])
-                .ok_or_else(|| ExecError(format!("unknown request `{}`", segs[0])))?;
-            return Ok(ex.response.comparable());
-        }
+        && segs.len() == 2
+        && segs[1] == "response"
+    {
+        let ex = cx
+            .exchanges
+            .get(&segs[0])
+            .ok_or_else(|| ExecError(format!("unknown request `{}`", segs[0])))?;
+        return Ok(ex.response.comparable());
+    }
     eval_expr(cx, e)
 }
 
@@ -702,7 +704,7 @@ pub fn eval_condition(cx: &mut Context, c: &Condition) -> Result<bool, ExecError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bcheck::{parse, GivenMode, Stmt};
+    use crate::bcheck::{GivenMode, Stmt, parse};
 
     struct FakeCollaborator {
         next: u32,
@@ -871,22 +873,32 @@ mod tests {
             eval_expr(&mut cx, &path("base.request.url.query")).unwrap(),
             "productId=1"
         );
-        assert!(eval_expr(&mut cx, &path("base.request.url"))
-            .unwrap()
-            .starts_with("https://"));
+        assert!(
+            eval_expr(&mut cx, &path("base.request.url"))
+                .unwrap()
+                .starts_with("https://")
+        );
         // whole request / response serialize
-        assert!(eval_expr(&mut cx, &path("base.request"))
-            .unwrap()
-            .contains("GET /catalog/product?productId=1 HTTP/2"));
-        assert!(eval_expr(&mut cx, &path("base.response"))
-            .unwrap()
-            .contains("200"));
-        assert!(eval_expr(&mut cx, &path("latest.response.body"))
-            .unwrap()
-            .contains("hello"));
-        assert!(eval_expr(&mut cx, &Expr::Var("user_agent".into()))
-            .unwrap()
-            .contains("WebProbe"));
+        assert!(
+            eval_expr(&mut cx, &path("base.request"))
+                .unwrap()
+                .contains("GET /catalog/product?productId=1 HTTP/2")
+        );
+        assert!(
+            eval_expr(&mut cx, &path("base.response"))
+                .unwrap()
+                .contains("200")
+        );
+        assert!(
+            eval_expr(&mut cx, &path("latest.response.body"))
+                .unwrap()
+                .contains("hello")
+        );
+        assert!(
+            eval_expr(&mut cx, &Expr::Var("user_agent".into()))
+                .unwrap()
+                .contains("WebProbe")
+        );
     }
 
     #[test]
@@ -957,9 +969,10 @@ mod tests {
         // random_str length and charset
         let r = eval_expr(&mut cx, &call("random_str", vec![Expr::Int(13)])).unwrap();
         assert_eq!(r.len(), 13);
-        assert!(r
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        assert!(
+            r.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        );
         assert_eq!(
             eval_expr(&mut cx, &call("random_str", vec![Expr::Int(0)])).unwrap(),
             ""
@@ -1069,10 +1082,11 @@ mod tests {
         for m in mods {
             apply_mod(&mut cx, &mut req, m).unwrap();
         }
-        assert!(req
-            .headers
-            .iter()
-            .any(|(k, v)| k == "Referer" && v == "1.oast.test"));
+        assert!(
+            req.headers
+                .iter()
+                .any(|(k, v)| k == "Referer" && v == "1.oast.test")
+        );
     }
 
     #[test]
@@ -1119,37 +1133,47 @@ mod tests {
         };
         let path = |s: &str| Expr::Path(s.split('.').map(|x| x.to_string()).collect());
         // matches
-        assert!(eval_condition(
-            &mut cx,
-            &Condition::Matches(path("base.response.body"), interp("h.llo"))
-        )
-        .unwrap());
-        assert!(!eval_condition(
-            &mut cx,
-            &Condition::Matches(path("base.response.body"), interp("^h.llo$"))
-        )
-        .unwrap());
-        // in
-        assert!(eval_condition(
-            &mut cx,
-            &Condition::In(
-                Expr::Str(interp("[core]")),
-                Expr::Str(interp("a [core] section"))
+        assert!(
+            eval_condition(
+                &mut cx,
+                &Condition::Matches(path("base.response.body"), interp("h.llo"))
             )
-        )
-        .unwrap());
+            .unwrap()
+        );
+        assert!(
+            !eval_condition(
+                &mut cx,
+                &Condition::Matches(path("base.response.body"), interp("^h.llo$"))
+            )
+            .unwrap()
+        );
+        // in
+        assert!(
+            eval_condition(
+                &mut cx,
+                &Condition::In(
+                    Expr::Str(interp("[core]")),
+                    Expr::Str(interp("a [core] section"))
+                )
+            )
+            .unwrap()
+        );
         // is
-        assert!(eval_condition(
-            &mut cx,
-            &Condition::Is(path("base.response.status_code"), Expr::Str(interp("200")))
-        )
-        .unwrap());
+        assert!(
+            eval_condition(
+                &mut cx,
+                &Condition::Is(path("base.response.status_code"), Expr::Str(interp("200")))
+            )
+            .unwrap()
+        );
         // differs
-        assert!(eval_condition(
-            &mut cx,
-            &Condition::Differs(Expr::Str(interp("a")), Expr::Str(interp("b")))
-        )
-        .unwrap());
+        assert!(
+            eval_condition(
+                &mut cx,
+                &Condition::Differs(Expr::Str(interp("a")), Expr::Str(interp("b")))
+            )
+            .unwrap()
+        );
         // combinators + not
         let c = Condition::Or(
             Box::new(Condition::Is(

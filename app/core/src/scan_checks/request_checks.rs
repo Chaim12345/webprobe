@@ -139,20 +139,23 @@ impl RequestCheck for TraceEnabled {
             };
             let probe = bc::trace_probe(cx.req.as_bytes(), &token);
             if let Some(resp) = burp_send(cx, &probe)
-                && bc::trace_hit(&resp, &token) {
-                    let mut e = cx.entry.clone();
-                    e.path = "/".into();
-                    let mut i = mk(
-                        "info",
-                        "HTTP TRACE method is enabled",
-                        &e,
-                        format!("The TRACE method is enabled on this server: the request's Cookie value {token} was echoed back in the response."),
-                    );
-                    i.confidence = "Certain".into();
-                    cx.report(vec![
-                        i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))])
-                    ]);
-                }
+                && bc::trace_hit(&resp, &token)
+            {
+                let mut e = cx.entry.clone();
+                e.path = "/".into();
+                let mut i = mk(
+                    "info",
+                    "HTTP TRACE method is enabled",
+                    &e,
+                    format!(
+                        "The TRACE method is enabled on this server: the request's Cookie value {token} was echoed back in the response."
+                    ),
+                );
+                i.confidence = "Certain".into();
+                cx.report(vec![
+                    i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))]),
+                ]);
+            }
         }
     }
 }
@@ -187,7 +190,9 @@ impl RequestCheck for OpenApiDefinition {
                 if cx.stopped() {
                     break;
                 }
-                let probe = format!("GET {path} HTTP/1.1\r\nHost: {host_hdr}\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+                let probe = format!(
+                    "GET {path} HTTP/1.1\r\nHost: {host_hdr}\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+                );
                 if let Some(resp) = burp_send(cx, probe.as_bytes()) {
                     let hit = if path == bc::SWAGGER_UI_INIT {
                         bc::openapi_in_swagger_init(&resp)
@@ -294,16 +299,18 @@ impl RequestCheck for ServerOptions {
             let allow = util::get_header(&rp.headers, "Allow");
             let risky = risky_methods_allowed(&status, allow.as_deref());
             if !risky.is_empty() {
-                cx.report(vec![mk(
-                    "low",
-                    "Active probe: permissive HTTP methods advertised via OPTIONS",
-                    &cx.entry,
-                    format!("Allow advertises risky methods: {}.", risky.join(", ")),
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    options_req.as_bytes(),
-                    Some(&resp[..]),
-                )])]);
+                cx.report(vec![
+                    mk(
+                        "low",
+                        "Active probe: permissive HTTP methods advertised via OPTIONS",
+                        &cx.entry,
+                        format!("Allow advertises risky methods: {}.", risky.join(", ")),
+                    )
+                    .with_evidence(vec![ScanEvidence::new(
+                        options_req.as_bytes(),
+                        Some(&resp[..]),
+                    )]),
+                ]);
             }
         }
         cx.progress();
@@ -336,13 +343,17 @@ impl RequestCheck for HeaderManipulation {
             let rp = util::parse_http(resp);
             let rbody = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
             if is_header_manipulation_hit(&rbody, &rp.headers, FIP_MARKER) {
-                cx.report(vec![mk(
-                    "low",
-                    "Active probe: attacker-set header value reflected (header manipulation)",
-                    &cx.entry,
-                    format!("The response echoes the {FIP_MARKER} value sent in X-Forwarded-For."),
-                )
-                .with_evidence(vec![ScanEvidence::new(&manip, Some(&resp[..]))])]);
+                cx.report(vec![
+                    mk(
+                        "low",
+                        "Active probe: attacker-set header value reflected (header manipulation)",
+                        &cx.entry,
+                        format!(
+                            "The response echoes the {FIP_MARKER} value sent in X-Forwarded-For."
+                        ),
+                    )
+                    .with_evidence(vec![ScanEvidence::new(&manip, Some(&resp[..]))]),
+                ]);
             }
         }
         cx.progress();
@@ -449,7 +460,9 @@ impl RequestCheck for CsrfTokenNotEnforced {
         let req_ct = request_ct(cx);
         let req_body = request_body(cx);
         if !csrf_applicable(&parts.method, &req_ct, &parts.headers)
-            || !req_ct.to_ascii_lowercase().contains("x-www-form-urlencoded")
+            || !req_ct
+                .to_ascii_lowercase()
+                .contains("x-www-form-urlencoded")
             || req_body.trim().is_empty()
             || cx.stopped()
         {

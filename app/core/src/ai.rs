@@ -3,8 +3,8 @@
 // OpenAI-compatible chat endpoint the user configures (a local model server or
 // a hosted API). Nothing is sent until an endpoint is set.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::sync::Mutex;
 
@@ -174,10 +174,9 @@ fn complete(
     let chunked = util::get_header(&parts.headers, "Transfer-Encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    if chunked
-        && let Some((d, _)) = crate::codec::decode_chunked(&b) {
-            b = d;
-        }
+    if chunked && let Some((d, _)) = crate::codec::decode_chunked(&b) {
+        b = d;
+    }
     let status = parts
         .first
         .split_whitespace()
@@ -218,9 +217,11 @@ mod tests {
                 .unwrap(),
             "ok"
         );
-        assert!(parse_reply(r#"{"error":{"message":"bad key"}}"#)
-            .unwrap_err()
-            .contains("bad key"));
+        assert!(
+            parse_reply(r#"{"error":{"message":"bad key"}}"#)
+                .unwrap_err()
+                .contains("bad key")
+        );
         assert!(explain_prompt(b"GET / HTTP/1.1", Some(b"HTTP/1.1 200 OK")).contains("Response:"));
     }
 

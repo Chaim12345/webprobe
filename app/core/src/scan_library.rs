@@ -206,11 +206,12 @@ pub fn parse_config(name: &str, bytes: &[u8], built_in: bool) -> Result<LibraryC
     }
     for (path, kind) in TYPED {
         if let Some(v) = get_path(&tree, path)
-            && !kind_ok(*kind, v) {
-                return Err(format!(
-                    "{name}: {path} has the wrong type (expected {kind:?})"
-                ));
-            }
+            && !kind_ok(*kind, v)
+        {
+            return Err(format!(
+                "{name}: {path} has the wrong type (expected {kind:?})"
+            ));
+        }
     }
     if let Some(Value::Array(items)) = get_path(&tree, "scanner.issues_reported.selected_issues") {
         for (i, it) in items.iter().enumerate() {
@@ -434,9 +435,10 @@ fn jar_files(jar: &Path, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String>
             .into_owned();
         if let Some(rest) = name.strip_prefix(prefix)
             && !rest.contains('/')
-                && let Some(stem) = rest.strip_suffix(".json") {
-                    wanted.push((stem.to_string(), method, csize, usize_, loff));
-                }
+            && let Some(stem) = rest.strip_suffix(".json")
+        {
+            wanted.push((stem.to_string(), method, csize, usize_, loff));
+        }
         at += 46 + nlen + xlen + clen;
     }
     let mut out = Vec::new();
@@ -645,11 +647,12 @@ pub fn not_applied(configs: &[&LibraryConfig]) -> Vec<String> {
             ),
         ] {
             if let Some(v) = get_path(&c.tree, p).and_then(Value::as_str)
-                && !names.contains(&v) {
-                    add(format!(
-                        "{p} = {v:?} (unknown value, not applied by WebProbe)"
-                    ));
-                }
+                && !names.contains(&v)
+            {
+                add(format!(
+                    "{p} = {v:?} (unknown value, not applied by WebProbe)"
+                ));
+            }
         }
         if let Some(Value::Array(items)) =
             get_path(&c.tree, "scanner.issues_reported.selected_issues")
@@ -793,19 +796,18 @@ pub fn with_settings(entry: &Value, edited: &Value, start: &Value) -> Value {
         let mut value = new.clone();
         if *p == "scanner.issues_reported.selected_issues"
             && let (Value::Array(items), Some(Value::Array(old))) = (&mut value, get_path(entry, p))
-            {
-                for it in items.iter_mut() {
-                    let id = parse_type_index(it.get("type_index"));
-                    if let Some(prev) = old
-                        .iter()
-                        .find(|o| parse_type_index(o.get("type_index")) == id)
-                        && let (Some(m), Value::Object(obj)) =
-                            (prev.get("detection_methods"), &mut *it)
-                        {
-                            obj.insert("detection_methods".into(), m.clone());
-                        }
+        {
+            for it in items.iter_mut() {
+                let id = parse_type_index(it.get("type_index"));
+                if let Some(prev) = old
+                    .iter()
+                    .find(|o| parse_type_index(o.get("type_index")) == id)
+                    && let (Some(m), Value::Object(obj)) = (prev.get("detection_methods"), &mut *it)
+                {
+                    obj.insert("detection_methods".into(), m.clone());
                 }
             }
+        }
         set_path(&mut out, p, value);
     }
     out
@@ -871,18 +873,22 @@ mod tests {
     fn malformed_configs_are_rejected_and_unknown_keys_kept() {
         assert!(parse_config("x", b"[1]", false).is_err());
         assert!(parse_config("x", b"{", false).is_err());
-        assert!(parse_config(
-            "x",
-            br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#,
-            false
-        )
-        .is_err());
-        assert!(parse_config(
-            "x",
-            br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#,
-            false
-        )
-        .is_err());
+        assert!(
+            parse_config(
+                "x",
+                br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#,
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            parse_config(
+                "x",
+                br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#,
+                false
+            )
+            .is_err()
+        );
         assert!(parse_config("x", &vec![b' '; MAX_CONFIG_BYTES + 1], false).is_err());
         let c = cfg(
             "x",
@@ -909,15 +915,14 @@ mod tests {
             let rep = load_builtin(&src).unwrap();
             assert!(rep.errors.is_empty(), "{:?}", rep.errors);
             assert_eq!(rep.configs.len(), 29, "{src:?}");
-            assert!(rep
-                .configs
-                .iter()
-                .any(|c| c.name == "Audit checks - passive"));
-            assert!(load_burp_defaults(&src).is_some_and(|d| get_path(
-                &d,
-                "crawler.crawl_limits.maximum_crawl_time"
-            )
-            .is_some()));
+            assert!(
+                rep.configs
+                    .iter()
+                    .any(|c| c.name == "Audit checks - passive")
+            );
+            assert!(load_burp_defaults(&src).is_some_and(|d| {
+                get_path(&d, "crawler.crawl_limits.maximum_crawl_time").is_some()
+            }));
         }
     }
 
@@ -984,9 +989,10 @@ mod tests {
                 .any(|l| l.starts_with("crawler.crawl_optimization.crawl_strategy")),
             "{na:?}"
         );
-        assert!(na
-            .iter()
-            .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks")));
+        assert!(
+            na.iter()
+                .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks"))
+        );
         assert!(!na.iter().any(|l| l.contains("maximum_crawl_time")));
         // Round trip: the current settings as a tree decode to themselves.
         let back = tree_to_config(

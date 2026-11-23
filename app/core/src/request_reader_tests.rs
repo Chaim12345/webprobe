@@ -3,7 +3,7 @@
 //! `handle_conn` (pipelining, CONNECT with coalesced tunnel bytes, WebSocket
 //! with coalesced first frame).
 
-use crate::net::{handle_conn, read_request_outcome, ws_frame, ReadOutcome, Shared};
+use crate::net::{ReadOutcome, Shared, handle_conn, read_request_outcome, ws_frame};
 use std::io::{Cursor, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
@@ -189,9 +189,11 @@ fn oversized_head_and_body_limits_still_error() {
     let mut r = RequestReader::new();
     assert!(r.read_next(&mut script(&huge, 16_384)).is_err());
     let big = b"POST / HTTP/1.1\r\nContent-Length: 99999999999\r\n\r\n";
-    assert!(RequestReader::new()
-        .read_next(&mut script(big, 16_384))
-        .is_err());
+    assert!(
+        RequestReader::new()
+            .read_next(&mut script(big, 16_384))
+            .is_err()
+    );
 }
 
 // ---------------------------------------------------------- end to end
@@ -759,7 +761,7 @@ fn a_failed_early_frame_write_aborts_without_retrying_the_frame() {
 
 // ------------------------------------------------- inbound ambiguity guard
 
-use crate::strict_request::{inbound_ambiguity, RequestFramingError as E};
+use crate::strict_request::{RequestFramingError as E, inbound_ambiguity};
 
 fn req(extra: &str) -> Vec<u8> {
     format!("POST /x HTTP/1.1\r\nHost: h\r\n{extra}\r\n\r\nabcde").into_bytes()
@@ -1025,11 +1027,12 @@ fn decrypted_h1_refuses_bare_lf_heads_like_cleartext() {
         pt.join().unwrap();
         let h = shared.history.last().expect("captured");
         assert!(wire.starts_with(&h.req_raw), "verbatim capture");
-        assert!(h
-            .note
-            .as_deref()
-            .unwrap_or("")
-            .contains("Rejected before forwarding"));
+        assert!(
+            h.note
+                .as_deref()
+                .unwrap_or("")
+                .contains("Rejected before forwarding")
+        );
     }
 }
 
