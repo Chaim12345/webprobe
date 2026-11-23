@@ -737,13 +737,12 @@ fn schedule_grab(
                 }
             }
 
-            if let Ok(png) =
-                std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped))
-            {
+            match std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped))
+            { Ok(png) => {
                 std::fs::write(&path, png).is_ok()
-            } else {
+            } _ => {
                 false
-            }
+            }}
         };
         *done.lock().unwrap() = ok;
     });
@@ -958,6 +957,8 @@ static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> =
     std::sync::LazyLock::new(Default::default);
 
 fn main() {
+    // Environment mutation precedes diagnostics, signal setup and worker/window libraries.
+    gl_env::apply();
     webprobe_core::diagnostics::init_stderr();
     // Panic policy "contain and continue" (issue #32): worker panics are
     // contained per thread (catch_unwind at spawn boundaries, poison-tolerant
@@ -980,8 +981,6 @@ fn main() {
     for sig in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         let _ = signal_hook::flag::register(sig, Arc::clone(&TERMINATE));
     }
-    // Must run before any thread or window exists (see gl_env for why).
-    gl_env::apply();
 
     let mut screenshot: Option<PathBuf> = None;
     let args: Vec<String> = std::env::args().collect();

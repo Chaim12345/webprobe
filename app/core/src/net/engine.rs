@@ -190,9 +190,9 @@ pub fn listener_status(shared: &Arc<Shared>) -> Vec<(String, bool, Option<String
     out
 }
 
-pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64) {
+pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, r#gen: u64) {
     loop {
-        if shared.listener_generation.load(Ordering::SeqCst) != gen {
+        if shared.listener_generation.load(Ordering::SeqCst) != r#gen {
             break;
         }
         let addr = format!("{}:{}", state.spec.bind, state.spec.port);
@@ -203,7 +203,7 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64)
                 *state.error.lock().unwrap() = None;
                 shared.log(&format!("Proxy listener started on {addr}"));
                 loop {
-                    if shared.listener_generation.load(Ordering::SeqCst) != gen {
+                    if shared.listener_generation.load(Ordering::SeqCst) != r#gen {
                         break;
                     }
                     match l.accept() {
@@ -232,7 +232,7 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64)
                     format!("Listener {addr} failed: {e}"),
                 );
                 // Wait for a configuration change before retrying.
-                while shared.listener_generation.load(Ordering::SeqCst) == gen {
+                while shared.listener_generation.load(Ordering::SeqCst) == r#gen {
                     std::thread::sleep(Duration::from_millis(500));
                 }
             }
@@ -247,13 +247,13 @@ pub fn start_extra_listeners(shared: Arc<Shared>) {
     crate::util::spawn_contained("net", move || {
         let mut spawned_gen = u64::MAX;
         loop {
-            let gen = shared.listener_generation.load(Ordering::SeqCst);
-            if gen != spawned_gen {
-                spawned_gen = gen;
+            let r#gen = shared.listener_generation.load(Ordering::SeqCst);
+            if r#gen != spawned_gen {
+                spawned_gen = r#gen;
                 let specs: Vec<Arc<ListenerState>> = shared.listeners.lock().unwrap().clone();
                 for st in specs {
                     let sh = shared.clone();
-                    crate::util::spawn_contained("net", move || listener_worker(sh, st, gen));
+                    crate::util::spawn_contained("net", move || listener_worker(sh, st, r#gen));
                 }
             }
             std::thread::sleep(Duration::from_millis(250));

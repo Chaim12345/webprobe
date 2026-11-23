@@ -48,7 +48,7 @@ fn random_lower_alnum(n: usize) -> String {
 }
 
 fn random_uuid() -> String {
-    let b: [u8; 16] = rand::thread_rng().gen();
+    let b: [u8; 16] = rand::thread_rng().r#gen();
     format!(
         "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-4{:01x}{:02x}-{:02x}{:02x}-{}",
         b[0],
@@ -389,13 +389,13 @@ mod tests {
         use ctr::cipher::{KeyIvInit, StreamCipher};
         let mut rng = rand::thread_rng();
         let key = rsa::RsaPrivateKey::new(&mut rng, 1024).unwrap();
-        let aes_key: [u8; 32] = rng.gen();
+        let aes_key: [u8; 32] = rng.r#gen();
         let wrapped = key
             .to_public_key()
             .encrypt(&mut rng, rsa::Oaep::new::<sha2::Sha256>(), &aes_key)
             .unwrap();
         let msg = r#"{"protocol":"smtp","unique-id":"ABCDEFGHIJKLMNOPQRST1234567890abc","full-id":"abcdefghijklmnopqrst1234567890abc","raw-request":"MAIL FROM:<a@b>","remote-address":"203.0.113.9","smtp-from":"a@b","timestamp":"2026-11-16T00:00:00Z"}"#;
-        let iv: [u8; 16] = rng.gen();
+        let iv: [u8; 16] = rng.r#gen();
         let mut ct = msg.as_bytes().to_vec();
         ctr::Ctr128BE::<aes::Aes256>::new_from_slices(&aes_key, &iv)
             .unwrap()

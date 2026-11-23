@@ -25,7 +25,7 @@ mod repeater_fix_tests {
     fn cancel_abandons_the_in_flight_send() {
         let sh = net::Shared::new();
         let tab = sh.repeaters.lock().unwrap()[0].id;
-        let gen = sh.rep.begin(tab);
+        let r#gen = sh.rep.begin(tab);
         cancel_repeater_send(&sh);
         assert_eq!(
             sh.repeaters.lock().unwrap()[0].result_line,
@@ -35,7 +35,7 @@ mod repeater_fix_tests {
         assert!(!sh.rep.is_busy());
         assert_eq!(sh.rep.result(), "Request cancelled");
         assert!(
-            !sh.rep.is_current(gen),
+            !sh.rep.is_current(r#gen),
             "the worker sees a stale generation"
         );
         // Cancel with nothing in flight changes nothing.

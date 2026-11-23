@@ -1,7 +1,8 @@
 [package]
 name = "webprobe"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 tracing.workspace = true
@@ -63,12 +64,17 @@ debug = "line-tables-only"
 # The engine is its own crate (core/), with no UI dependency; the desktop app
 # is this package. `cargo build` / `cargo test` here cover both.
 [workspace]
+resolver = "3"
 members = ["core", "support", "report"]
 default-members = [".", "core"]
 
 # Versions shared by webprobe and webprobe-core live here once; members
 # reference them with `workspace = true`. Member-only versions stay in the
 # member manifests.
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+
 [workspace.dependencies]
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi"] }

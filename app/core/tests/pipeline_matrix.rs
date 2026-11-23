@@ -320,7 +320,7 @@ fn one_shot_upstream(reply: &'static [u8]) -> (u16, std::thread::JoinHandle<usiz
         let mut heads = 0;
         let mut live = vec![];
         while Instant::now() < end {
-            if let Ok((mut s, _)) = up.accept() {
+            match up.accept() { Ok((mut s, _)) => {
                 s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
                 let mut buf = [0; 8192];
                 let mut got = vec![];
@@ -333,9 +333,9 @@ fn one_shot_upstream(reply: &'static [u8]) -> (u16, std::thread::JoinHandle<usiz
                 heads += got.windows(4).filter(|w| *w == b"\r\n\r\n").count();
                 let _ = s.write_all(reply);
                 live.push(s);
-            } else {
+            } _ => {
                 std::thread::sleep(Duration::from_millis(5));
-            }
+            }}
         }
         heads
     });
