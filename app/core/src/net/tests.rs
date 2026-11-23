@@ -4210,8 +4210,10 @@ fn connect_tunnel_requests_resolve_by_their_own_destination() {
 fn connect_tunnel_inner_destination_follows_configured_listener_redirect() {
     // Route selection applies to the inner effective destination: a request
     // naming an undialable host is delivered by the listener's configured
-    // redirect with its Host header unchanged, and history records the
-    // request-resolved destination, exactly as for a direct request.
+    // redirect with its Host header unchanged. History records the
+    // client-requested origin, not the redirect's transport destination:
+    // the assertion below pins history[0].host to the requested name while
+    // the bytes demonstrably went to the redirect target.
     let shared = Shared::new();
     let origin = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin_port = origin.local_addr().unwrap().port();

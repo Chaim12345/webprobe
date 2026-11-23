@@ -413,10 +413,14 @@ pub fn handle_conn(shared: Arc<Shared>, stream: TcpStream) {
 /// carries to the CONNECT authority. Each inner request resolves its own
 /// destination (Host header, then absolute-form authority; the CONNECT port
 /// only defaults a portless Host) and passes the same admission, redirect,
-/// upstream and extension controls as a direct request on this listener,
-/// and history records that request-resolved destination. There is no
-/// second-destination fallback after a failed send. This is distinct from
-/// the opaque byte relay for tls_bypass hosts, which forwards to the
+/// upstream and extension controls as a direct request on this listener.
+/// History records the client-requested (request-resolved) origin even when
+/// a configured listener redirect transports the bytes elsewhere: the
+/// redirect target is transport-only and never becomes the history host.
+/// An extension-dropped request is not an origin exchange: it gets the
+/// local drop page and no history entry; that policy is unchanged here.
+/// There is no second-destination fallback after a failed send. This is
+/// distinct from the opaque byte relay for tls_bypass hosts, which forwards to the
 /// CONNECT authority without parsing inner traffic. The proxy has no
 /// destination ACL beyond this explicit-proxy trust model; target scope
 /// restricts scanner and other tool traffic, not proxy egress.
