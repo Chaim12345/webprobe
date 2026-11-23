@@ -552,6 +552,44 @@ mod tests {
         }
     }
     #[test]
+    fn resolver_snapshot_follows_exact_adopted_permit_and_survives_close() {
+        let c = Coordinator::new(Shared::new(), limits()).unwrap();
+        let a = c.open().unwrap();
+        let b = c.open().unwrap();
+        assert!(matches!(a.finish(), Ok(Handoff::Joined)));
+        let f = finalizer(b.finish().unwrap());
+        let mut retained = None;
+        let mut snapshot = None;
+        let outcome = f.run(|p| {
+            retained = Some(p.owner().clone());
+            let result = crate::scan_resolver::process_resolver().unwrap().resolve(
+                p.owner().clone(),
+                "127.0.0.1",
+                80,
+                p.ledger().deadline().unwrap(),
+            );
+            snapshot = Some((result, p.owner().resolver_snapshot()));
+            Finish::Complete
+        });
+        assert_eq!(outcome, Finish::Complete);
+        let (result, snapshot) = snapshot.unwrap();
+        assert!(result.is_ok());
+        assert_eq!(
+            snapshot,
+            crate::scan_resolver::ResolverSnapshot {
+                resolver_calls: 1,
+                queue_submission_attempts: 1,
+                lookup_starts: 1
+            }
+        );
+        assert_eq!(retained.unwrap().resolver_snapshot(), snapshot);
+        let next = c.open().unwrap();
+        assert_eq!(
+            next.owner.resolver_snapshot(),
+            crate::scan_resolver::ResolverSnapshot::default()
+        );
+    }
+    #[test]
     fn actual_store_standalone_adoption_preserves_item_and_defers_finish() {
         let shared = Shared::new();
         let c = Coordinator::new(shared.clone(), limits()).unwrap();

@@ -28,11 +28,18 @@ pub struct AttemptScope {
     cancelled: std::sync::atomic::AtomicBool,
     #[cfg(test)]
     pub(crate) terminal: Mutex<Option<crate::scan_lifecycle::Finish>>,
+    #[cfg(test)]
+    pub(crate) resolver_observation: Arc<crate::scan_resolver::ResolverObservation>,
     pub(crate) dedup: Arc<ScanDedup>,
     attempted: Mutex<HashSet<String>>,
     session: Arc<SessionClaims>,
 }
 impl AttemptScope {
+    #[cfg(test)]
+    pub(crate) fn resolver_snapshot(&self) -> crate::scan_resolver::ResolverSnapshot {
+        self.resolver_observation.snapshot()
+    }
+
     /// Cancel this exact logical owner. Safe to retain on bounded resolver
     /// jobs and check both before enqueueing and before lookup starts.
     #[cfg(test)]
@@ -54,6 +61,8 @@ impl AttemptScope {
             cancelled: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]
             terminal: Mutex::new(None),
+            #[cfg(test)]
+            resolver_observation: Arc::new(crate::scan_resolver::ResolverObservation::default()),
             dedup,
             session,
             attempted: Mutex::new(HashSet::new()),

@@ -19,6 +19,30 @@ pub(crate) enum ResolveError {
     Expired,
     Unavailable,
 }
+/// Owner-scoped fixture observations, never a DNS packet count. Relaxed
+/// atomics observe boundaries only, and establish no cancellation ordering.
+#[derive(Default)]
+pub(crate) struct ResolverObservation {
+    resolver_calls: std::sync::atomic::AtomicU64,
+    queue_submission_attempts: std::sync::atomic::AtomicU64,
+    lookup_starts: std::sync::atomic::AtomicU64,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ResolverSnapshot {
+    pub resolver_calls: u64,
+    pub queue_submission_attempts: u64,
+    pub lookup_starts: u64,
+}
+impl ResolverObservation {
+    pub fn snapshot(&self) -> ResolverSnapshot {
+        use std::sync::atomic::Ordering::Relaxed;
+        ResolverSnapshot {
+            resolver_calls: self.resolver_calls.load(Relaxed),
+            queue_submission_attempts: self.queue_submission_attempts.load(Relaxed),
+            lookup_starts: self.lookup_starts.load(Relaxed),
+        }
+    }
+}
 struct Job {
     owner: Arc<crate::host_probe_state::AttemptScope>,
     host: String,
@@ -55,6 +79,10 @@ impl Resolver {
                         let _ = job.response.try_send(Err(ResolveError::Expired));
                         continue;
                     }
+                    job.owner
+                        .resolver_observation
+                        .lookup_starts
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         lookup(&job.host, job.port)
                     }))
@@ -107,6 +135,10 @@ impl Resolver {
         deadline: Instant,
         receipt: impl FnOnce(),
     ) -> Result<Vec<SocketAddr>, ResolveError> {
+        owner
+            .resolver_observation
+            .resolver_calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if owner.is_cancelled() {
             return Err(ResolveError::Cancelled);
         }
@@ -118,6 +150,10 @@ impl Resolver {
             return Err(ResolveError::Expired);
         }
         let (tx, rx) = mpsc::sync_channel(1);
+        owner
+            .resolver_observation
+            .queue_submission_attempts
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.tx
             .try_send(Job {
                 owner: owner.clone(),
@@ -171,6 +207,69 @@ mod tests {
     fn owner() -> Arc<crate::host_probe_state::AttemptScope> {
         let shared = crate::net::Shared::new();
         crate::host_probe_state::admit(&shared).unwrap().1
+    }
+    #[test]
+    fn actual_process_resolver_observations_are_owner_isolated_and_retained() {
+        let a = owner();
+        let b = owner();
+        let retained = a.clone();
+        let pool = process_resolver().unwrap();
+        assert_eq!(
+            pool.resolve(
+                a.clone(),
+                "127.0.0.1",
+                80,
+                Instant::now() + Duration::from_secs(2)
+            )
+            .unwrap(),
+            vec!["127.0.0.1:80".parse::<SocketAddr>().unwrap()]
+        );
+        let one = ResolverSnapshot {
+            resolver_calls: 1,
+            queue_submission_attempts: 1,
+            lookup_starts: 1,
+        };
+        assert_eq!(a.resolver_snapshot(), one);
+        assert_eq!(b.resolver_snapshot(), ResolverSnapshot::default());
+        drop(a);
+        assert_eq!(retained.resolver_snapshot(), one);
+        assert!(pool
+            .resolve(
+                b.clone(),
+                "127.0.0.1",
+                81,
+                Instant::now() + Duration::from_secs(2)
+            )
+            .is_ok());
+        assert_eq!(b.resolver_snapshot(), one);
+        assert_eq!(retained.resolver_snapshot(), one);
+    }
+    #[test]
+    fn resolver_entry_counts_early_return_without_submission_or_lookup() {
+        let a = owner();
+        let pool = process_resolver().unwrap();
+        assert_eq!(
+            pool.resolve(a.clone(), "", 80, Instant::now() + Duration::from_secs(2)),
+            Err(ResolveError::InvalidInput)
+        );
+        a.cancel();
+        assert_eq!(
+            pool.resolve(
+                a.clone(),
+                "127.0.0.1",
+                80,
+                Instant::now() + Duration::from_secs(2)
+            ),
+            Err(ResolveError::Cancelled)
+        );
+        assert_eq!(
+            a.resolver_snapshot(),
+            ResolverSnapshot {
+                resolver_calls: 2,
+                queue_submission_attempts: 0,
+                lookup_starts: 0
+            }
+        );
     }
     #[test]
     fn saturation_does_not_spawn_per_timeout_or_start_expired_queued_lookup() {
