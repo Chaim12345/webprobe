@@ -63,7 +63,7 @@ Small slices:
 
 ## M5 — R-11 scan configuration library
 
-**Status:** done. Implemented 2026-11-18 (aa490e8, 09e87f8); verified 2026-11-23 on `lane/r11-verify-leftovers` (PR #6's verification pass rebased): built-ins smoke test reads WEBPROBE_BURP_APP_JAR / WEBPROBE_BURP_BUILTINS with per-source labeled failures, WEBPROBE_SETTINGS=library opens the Configuration library pane for screenshot checks, 6 library tests and 5 subprocess gate scenarios pass; real-application smoke not run without configured resources; full-suite verification pending.
+**Status:** implemented, awaiting independent QA of replacement PR #194. Local core: 848 passed, 0 failed, 13 ignored; library 6/6 and subprocess smoke-gate scenarios 5/5 passed. Actual Burp application-resource smoke NOT_RUN without configured resources. Uses WEBPROBE_BURP_APP_JAR / WEBPROBE_BURP_BUILTINS, separate from the Montoya variable WEBPROBE_BURP_JAR. Required mode fails if no source is configured; synthetic fixtures verify the harness only.
 
 Worktree: `.worktrees/r11`.
 
