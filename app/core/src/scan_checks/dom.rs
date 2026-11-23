@@ -134,32 +134,10 @@ impl RequestCheck for DomPrototypePollution {
     }
 }
 
-/// A GET over the audited session (cookie/session headers of the template
-/// request, minus framing and hop-by-hop fields): the stored submission
-/// carries the same identity as the audited
-/// request, like the browser probe's forwarded requests.
-fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
-    let mut raw = format!("GET {path_query} HTTP/1.1\r\nHost: {}\r\n", cx.host_hdr);
-    let connection = cx
-        .parts
-        .headers
-        .iter()
-        .filter(|(k, _)| k.eq_ignore_ascii_case("connection"))
-        .map(|(_, v)| v.as_str())
-        .collect::<Vec<_>>()
-        .join(",");
-    for (k, v) in &cx.parts.headers {
-        if crate::crawl::dom_safe_header(k, v, &connection) {
-            raw.push_str(&format!("{k}: {v}\r\n"));
-        }
-    }
-    raw.push_str("Connection: close\r\nAccept-Encoding: identity\r\n\r\n");
-    raw.into_bytes()
-}
-
 /// Only self-delimited complete final responses acknowledge a submission.
 /// The transport's Option<Vec<u8>> does not prove clean EOF, so an EOF-
 /// delimited response is conservatively unknown, never replayed.
+#[cfg(test)]
 fn dom_submission_acknowledged(response: &[u8]) -> bool {
     crate::crawl::dom_complete_final_response(response)
 }
