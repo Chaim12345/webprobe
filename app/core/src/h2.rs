@@ -719,7 +719,21 @@ impl<S: Read + Write> Conn<S> {
         req: &H2Request,
         mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
     ) -> Result<Vec<u8>, StreamError> {
-        let id = self.start_request(req)?;
+        // Once retired, preserve the previous request's commitment state and
+        // never attempt another stream on this connection.
+        if self.retired {
+            return Err(StreamError::fatal("h2: connection retired"));
+        }
+        let id = match self.start_request(req) {
+            Ok(id) => id,
+            Err(error) => {
+                // start_request may fail after a partial/complete HEADERS write.
+                // Retire before returning so a caller using this Conn for a
+                // sequence cannot send a later item on desynchronized state.
+                self.retired = true;
+                return Err(error);
+            }
+        };
         let body = if req.body.is_empty() {
             None
         } else {
@@ -727,6 +741,7 @@ impl<S: Read + Write> Conn<S> {
         };
         let outcome = self.pump(id, body, &mut sink);
         let Some(srx) = self.streams.remove(&id) else {
+            self.retired = true;
             return Err(StreamError::fatal("h2: stream state lost"));
         };
         if let Err(e) = outcome {
@@ -741,7 +756,13 @@ impl<S: Read + Write> Conn<S> {
                 s.end(false);
             }
         }
-        srx.finish()
+        match srx.finish() {
+            Ok(response) => Ok(response),
+            Err(error) => {
+                self.retired = true;
+                Err(error)
+            }
+        }
     }
 
     /// Continue an h2c upgrade (RFC 7540 §3.2): stream 1 *is* the HTTP/1.1
@@ -1464,6 +1485,55 @@ mod tests {
         assert_eq!(f.ty, FRAME_HEADERS);
         assert!(f.flags & FLAG_END_STREAM != 0);
         assert!(read_frame(&mut cursor).is_err());
+    }
+
+    /// A header-write failure after commitment poisons the connection: a
+    /// later group item must not write another HEADERS block on the same socket.
+    #[test]
+    fn failed_request_head_retires_connection_before_next_exchange() {
+        struct FailOnWrite {
+            input: Cursor<Vec<u8>>,
+            out: Vec<u8>,
+            writes: usize,
+            fail_at: usize,
+        }
+        impl Read for FailOnWrite {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.input.read(buf)
+            }
+        }
+        impl Write for FailOnWrite {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.writes += 1;
+                if self.writes == self.fail_at {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "injected HEADERS write failure",
+                    ));
+                }
+                self.out.extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let io = FailOnWrite {
+            input: Cursor::new(Vec::new()),
+            out: Vec::new(),
+            writes: 0,
+            // Preface, SETTINGS frame header, SETTINGS payload, then HEADERS.
+            fail_at: 4,
+        };
+        let mut conn = Conn::new(io);
+        assert!(conn.exchange(&get_request(), None).is_err());
+        assert!(conn.committed(), "the failed HEADERS write is an unknown outcome");
+        let writes = conn.get_mut().writes;
+        let bytes = conn.get_mut().out.len();
+        assert!(conn.exchange(&get_request(), None).is_err());
+        assert_eq!(conn.get_mut().writes, writes, "retired socket must not write");
+        assert_eq!(conn.get_mut().out.len(), bytes, "no second request bytes");
+        assert!(conn.committed(), "retirement preserves the prior commitment");
     }
 
     #[test]
