@@ -31,7 +31,7 @@ step() {
 }
 
 step "test suites (core + desktop)" env WP_APP_DIR="$APP" "$Q" test
-step "headless engine binary" env WP_APP_DIR="$APP/core" "$Q" run -- cargo build --bin webprobe-headless
+step "headless engine binary" env WP_APP_DIR="$APP" "$Q" run -- cargo build --bin webprobe-headless
 if [ -z "${CI_SKIP_MCP:-}" ]; then
     step "desktop with egui MCP" env WP_APP_DIR="$APP" "$Q" run -- cargo build --features mcp
     step "vendored egui-mcp-server tests" env WP_APP_DIR="$ROOT/vendor/egui-mcp-server" "$Q" test
