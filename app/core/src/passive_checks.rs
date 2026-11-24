@@ -101,6 +101,7 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_CSRF, csrf_form_token),
     unit!(CH_CT_MISSING, |cx, v| mime(cx, v, CH_CT_MISSING)),
     unit!(CH_CT_MULTI, |cx, v| mime(cx, v, CH_CT_MULTI)),
+    unit!(pack::CH_CT_MISSTATED, pack::content_type_misstated),
     unit!(CH_HTML_NO_CHARSET, |cx, v| mime(cx, v, CH_HTML_NO_CHARSET)),
     unit!(CH_HTML_BAD_CHARSET, |cx, v| mime(
         cx,
@@ -2704,6 +2705,190 @@ mod tests {
     }
 
     /// The new pack, each switched off in the scan configuration.
+    #[test]
+    fn content_type_incorrectly_stated() {
+        // burp.Zf9p.ZT with burp.Zwgu's sniffing and burp.Zen8's browser
+        // model. The browser sets were checked against the reference jar
+        // (burp.Zh63 and burp.Zw8c run on the same responses).
+        const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR";
+        let run = |path: &str, headers: &str, body: &[u8]| {
+            let mut e = ex(path, true, "", "");
+            let mut r = format!(
+                "HTTP/1.1 200 OK\r\n{headers}Content-Length: {}\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            r.extend_from_slice(body);
+            e.resp_raw = Some(r.into());
+            only(&e, pack::CH_CT_MISSTATED)
+        };
+        let ct = |t: &str| format!("Content-Type: {t}\r\n");
+        let detail = |path: &str, headers: &str, body: &[u8]| {
+            let v = run(path, headers, body);
+            assert_eq!(v.len(), 1, "{headers:?} {body:?}");
+            v[0].detail.clone()
+        };
+        let head = |stated: &str, inferred: &str| {
+            format!(
+                "The response states that the content type is <b>{stated}</b>. However, it actually appears to contain <b>{inferred}</b>.<br><br>"
+            )
+        };
+        let listed = "The following browsers may interpret the response as HTML:<ul>";
+        let (ie, ie_c) = (
+            "<li>Internet Explorer 11</li>",
+            "<li>Internet Explorer 11 (Compatibility Mode)</li>",
+        );
+        let others = "<li>Chrome</li><li>Firefox</li><li>Opera</li><li>Safari</li>";
+        let if_html = " the URL path can be manipulated to end with &quot;.html&quot;, the following browsers may interpret the response as HTML:<ul>";
+
+        // text/plain: Internet Explorer 11 in compatibility mode; the
+        // stated type loses its parameters.
+        let v = run("/a", &ct("text/plain; charset=utf-8"), PNG);
+        assert_eq!(
+            names(&v),
+            [("Content type incorrectly stated".to_string(), String::new())]
+        );
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("low", "Firm")
+        );
+        assert_eq!(
+            v[0].detail,
+            format!("{}{listed}{ie_c}</ul>", head("text/plain", "a PNG image"))
+        );
+        // text/html: every browser.
+        let gif = b"GIF89a\x01\0\x01\0\x80\0\0";
+        assert_eq!(
+            detail("/a", &ct("text/html; charset=utf-8"), gif),
+            format!(
+                "{}All browsers may interpret the response as HTML.",
+                head("text/html", "a GIF image")
+            )
+        );
+        assert_eq!(
+            detail("/a", &ct("application/octet-stream"), PNG),
+            format!(
+                "{}{listed}{ie}{ie_c}<li>Edge</li></ul>",
+                head("application/octet-stream", "a PNG image")
+            )
+        );
+        // A type without "/" (burp.Zr1o.ZX): more browsers at a ".html"
+        // path, which burp.Zw8c.ZD matches ignoring case.
+        assert_eq!(
+            detail("/a", &ct("x<y"), PNG),
+            format!(
+                "{}{listed}{others}</ul>Additionally, if{if_html}{ie}{ie_c}</ul>",
+                head("x&lt;y", "a PNG image")
+            )
+        );
+        let at_html = format!(
+            "{}{listed}<li>Chrome</li><li>Firefox</li><li>Opera</li>{ie}{ie_c}<li>Safari</li></ul>",
+            head("foo", "a PNG image")
+        );
+        assert_eq!(detail("/x.html", &ct("foo"), PNG), at_html);
+        assert_eq!(detail("/x.HTML", &ct("foo"), PNG), at_html);
+        // Only at a ".html" path (burp.Zr1o.ZP).
+        assert_eq!(
+            detail("/a", &ct("application/zip"), PNG),
+            format!(
+                "{}If{if_html}{ie}{ie_c}</ul>",
+                head("application/zip", "a PNG image")
+            )
+        );
+        // No browser renders it as HTML: nosniff (the first such header
+        // counts), an image type (burp.Z_0), JSON (burp.Za2), a JSON type
+        // served as an attachment (burp.Zsto), a type Burp lists with no
+        // browser (burp.Zr1o.Ze).
+        let plain = ct("text/plain");
+        for h in [
+            format!("{plain}X-Content-Type-Options: nosniff\r\n"),
+            format!("{plain}x-content-type-options:  NOSNIFF \r\n"),
+            ct("image/jpeg"),
+            ct("application/json"),
+            format!("{}Content-Disposition: attachment\r\n", ct("text/x-json")),
+            ct("text/css"),
+            ct("application/xml"),
+        ] {
+            assert!(run("/a", &h, PNG).is_empty(), "{h:?}");
+        }
+        assert_eq!(
+            run(
+                "/a",
+                &format!("{plain}X-Content-Type-Options: x\r\nX-Content-Type-Options: nosniff\r\n"),
+                PNG
+            )
+            .len(),
+            1
+        );
+        assert_eq!(run("/a", &ct("text/x-json"), PNG).len(), 1);
+        // The stated type is the inferred one.
+        assert!(run("/a", &ct("image/png"), PNG).is_empty());
+
+        // burp.Zwgu: the magic numbers, after a byte-order mark.
+        let sniffed = |body: &[u8]| {
+            run("/a", &plain, body)
+                .first()
+                .map(|i| i.detail.split("<b>").nth(2).unwrap_or("").to_string())
+        };
+        let jpeg = |len: usize| {
+            let mut b = vec![0xFF, 0xD8, 0xFF, 0xE0];
+            b.resize(len - 2, b'A');
+            b.extend_from_slice(&[0xFF, 0xD9]);
+            b
+        };
+        for (body, inferred) in [
+            (jpeg(9), "a JPEG image"),
+            (jpeg(10_000), "a JPEG image"),
+            (b"GIF89a hello\xe9".to_vec(), "a GIF image"),
+            (b"BM\x09\x01\x02\x03".to_vec(), "a BMP image"),
+            (b"IIB\0\x01\x02\x03".to_vec(), "a TIFF image"),
+            (b"CWS\x09\x01\x02\x03".to_vec(), "a flash object"),
+            (b"wOFF\0\x01\0\0\0\0".to_vec(), "a WOFF font"),
+            ([b"\xEF\xBB\xBF", PNG].concat(), "a PNG image"),
+            ([b"\xFF\xFE", PNG].concat(), "a PNG image"),
+        ] {
+            assert_eq!(
+                sniffed(&body),
+                Some(format!("{inferred}</b>.<br><br>{listed}{ie_c}</ul>")),
+                "{body:?}"
+            );
+        }
+        let mut no_end = jpeg(9);
+        no_end[8] = 0xD8;
+        for body in [
+            no_end,
+            // Only the first 10,000 bytes are sniffed, so the end marker
+            // is cut off.
+            jpeg(10_001),
+            // No control byte, or a body of 5 bytes.
+            b"GIF89a hello world".to_vec(),
+            b"GIF\x01\x02".to_vec(),
+            // The real TIFF magic is not Burp's.
+            b"II*\0\x01\x02\x03".to_vec(),
+            Vec::new(),
+        ] {
+            assert_eq!(sniffed(&body), None, "{body:?}");
+        }
+
+        // burp.Zf9p.ZT's gates: a redirect, no or several stated types; a
+        // repeated statement is one type, and the last distinct value counts.
+        let mut redirect = ex("/a", true, "", "");
+        let mut raw = format!("HTTP/1.1 302 Found\r\n{plain}Location: /b\r\n\r\n").into_bytes();
+        raw.extend_from_slice(PNG);
+        redirect.resp_raw = Some(raw.into());
+        assert!(only(&redirect, pack::CH_CT_MISSTATED).is_empty());
+        assert!(run("/a", "", PNG).is_empty());
+        assert!(run("/a", &format!("{plain}{}", ct("text/css")), PNG).is_empty());
+        // The parameters count for the stated type ("image" and "png"
+        // state a PNG image); a repeated value keeps its first position.
+        let png_named = ct("text/plain; n=image.png");
+        assert!(run("/a", &format!("{plain}{png_named}"), PNG).is_empty());
+        assert_eq!(
+            detail("/a", &format!("{png_named}{plain}{png_named}"), PNG),
+            format!("{}{listed}{ie_c}</ul>", head("text/plain", "a PNG image"))
+        );
+    }
+
     #[test]
     fn switching_off_the_second_pass() {
         let shared = crate::net::Shared::new();

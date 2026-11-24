@@ -1799,6 +1799,105 @@ pub(crate) fn sql_statement(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
 }
 
+// ------------------------------------------------------------ content type (burp.Zf9p)
+
+/// burp.Zur0: Zrh bytes 2 / 2.
+pub(crate) const CH_CT_MISSTATED: CheckDef = CheckDef {
+    id: "passive.content-type-incorrectly-stated",
+    name: "Content type incorrectly stated",
+    sev: "low",
+    confidence: "Firm",
+};
+
+/// burp.Zucz.ZL: a value written into issue text. Line breaks become
+/// `<br>`, a tab a space and three `&nbsp;`, `<`, `>` and `&` entities,
+/// and any other character below space or above 127 a dot.
+fn issue_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\n' => out.push_str("<br>"),
+            '\r' if chars.peek() == Some(&'\n') => {
+                chars.next();
+                out.push_str("<br>");
+            }
+            '\r' => {}
+            '\t' => out.push_str(" &nbsp;&nbsp;&nbsp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '&' => out.push_str("&amp;"),
+            c if c < ' ' || u32::from(c) > 127 => out.push('.'),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// burp.Zhk1.Zv: a set of browsers as list items, in burp.Zbt4 order.
+fn browser_items(t: &mut String, set: u8) {
+    for (i, name) in BROWSER_NAMES.iter().enumerate() {
+        if set & (1 << i) != 0 {
+            t.push_str(&format!("<li>{name}</li>"));
+        }
+    }
+}
+
+/// burp.Zhk1.ZD with no manipulated path: which browsers may render the
+/// response as HTML at this path (`all`), and which more would if the path
+/// ended with ".html" (`html`). Zhk1 tests the path as it is, where
+/// burp.Zw8c.ZD ignores case. Its all-browsers sentence is written by the
+/// caller, as burp.Zwuk does.
+fn html_browsers_text(t: &mut String, all: u8, html: u8, path: &str) {
+    if all != 0 {
+        t.push_str("The following browsers may interpret the response as HTML:<ul>");
+        if path.ends_with(".html") {
+            browser_items(t, html);
+            t.push_str("</ul>");
+            return;
+        }
+        browser_items(t, all);
+        t.push_str("</ul>");
+    }
+    if html != 0 && html != all {
+        t.push_str(if all == 0 { "If" } else { "Additionally, if" });
+        t.push_str(" the URL path can be manipulated to end with &quot;.html&quot;, the following browsers may interpret the response as HTML");
+        if html == ALL_BROWSERS {
+            t.push_str(". All browsers may interpret the response as HTML.");
+        } else {
+            t.push_str(":<ul>");
+            browser_items(t, html & !all);
+            t.push_str("</ul>");
+        }
+    }
+}
+
+/// Content type incorrectly stated (burp.Zf9p.ZT, factory burp.Zur0.ZM,
+/// text burp.Zwuk with burp.Zhk1.ZD): the body is a binary format other
+/// than the one the Content-Type header states, and some browser may
+/// render it as HTML. The analysis is scan::misstated_type. Burp passes
+/// Zhk1.ZD no manipulated path (0), so its "WebProbe was able to manipulate
+/// the URL path" sentences cannot occur here.
+pub(crate) fn content_type_misstated(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    let c = CH_CT_MISSTATED;
+    let Some(m) = misstated_type(cx.resp, &cx.e.path) else {
+        return;
+    };
+    let (all, html) = (m.browsers, m.html_browsers);
+    let mut t = format!(
+        "The response states that the content type is <b>{}</b>. However, it actually appears to contain <b>{}</b>.",
+        issue_text(&m.stated),
+        m.inferred
+    );
+    if all == ALL_BROWSERS {
+        t.push_str("<br><br>All browsers may interpret the response as HTML.");
+    } else {
+        t.push_str("<br><br>");
+        html_browsers_text(&mut t, all, html, &cx.e.path);
+    }
+    v.push(issue(c, cx, c.sev, c.confidence, String::new(), t));
+}
+
 #[cfg(test)]
 mod php_depth_tests {
     use super::php;
