@@ -10,16 +10,16 @@
       "status": "excluded"
     },
     "Client-side SQL injection (DOM-based)": {
-      "note": "Sink webdatabase.executeSql (burp.Zbjx:157-164). WebSQL is gone from current Chromium, so the dynamic probe cannot reach it; Burp also finds it by static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-coverage-matrix.md)",
-      "status": "todo"
+      "note": "No detection path was found in the reference build: none of the 566 strings of the static analyser's tables (burp.Zeys) names a SQL sink, the dynamic decoder burp.Zcwh maps no sink to these types, and the only webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). Whether the types are retired is not established with certainty (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6)",
+      "status": "excluded"
     },
     "Client-side SQL injection (reflected DOM-based)": {
-      "note": "Sink webdatabase.executeSql (burp.Zbjx:157-164). WebSQL is gone from current Chromium, so the dynamic probe cannot reach it; Burp also finds it by static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-coverage-matrix.md)",
-      "status": "todo"
+      "note": "No detection path was found in the reference build: none of the 566 strings of the static analyser's tables (burp.Zeys) names a SQL sink, the dynamic decoder burp.Zcwh maps no sink to these types, and the only webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). Whether the types are retired is not established with certainty (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6)",
+      "status": "excluded"
     },
     "Client-side SQL injection (stored DOM-based)": {
-      "note": "Sink webdatabase.executeSql (burp.Zbjx:157-164). WebSQL is gone from current Chromium, so the dynamic probe cannot reach it; Burp also finds it by static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-coverage-matrix.md)",
-      "status": "todo"
+      "note": "No detection path was found in the reference build: none of the 566 strings of the static analyser's tables (burp.Zeys) names a SQL sink, the dynamic decoder burp.Zcwh maps no sink to these types, and the only webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). Whether the types are retired is not established with certainty (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6)",
+      "status": "excluded"
     },
     "Client-side desync": {
       "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
@@ -30,15 +30,15 @@
       "status": "excluded"
     },
     "Local file path manipulation (DOM-based)": {
-      "note": "No dynamic sink leads to this family: burp.Zcwh's sink names and burp.Zw7w's follow-up contexts have none for it, so in Burp it can only come from static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-analysis.research.md:145)",
+      "note": "Static JavaScript analysis only: seven sinks in burp.Zeys (FileReader.readAsArrayBuffer, readAsBinaryString, readAsDataURL, readAsText, readAsFile, root.getFile, root.getDirectory); the dynamic decoder never returns this type. Needs the static analyser (tasks.json S-04; stages in docs/specs/R-13-static-js-analysis.research.md)",
       "status": "todo"
     },
     "Local file path manipulation (reflected DOM-based)": {
-      "note": "No dynamic sink leads to this family: burp.Zcwh's sink names and burp.Zw7w's follow-up contexts have none for it, so in Burp it can only come from static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-analysis.research.md:145)",
+      "note": "Static JavaScript analysis only: seven sinks in burp.Zeys (FileReader.readAsArrayBuffer, readAsBinaryString, readAsDataURL, readAsText, readAsFile, root.getFile, root.getDirectory); the dynamic decoder never returns this type. Needs the static analyser (tasks.json S-04; stages in docs/specs/R-13-static-js-analysis.research.md)",
       "status": "todo"
     },
     "Local file path manipulation (stored DOM-based)": {
-      "note": "No dynamic sink leads to this family: burp.Zcwh's sink names and burp.Zw7w's follow-up contexts have none for it, so in Burp it can only come from static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-analysis.research.md:145)",
+      "note": "Static JavaScript analysis only: seven sinks in burp.Zeys (FileReader.readAsArrayBuffer, readAsBinaryString, readAsDataURL, readAsText, readAsFile, root.getFile, root.getDirectory); the dynamic decoder never returns this type. Needs the static analyser (tasks.json S-04; stages in docs/specs/R-13-static-js-analysis.research.md)",
       "status": "todo"
     },
     "Manually generated issue": {
