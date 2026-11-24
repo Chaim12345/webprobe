@@ -2447,6 +2447,21 @@ pub fn dom_analysis_probe(
     )
 }
 
+/// Count and attempt the optional stored-variant request. An empty token means
+/// the variant is disabled: do not call its sender or consume the per-probe
+/// intercepted-request budget for a request that will not be sent.
+fn submit_dom_stored_variant(
+    route: &mut DomRoute,
+    stored: &str,
+    submit: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    if stored.is_empty() {
+        return Ok(());
+    }
+    route.sent += 1;
+    submit()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn dom_probe_with_binary(
     shared: &Arc<Shared>,
@@ -2582,13 +2597,16 @@ fn dom_probe_with_binary(
         if shared.scan.stop.load(Ordering::SeqCst) {
             return Err("scan stopped before stored submission".into());
         }
-        // Consume from the same counter used by every intercepted request,
-        // before attempting the outer stored submission (unknown outcomes
-        // still spent the request and are never replayed).
-        cdp.dom_route.as_mut().expect("DOM route installed").sent += 1;
-        submit()?;
+        // Count an optional stored submission against the same per-probe
+        // request budget. With an empty token the variant is disabled, so
+        // neither a request nor a budget unit is consumed.
+        submit_dom_stored_variant(
+            cdp.dom_route.as_mut().expect("DOM route installed"),
+            stored,
+            submit,
+        )?;
         if shared.scan.stop.load(Ordering::SeqCst) {
-            return Err("scan stopped after stored submission".into());
+            return Err("scan stopped before navigation".into());
         }
         let base = url.split('#').next().unwrap_or(url);
         cdp.call(
@@ -2670,6 +2688,37 @@ fn dom_probe_with_binary(
 #[cfg(test)]
 mod dom_route_tests {
     use super::*;
+
+    #[test]
+    fn disabled_stored_variant_does_not_send_or_spend_request_budget() {
+        let mut route = DomRoute {
+            shared: Shared::new(),
+            origin: "http://127.0.0.1".into(),
+            host: "127.0.0.1".into(),
+            port: 80,
+            https: false,
+            template: String::new(),
+            sent: 0,
+            document_url: String::new(),
+            document_response: None,
+        };
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        submit_dom_stored_variant(&mut route, "", || {
+            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(route.sent, 0);
+
+        submit_dom_stored_variant(&mut route, "stored-token", || {
+            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(route.sent, 1);
+    }
 
     #[test]
     fn dom_denied_admission_never_submits_or_opens_target_connection() {
