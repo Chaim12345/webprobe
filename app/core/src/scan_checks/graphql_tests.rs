@@ -186,7 +186,9 @@ fn user_agent_variant_follows_burps_mobile_token_list() {
     let ie9 = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)";
     assert_eq!(ua_variant(None), iphone);
     assert_eq!(
-        ua_variant(Some("Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0")),
+        ua_variant(Some(
+            "Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0"
+        )),
         iphone
     );
     // Every mobile token of burp.Zxly.java:34-45 flips to IE9.
