@@ -2053,7 +2053,15 @@ mod tests {
         ]);
         let items = sc.menu_items(&ctx);
         assert!(sc.invoke_menu_item(&items[0].id).ok, "{:#?}", sc.errors());
-        let log = sc.errors();
+        // Extension output arrives on the JVM's stderr, read by its own
+        // thread: the reply can overtake it under load. Wait for the
+        // action's last line before reading the log.
+        let log = eventually(|| {
+            let log = sc.errors();
+            log.iter()
+                .any(|l| l.starts_with("[out] organizer="))
+                .then_some(log)
+        });
         assert!(
             log.iter().any(|l| l.starts_with("[out] sitemap=2 issues=")),
             "{log:#?}"
@@ -2103,10 +2111,14 @@ mod tests {
         }]);
         let items = sc.menu_items(&ctx);
         assert!(sc.invoke_menu_item(&items[1].id).ok);
-        assert!(
+        let interactions = eventually(|| {
             sc.errors()
-                .iter()
-                .any(|l| l == &format!("[out] interactions=1 type=DNS client=10.0.0.9 id={token}")),
+                .into_iter()
+                .find(|l| l.starts_with("[out] interactions="))
+        });
+        assert_eq!(
+            interactions,
+            format!("[out] interactions=1 type=DNS client=10.0.0.9 id={token}"),
             "{:#?}",
             sc.errors()
         );

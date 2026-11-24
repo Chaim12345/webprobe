@@ -323,6 +323,36 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
 
 #[cfg(test)]
 mod tests {
+    /// A browser that answers the DevTools upgrade later than one 200 ms
+    /// poll slice must still connect; afterwards reads return in poll
+    /// slices rather than waiting out the handshake deadline.
+    #[test]
+    fn cdp_connect_survives_a_slow_websocket_upgrade() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (stream, _) = l.accept().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            let ws = tungstenite::accept(stream).unwrap();
+            // Keep the socket open and silent while the client polls.
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            drop(ws);
+        });
+        let mut cdp = super::Cdp::connect(&format!("ws://127.0.0.1:{port}/devtools"))
+            .expect("slow upgrade must not fail the handshake");
+        let t0 = std::time::Instant::now();
+        assert!(
+            cdp.ws.read().is_err(),
+            "a silent peer yields a poll timeout"
+        );
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(2),
+            "post-handshake reads use the short poll timeout, took {:?}",
+            t0.elapsed()
+        );
+        server.join().unwrap();
+    }
+
     #[test]
     fn dom_request_size_limits_cover_path_and_headers() {
         assert!(super::dom_request_prefix_fits("GET", "/", "example.test"));
@@ -862,14 +892,26 @@ pub fn browser_response(head: &str, body: &[u8]) -> Vec<u8> {
     v
 }
 
+/// How long the DevTools WebSocket upgrade may take before the browser is
+/// treated as unreachable.
+const CDP_HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 impl Cdp {
     fn connect(ws_url: &str) -> Result<Cdp, String> {
         let rest = ws_url.strip_prefix("ws://").ok_or("not a ws:// url")?;
         let authority = rest.split('/').next().unwrap_or("");
         let tcp = std::net::TcpStream::connect(authority).map_err(|e| e.to_string())?;
-        tcp.set_read_timeout(Some(std::time::Duration::from_millis(200)))
-            .ok();
+        // The handshake gets its own generous deadline: with the 200 ms
+        // poll timeout already set, a browser that answers the upgrade
+        // slowly (a loaded machine) failed the whole probe with
+        // "Interrupted handshake (WouldBlock)".
+        tcp.set_read_timeout(Some(CDP_HANDSHAKE_TIMEOUT)).ok();
         let (ws, _) = tungstenite::client(ws_url, tcp).map_err(|e| e.to_string())?;
+        // Short poll slices from here on: the event loop checks stop flags
+        // and deadlines between reads.
+        ws.get_ref()
+            .set_read_timeout(Some(std::time::Duration::from_millis(200)))
+            .ok();
         Ok(Cdp {
             ws,
             next: 1,
