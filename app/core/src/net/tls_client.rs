@@ -36,7 +36,7 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
 pub fn tls_client_config(shared: &Shared, host: &str) -> std::sync::Arc<rustls::ClientConfig> {
     let base = tls_client_config_base(shared, host);
     // A sender that chose the protocol (Repeater) offers only that one.
-    match H2_CHOICE.with(|c| c.get()).and_then(|c| c.want_h2) {
+    match sender_choice().and_then(|c| c.want_h2) {
         Some(h2) => {
             let mut c = (*base).clone();
             c.alpn_protocols = vec![if h2 {
@@ -132,7 +132,7 @@ impl EffectiveTlsPolicy {
     /// The captured config with the sender's protocol choice (a Repeater
     /// ALPN pin) applied, mirroring `tls_client_config`.
     pub fn config_with_sender_choice(&self) -> std::sync::Arc<rustls::ClientConfig> {
-        match H2_CHOICE.with(|c| c.get()).and_then(|c| c.want_h2) {
+        match sender_choice().and_then(|c| c.want_h2) {
             Some(h2) => {
                 let mut c = (*self.config).clone();
                 c.alpn_protocols = vec![if h2 {

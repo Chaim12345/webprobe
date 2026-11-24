@@ -796,6 +796,7 @@ fn repeater_sends_with_the_protocol_the_request_asks_for() {
         let _h2 = crate::net::http2_scope(crate::net::Http2Choice {
             want_h2: want,
             strip_connection: true,
+            force_h2: false,
         });
         let up = crate::net::send_tls_raw(
             &shared,

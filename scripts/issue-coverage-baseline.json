@@ -1,5 +1,5 @@
 {
-  "covered": 166,
+  "covered": 167,
   "not_covered": {
     "Bambda generated issue": {
       "note": "type 0x09008000, for issues raised by a Bambda scan check; WebProbe runs Bambdas as filters and columns only",
@@ -28,10 +28,6 @@
     "HTTP request smuggling": {
       "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
       "status": "excluded"
-    },
-    "Hidden HTTP 2": {
-      "note": "burp.Zpfw: over HTTPS, when the host does not advertise HTTP/2, the base request is sent with HTTP/2 forced (Zwk0.FORCE_HTTP2_NON_POOLED) and any response is reported (burp.Zhhg: Certain, information). Needs a forced-HTTP/2 send in the transport",
-      "status": "todo"
     },
     "Local file path manipulation (DOM-based)": {
       "note": "No dynamic sink leads to this family: burp.Zcwh's sink names and burp.Zw7w's follow-up contexts have none for it, so in Burp it can only come from static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-analysis.research.md:145)",

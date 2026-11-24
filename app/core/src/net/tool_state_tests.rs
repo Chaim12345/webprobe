@@ -52,14 +52,34 @@ fn tool_scopes_nest_and_restore_on_drop() {
 }
 
 #[test]
+fn a_forced_http2_choice_does_not_reach_session_sends() {
+    let forced = Http2Choice {
+        want_h2: Some(true),
+        strip_connection: true,
+        force_h2: true,
+    };
+    let pinned = Http2Choice {
+        force_h2: false,
+        ..forced
+    };
+    let _f = http2_scope(forced);
+    assert_eq!(sender_choice(), Some(forced));
+    assert_eq!(in_session(sender_choice), None);
+    let _p = http2_scope(pinned);
+    assert_eq!(in_session(sender_choice), Some(pinned));
+}
+
+#[test]
 fn http2_scopes_nest_and_restore_on_drop() {
     let outer = Http2Choice {
         want_h2: Some(true),
         strip_connection: false,
+        force_h2: false,
     };
     let inner = Http2Choice {
         want_h2: Some(false),
         strip_connection: true,
+        force_h2: false,
     };
     {
         let _o = http2_scope(outer);

@@ -795,6 +795,7 @@ mod tests {
                             let _h2 = http2_scope(Http2Choice {
                                 want_h2: Some(true),
                                 strip_connection: true,
+                                force_h2: false,
                             });
                             let _ = send_raw(
                                 &shared,

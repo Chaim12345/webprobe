@@ -378,8 +378,10 @@ pub fn send_tls_inner(
         set_connection(&req, "close")
     };
     let key = (host.to_string(), port);
-    let choice = H2_CHOICE.with(|c| c.get());
+    let choice = sender_choice();
     let want_h2 = choice.and_then(|c| c.want_h2);
+    // A forced send speaks HTTP/2 on a connection of its own (Http2Choice).
+    let force_h2 = choice.is_some_and(|c| c.force_h2);
     // A custom SNI (D-12) needs its own connection, and that connection is
     // not pooled under the host's key afterwards: a pooled connection was
     // negotiated under another name.
@@ -391,7 +393,7 @@ pub fn send_tls_inner(
     // A pooled HTTP/2 connection answers on its next odd stream. Pooling is
     // off entirely when keep-alive is disabled or the sender pinned HTTP/1;
     // a dead socket, a GOAWAY connection or a retired connection is dropped.
-    let mut h2conn = if keep_alive && want_h2 != Some(false) && !custom_sni {
+    let mut h2conn = if keep_alive && want_h2 != Some(false) && !custom_sni && !force_h2 {
         shared.h2_pool.lock().unwrap().remove(&h2key)
     } else {
         None
@@ -434,7 +436,7 @@ pub fn send_tls_inner(
     }
     // Pooled HTTP/1 connections are HTTP/1.x: an HTTP/2 demand without a
     // pooled h2 connection needs a fresh one.
-    let mut pooled = if want_h2 == Some(true) || custom_sni {
+    let mut pooled = if want_h2 == Some(true) || custom_sni || force_h2 {
         None
     } else {
         shared.tls_pool.lock().unwrap().remove(&key)
@@ -465,7 +467,7 @@ pub fn send_tls_inner(
     // Fresh connections settle ALPN during the handshake; if the server chose
     // h2, run this request through the HTTP/2 client (pooled connections are
     // always HTTP/1.x — the h2 path returns without pooling).
-    let use_h2 = !reused
+    let alpn_h2 = !reused
         && match &mut stream {
             UpstreamConn::Tls(tls) => {
                 let _ = tls.conn.complete_io(&mut tls.sock);
@@ -473,7 +475,14 @@ pub fn send_tls_inner(
             }
             _ => false,
         };
-    LAST_PROTOCOL.with(|p| p.set(if use_h2 { "HTTP/2" } else { "HTTP/1.1" }));
+    let use_h2 = alpn_h2 || force_h2;
+    LAST_PROTOCOL.with(|p| {
+        p.set(match (use_h2, alpn_h2) {
+            (true, true) => "HTTP/2",
+            (true, false) => HTTP2_WITHOUT_ALPN,
+            (false, _) => "HTTP/1.1",
+        })
+    });
     if want_h2 == Some(true) && !use_h2 {
         return Err(
             "the server did not agree to HTTP/2 (ALPN); switch the request to HTTP/1".into(),
@@ -493,7 +502,7 @@ pub fn send_tls_inner(
         match conn.exchange(&h2req, sink.as_deref_mut()) {
             Ok(resp) => {
                 // Pool the connection for the next request to this origin.
-                if keep_alive && !custom_sni && conn.idle() {
+                if keep_alive && !custom_sni && !force_h2 && conn.idle() {
                     shared.h2_pool.lock().unwrap().insert(h2key, conn);
                 }
                 return Ok(resp);
@@ -508,12 +517,17 @@ pub fn send_tls_inner(
                 let retried = match fresh {
                     UpstreamConn::Tls(mut tls) => {
                         let _ = tls.conn.complete_io(&mut tls.sock);
-                        if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
+                        if force_h2 || tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
                             let mut retry_conn = crate::h2::Conn::new(UpstreamConn::Tls(tls));
                             #[cfg(test)]
                             scanner_send_admission(shared)?;
                             let r = retry_conn.exchange(&h2req, sink.as_deref_mut());
-                            if r.is_ok() && keep_alive && !custom_sni && retry_conn.idle() {
+                            if r.is_ok()
+                                && keep_alive
+                                && !custom_sni
+                                && !force_h2
+                                && retry_conn.idle()
+                            {
                                 shared.h2_pool.lock().unwrap().insert(h2key, retry_conn);
                             }
                             r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
