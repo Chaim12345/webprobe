@@ -725,6 +725,123 @@ impl RequestCheck for HttpPutEnabled {
     }
 }
 
+/// burp.Zh7b.ZA: the paths probed for a JWK Set, in Burp's order.
+pub(crate) const JWK_SET_PATHS: [&str; 8] = [
+    "/oauth2/v1/keys",
+    "/jwks.json",
+    "/.well-known/jwks.json",
+    "/.well-known/jwks_uri",
+    "/.well-known/openid-configuration/jwks",
+    "/openid/connect/jwks.json",
+    "/oauth/discovery/keys",
+    "/id/keys",
+];
+
+/// burp.Zwws.Zp and burp.Zw8f.ZO: whether `body` is a JWK Set (a JSON
+/// object whose `keys` array holds at least one object with a string
+/// `kty`) and, if so, the private key material in it: the string members
+/// `d p q dp dq qi` and the strings of the `oth` array for RSA, `k` for
+/// oct, `d` for EC and OKP. An element of `keys` that is not an object
+/// ends the reading, as it does in Burp. `None`: not a JWK Set.
+pub(crate) fn jwk_set_private_material(body: &[u8]) -> Option<Vec<String>> {
+    let doc: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let mut keys = Vec::new();
+    for item in doc.as_object()?.get("keys")?.as_array()? {
+        let Some(key) = item.as_object() else { break };
+        if key.get("kty").is_some_and(serde_json::Value::is_string) {
+            keys.push(key);
+        }
+    }
+    if keys.is_empty() {
+        return None;
+    }
+    let mut private = Vec::new();
+    for key in keys {
+        let kty = key["kty"].as_str().unwrap_or_default();
+        let members: &[&str] = match kty {
+            "RSA" => &["d", "p", "q", "dp", "dq", "qi"],
+            "oct" => &["k"],
+            "EC" | "OKP" => &["d"],
+            _ => &[],
+        };
+        private.extend(
+            members
+                .iter()
+                .filter_map(|m| key.get(*m)?.as_str())
+                .map(str::to_string),
+        );
+        if kty == "RSA"
+            && let Some(other) = key.get("oth").and_then(serde_json::Value::as_array)
+        {
+            private.extend(other.iter().filter_map(|v| v.as_str()).map(str::to_string));
+        }
+    }
+    Some(private)
+}
+
+/// JSON Web Key Set disclosed, burp.Zh7b (per host, not at the fast audit
+/// speed): GET each of [`JWK_SET_PATHS`]; a body that is a JWK Set is
+/// reported at that path (burp.Zbfr). Factory burp.Zmir.ZJ: Certain, and
+/// High when the set holds private key material, else Information. Text
+/// burp.Zwf3.
+pub(crate) struct JwkSetDisclosed;
+
+impl RequestCheck for JwkSetDisclosed {
+    fn id(&self) -> &'static str {
+        "active.jwk-set-disclosed"
+    }
+    fn issue(&self) -> &'static str {
+        "Json Web Key Set disclosed"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        if cx.stopped()
+            || !cx.runs(self.issue())
+            || matches!(cx.settings.speed, ScanSpeed::Fast)
+            || !cx
+                .state()
+                .openapi_hosts
+                .lock()
+                .unwrap()
+                .insert(format!("jwks|{scheme}://{}:{}", cx.host, cx.port))
+        {
+            return;
+        }
+        for path in JWK_SET_PATHS {
+            if cx.stopped() {
+                return;
+            }
+            let req = host_request(cx, "GET", path, &[], b"");
+            let Some(resp) = burp_send(cx, &req) else {
+                continue;
+            };
+            let Some(private) = jwk_set_private_material(status_body(&resp).1) else {
+                continue;
+            };
+            let (sev, detail) = if private.is_empty() {
+                (
+                    "info",
+                    "The application publicly exposes a JSON Web Key (JWK) Set. Although no private keys have been found in the JWK set, exposed public key components can also be useful for attackers.",
+                )
+            } else {
+                (
+                    "high",
+                    "The application publicly exposes a JSON Web Key (JWK) Set that contains private keys. These could be used by an attacker to generate arbitrary valid JWTs.",
+                )
+            };
+            let mut e = cx.entry.clone();
+            e.path = path.into();
+            let mut i = mk(sev, self.issue(), &e, detail)
+                .with_evidence(vec![ScanEvidence::new(&req, Some(&resp))]);
+            i.confidence = "Certain".into();
+            cx.report(vec![i]);
+        }
+    }
+}
+
 /// ASP.NET tracing enabled, burp.Ze3_ (per host): GET /trace.axd; a 200
 /// whose HTML has `<span class="tracecontent">` (Zsqx.Zh). Zr17.Zv case 1:
 /// High, Certain; detail burp.Zwjg ("application" level).

@@ -425,6 +425,7 @@ fn registry_order_is_pinned() {
             ("active.http-put-enabled", Scope::Host, None),
             ("active.aspnet-tracing", Scope::Host, None),
             ("active.aspnet-debugging", Scope::Host, None),
+            ("active.jwk-set-disclosed", Scope::Host, None),
             ("active.graphql-introspection", Scope::Request, None),
             ("active.graphql-suggestions", Scope::Request, None),
             ("active.graphql-content-type", Scope::Request, None),
@@ -708,6 +709,124 @@ fn r10_host_checks_against_a_live_lab() {
     assert!(
         got.contains(&("ASP.NET debugging enabled", "medium", "Firm")),
         "{got:?}"
+    );
+}
+
+/// burp.Zwws / Zw8f: what counts as a JWK Set and as private material.
+#[test]
+fn jwk_set_private_material_follows_burp() {
+    let f = |s: &str| jwk_set_private_material(s.as_bytes());
+    // A public RSA key and a public EC key: a set, nothing private.
+    assert_eq!(
+        f(
+            r#"{"keys":[{"kty":"RSA","n":"abc","e":"AQAB"},{"kty":"EC","crv":"P-256","x":"1","y":"2"}]}"#
+        ),
+        Some(vec![])
+    );
+    // Private members per key type; non-string members do not count.
+    assert_eq!(
+        f(
+            r#"{"keys":[{"kty":"RSA","d":"D","p":"P","q":"Q","dp":"DP","dq":"DQ","qi":"QI","oth":["O1",2,"O3"]},{"kty":"oct","k":"K"},{"kty":"EC","d":"ED"},{"kty":"OKP","d":"OD"},{"kty":"oct","d":"not-private-for-oct"},{"kty":"RSA","d":5}]}"#
+        ),
+        Some(
+            ["D", "P", "Q", "DP", "DQ", "QI", "O1", "O3", "K", "ED", "OD"]
+                .map(String::from)
+                .to_vec()
+        )
+    );
+    // Not a set: no keys member, an empty array, keys without a string kty,
+    // a top-level array, text that is not JSON.
+    for s in [
+        r#"{"jwks_uri":"https://example.com/jwks.json"}"#,
+        r#"{"keys":[]}"#,
+        r#"{"keys":[{"kid":"1"},{"kty":7}]}"#,
+        r#"[{"kty":"RSA"}]"#,
+        "<html>not found</html>",
+    ] {
+        assert_eq!(f(s), None, "{s}");
+    }
+    // A non-object element ends the reading; the keys before it count.
+    assert_eq!(
+        f(r#"{"keys":[{"kty":"oct","k":"K"},"x",{"kty":"EC","d":"late"}]}"#),
+        Some(vec!["K".to_string()])
+    );
+    assert_eq!(f(r#"{"keys":["x",{"kty":"oct","k":"K"}]}"#), None);
+}
+
+/// JWK Set disclosure against a live lab: a public set at one of Burp's
+/// paths and a set with a private key at another; other paths answer 404.
+#[test]
+fn jwk_set_disclosed_against_a_live_lab() {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = match path {
+            "/.well-known/jwks.json" => r#"{"keys":[{"kty":"RSA","n":"abc","e":"AQAB"}]}"#,
+            "/id/keys" => r#"{"keys":[{"kty":"oct","k":"c2VjcmV0"}]}"#,
+            _ => {
+                return "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .into();
+            }
+        };
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    });
+    let shared = crate::net::Shared::new();
+    let host = format!("127.0.0.1:{port}");
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if id != "active.jwk-set-disclosed" {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    let mut e = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/".into(),
+        ..Default::default()
+    };
+    e.req_raw = format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n")
+        .into_bytes()
+        .into();
+    crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+    let t0 = std::time::Instant::now();
+    while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(!shared.scan.is_busy(), "scan did not finish");
+    let issues = shared.issues.lock().unwrap();
+    let mut got: Vec<(&str, &str, &str, &str)> = issues
+        .iter()
+        .filter(|i| i.name == "Json Web Key Set disclosed")
+        .map(|i| {
+            (
+                i.path.as_str(),
+                i.sev.as_str(),
+                i.confidence.as_str(),
+                i.detail.as_str(),
+            )
+        })
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            (
+                "/.well-known/jwks.json",
+                "info",
+                "Certain",
+                "The application publicly exposes a JSON Web Key (JWK) Set. Although no private keys have been found in the JWK set, exposed public key components can also be useful for attackers."
+            ),
+            (
+                "/id/keys",
+                "high",
+                "Certain",
+                "The application publicly exposes a JSON Web Key (JWK) Set that contains private keys. These could be used by an attacker to generate arbitrary valid JWTs."
+            ),
+        ]
     );
 }
 
