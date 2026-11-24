@@ -2150,8 +2150,8 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     );
     assert_eq!(
         visits.load(Ordering::SeqCst),
-        3,
-        "one baseline outside DOM budget, one stored-token submission and one DOM navigation"
+        2,
+        "one baseline outside DOM budget and one shared DOM navigation (stored submissions are disabled)"
     );
     vulnerable.store(false, Ordering::SeqCst);
     shared.issues.lock().unwrap().clear();
@@ -2162,7 +2162,7 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     );
     assert_eq!(
         visits.load(Ordering::SeqCst),
-        6,
+        4,
         "next run gets a fresh DOM probe"
     );
 }
@@ -2341,6 +2341,11 @@ fn dom_xss_reflected_variant_against_a_live_lab() {
 /// page, which passes it to document.write: the stored variant, not the
 /// plain or reflected ones (Tentative, like every non-location.hash
 /// provenance). Skipped when no Chromium is available.
+///
+/// Ignored: stored-DOM submissions are disabled by default (`dom.rs` sets
+/// `tok_st` empty) because submitting authenticated payloads can mutate
+/// server-side state. Re-enable together with the opt-in stored submission.
+#[ignore = "stored DOM submission is disabled by default (state-mutating)"]
 #[test]
 fn dom_xss_stored_variant_against_a_live_lab() {
     if crate::crawl::chromium_binary().is_none() {
@@ -2355,9 +2360,7 @@ fn dom_xss_stored_variant_against_a_live_lab() {
         // through an earlier request.
         let embed = st.lock().unwrap().clone();
         if let Some(q) = path.split('?').nth(1) {
-            if q.contains("__proto__") {
-                *st.lock().unwrap() = q.to_string();
-            }
+            *st.lock().unwrap() = q.to_string();
         }
         let body = if path.starts_with("/storexss") {
             format!("<html><body><script>var t = '{embed}'; document.write('<p>' + t + '</p>');</script></body></html>")
@@ -2415,20 +2418,18 @@ fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
     });
     let got = lab_scan(port, &["active.dom-xss"], "GET", "/mixed",
         format!("GET /mixed HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: session=kept\r\nAuthorization: Bearer lab-only\r\nConnection: X-Remove\r\nX-Remove: unsafe\r\nProxy-Authorization: lab-proxy\r\n\r\n"));
-    for name in [
-        "Cross-site scripting (DOM-based)",
-        "Cross-site scripting (stored DOM-based)",
-    ] {
-        assert!(
-            got.iter().any(|(n, _, _)| n == name),
-            "missing {name}: {got:?}"
-        );
-    }
+    // Stored submissions are disabled by default, so only the plain
+    // location.hash variant is expected from this mixed page.
+    assert!(
+        got.iter()
+            .any(|(n, _, _)| n == "Cross-site scripting (DOM-based)"),
+        "missing plain DOM XSS: {got:?}"
+    );
     let wire = seen.lock().unwrap();
     assert_eq!(
         wire.len(),
-        3,
-        "baseline + submission + navigation: {wire:?}"
+        2,
+        "baseline + one token navigation (stored submissions are disabled): {wire:?}"
     );
     for raw in wire.iter().skip(1) {
         let lower = raw.to_ascii_lowercase();
@@ -2553,7 +2554,7 @@ fn dom_reflection_uses_only_fulfilled_navigation_response_against_a_live_lab() {
     );
     assert_eq!(
         n.load(std::sync::atomic::Ordering::SeqCst),
-        3,
+        2,
         "no later query repetition"
     );
 }
@@ -2819,6 +2820,10 @@ function parseqs(s) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(fu
 /// additions are deliberately not covered. One admitted operation serves
 /// both families, including separate hash/query pollution and stored DOM
 /// evidence. No overwrite-detection claim.
+///
+/// Ignored: the stored half requires the state-mutating stored submission,
+/// which is disabled by default (`dom.rs` sets `tok_st` empty).
+#[ignore = "stored DOM submission is disabled by default (state-mutating)"]
 #[test]
 fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
     if crate::crawl::chromium_binary().is_none() {
@@ -2915,7 +2920,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
         let expected = if route == "/ppcap" {
             1 + crate::crawl::DOM_MAX_REQUESTS_PER_PROBE
         } else {
-            3
+            2
         };
         assert_eq!(
             requests.len(),
