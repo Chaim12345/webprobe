@@ -918,11 +918,26 @@ mod tests {
         for (label, source) in sources {
             let report = load_builtin(&source).unwrap_or_else(|e| panic!("{label}: {e}"));
             assert!(report.errors.is_empty(), "{label}: {:?}", report.errors);
-            assert_eq!(report.configs.len(), 29, "{label}: expected 29 application built-ins");
-            assert!(report.configs.iter().any(|c| c.name == "Audit checks - passive"), "{label}: passive configuration missing");
-            assert!(load_burp_defaults(&source).is_some_and(|d|
-                get_path(&d, "crawler.crawl_limits.maximum_crawl_time").is_some()),
-                "{label}: application preferences missing");
+            assert_eq!(
+                report.configs.len(),
+                29,
+                "{label}: expected 29 application built-ins"
+            );
+            assert!(
+                report
+                    .configs
+                    .iter()
+                    .any(|c| c.name == "Audit checks - passive"),
+                "{label}: passive configuration missing"
+            );
+            assert!(
+                load_burp_defaults(&source).is_some_and(|d| get_path(
+                    &d,
+                    "crawler.crawl_limits.maximum_crawl_time"
+                )
+                .is_some()),
+                "{label}: application preferences missing"
+            );
             eprintln!("BURP_APP_SMOKE_EXECUTED: {label}");
         }
     }
