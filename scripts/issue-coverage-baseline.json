@@ -1,10 +1,6 @@
 {
-  "covered": 163,
+  "covered": 164,
   "not_covered": {
-    "ASP.NET ViewState without MAC enabled": {
-      "note": "in progress: branch feat/viewstate-mac-20261124",
-      "status": "todo"
-    },
     "Bambda generated issue": {
       "note": "type 0x09008000, for issues raised by a Bambda scan check; WebProbe runs Bambdas as filters and columns only",
       "status": "todo"
