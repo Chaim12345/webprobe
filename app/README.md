@@ -94,3 +94,13 @@ configured and prints `BURP_APP_SMOKE_EXECUTED` only after loading succeeds.
 Run `python3 scripts/test-burp-app-smoke.py PATH_TO_CORE_TEST_BINARY` to
 exercise variable isolation and valid/invalid resource fixtures. Synthetic
 fixtures test the harness, not compatibility with an actual Burp release.
+
+### Options import and startup settings
+
+Project and user options imports update stored settings and scan settings.
+They do not live-rebind an already running proxy listener or restart an
+already running REST server. Restart WebProbe for changed listener address,
+port, API keys or API enable/disable settings to replace an existing server.
+Enabling an API for the first time can start it immediately.
+Headless `--project` and `--project-file` are aliases; the last occurrence
+in argument order wins, including repeated uses of the same alias.

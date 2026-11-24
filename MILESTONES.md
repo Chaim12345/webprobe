@@ -89,7 +89,7 @@ Worktree: `.worktrees/r07` after M2 integration.
 
 ## M7 — R-15 CLI, configuration and REST
 
-**Status:** pending.
+**Status:** done 2026-11-23 (lane/r15-cli-rest-config, ported from PR #5's 64aa1b0 onto the post-refactor tree): Burp CLI flags on both binaries, project/user options JSON import/export (burp_config.rs), /v0.1 REST API with API-key path auth (rest_api.rs), desktop options save/load UI; loopback-only by default, keys never logged.
 
 Worktree: `.worktrees/r15`.
 

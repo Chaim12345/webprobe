@@ -3629,6 +3629,163 @@ pub fn project_controls(app: &mut App, ui: &mut Ui) {
     if !app.project_status.is_empty() {
         hint(ui, &app.project_status);
     }
+    burp_options_json(app, ui);
+}
+
+/// Burp's Project options / User options "Save options" / "Load options"
+/// (R-15): the same JSON the command line's --config-file /
+/// --user-config-file read. Scan-configuration keys load through R-11's
+/// configuration library model; the API key is never shown.
+fn burp_options_json(app: &mut App, ui: &mut Ui) {
+    use crate::feedback::{toast, Level};
+    ui.add_space(6.0);
+    ui.label("Imported listener/API connection settings require restarting WebProbe to replace an existing server.");
+    let opts_id = egui::Id::unique("burp_options_path");
+    let mut opts_path: String = ui
+        .data_mut(|d| d.get_temp(opts_id))
+        .unwrap_or_else(|| "webprobe-options.json".to_string());
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new("Options JSON")
+                .size(12.0)
+                .color(theme::ink_faint()),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut opts_path)
+                .desired_width(330.0)
+                .font(egui::TextStyle::Monospace),
+        );
+    });
+    ui.horizontal(|ui| {
+        if ui.button("Save project options").clicked() {
+            let listener = webprobe_core::burp_config::ProxyListener {
+                port: app.shared.proxy_port.load(Ordering::SeqCst),
+                running: app.shared.listener_running.load(Ordering::SeqCst),
+                ..Default::default()
+            };
+            let json = webprobe_core::burp_config::export_project_options(&listener);
+            match std::fs::write(
+                opts_path.trim(),
+                serde_json::to_string_pretty(&json).unwrap_or_default(),
+            ) {
+                Ok(()) => toast(
+                    Level::Success,
+                    format!("Project options saved to {}", opts_path.trim()),
+                ),
+                Err(e) => toast(Level::Error, format!("Could not save project options: {e}")),
+            }
+        }
+        if ui.button("Load project options").clicked() {
+            let loaded = std::fs::read_to_string(opts_path.trim())
+                .map_err(|e| e.to_string())
+                .and_then(|t| {
+                    serde_json::from_str::<serde_json::Value>(&t)
+                        .map_err(|e| e.to_string())
+                        .map(|j| (t, j))
+                });
+            match loaded {
+                Ok((text, json)) => {
+                    let mut listener = webprobe_core::burp_config::ProxyListener::default();
+                    let mut notes = Vec::new();
+                    webprobe_core::burp_config::apply_project_options(
+                        &json,
+                        &mut listener,
+                        &mut notes,
+                    );
+                    app.shared.proxy_port.store(listener.port, Ordering::SeqCst);
+                    if let Ok(mut cfg) = webprobe_core::scan_library::parse_config(
+                        opts_path.trim(),
+                        text.as_bytes(),
+                        false,
+                    ) {
+                        cfg.tree.as_object_mut().map(|m| m.remove("proxy"));
+                        let refs = [&cfg];
+                        notes.extend(webprobe_core::scan_library::not_applied(&refs));
+                        let slot = webprobe_core::scan_config::shared_config(&app.shared);
+                        let base = slot.lock().unwrap().clone();
+                        let applied = webprobe_core::scan_library::apply(
+                            &refs,
+                            &base,
+                            app.shared.scan_speed.load(Ordering::SeqCst),
+                            app.shared.scan_accuracy.load(Ordering::SeqCst),
+                        );
+                        *slot.lock().unwrap() = applied.config;
+                        app.shared.scan_speed.store(applied.speed, Ordering::SeqCst);
+                        app.shared
+                            .scan_accuracy
+                            .store(applied.accuracy, Ordering::SeqCst);
+                    }
+                    if notes.is_empty() {
+                        toast(
+                            Level::Success,
+                            format!("Project options loaded from {}; restart WebProbe for listener changes", opts_path.trim()),
+                        );
+                    } else {
+                        toast(
+                            Level::Warn,
+                            format!("Project options loaded; restart WebProbe for listener changes. Notes: {}", notes.join("; ")),
+                        );
+                    }
+                }
+                Err(e) => toast(Level::Error, format!("Could not load project options: {e}")),
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        if ui.button("Save user options").clicked() {
+            let api = app.shared.api_config.lock().unwrap().clone();
+            let json = webprobe_core::burp_config::export_user_options(&api);
+            match std::fs::write(
+                opts_path.trim(),
+                serde_json::to_string_pretty(&json).unwrap_or_default(),
+            ) {
+                Ok(()) => toast(
+                    Level::Success,
+                    format!("User options saved to {}", opts_path.trim()),
+                ),
+                Err(e) => toast(Level::Error, format!("Could not save user options: {e}")),
+            }
+        }
+        if ui.button("Load user options").clicked() {
+            let loaded = std::fs::read_to_string(opts_path.trim())
+                .map_err(|e| e.to_string())
+                .and_then(|t| {
+                    serde_json::from_str::<serde_json::Value>(&t).map_err(|e| e.to_string())
+                });
+            match loaded {
+                Ok(json) => {
+                    let mut api = app.shared.api_config.lock().unwrap().clone();
+                    let mut notes = Vec::new();
+                    webprobe_core::burp_config::apply_user_options(&json, &mut api, &mut notes);
+                    *app.shared.api_config.lock().unwrap() = api.clone();
+                    // Apply a freshly enabled API at once; the server has no
+                    // shutdown, so disabling takes effect on the next start.
+                    if api.enabled && !app.shared.api_started.swap(true, Ordering::SeqCst) {
+                        let defs = webprobe_report::report::KnowledgeBase::discover()
+                            .rest_api_definitions();
+                        match webprobe_core::rest_api::start(&app.shared, &api, defs) {
+                            Ok(p) => toast(
+                                Level::Success,
+                                format!("REST API listening on {}:{p}", api.address.as_deref().unwrap_or(if api.listen_mode == "all_interfaces" { "0.0.0.0" } else { "127.0.0.1" })),
+                            ),
+                            Err(e) => {
+                                app.shared.api_started.store(false, Ordering::SeqCst);
+                                toast(Level::Error, format!("REST API did not start: {e}"));
+                            }
+                        }
+                    }
+                    if !notes.is_empty() {
+                        toast(
+                            Level::Warn,
+                            format!("User options loaded; existing API servers require restart for changes. Notes: {}", notes.join("; ")),
+                        );
+                    }
+                }
+                Err(e) => toast(Level::Error, format!("Could not load user options: {e}")),
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(opts_id, opts_path));
 }
 
 #[cfg(test)]

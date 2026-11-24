@@ -8,6 +8,7 @@ pub mod bambda;
 pub mod bambda_library;
 pub mod bcheck;
 pub mod burp_checks;
+pub mod burp_config;
 pub mod codec;
 pub mod collaborator;
 pub mod cookie_jar;
@@ -50,6 +51,7 @@ pub mod project_files;
 pub mod repeater_run;
 #[cfg(test)]
 mod request_reader_tests;
+pub mod rest_api;
 pub mod rt;
 pub mod scan;
 pub mod scan_config;
