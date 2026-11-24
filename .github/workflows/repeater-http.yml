@@ -11,6 +11,8 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_BUILD_RUSTC: rustc
   CARGO_BUILD_RUSTC_WRAPPER: ""
+  # Match workspace acceptance's linker so its desktop dependencies are reusable.
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: cc
   RUSTFLAGS: ""
   CARGO_TERM_COLOR: always
 
@@ -49,14 +51,23 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: rustup update stable && rustup default stable && rustup component add clippy rustfmt
-      - uses: actions/cache@v4
+      - name: Identify Rust cache toolchain
+        id: rust-cache-toolchain
+        run: echo "fingerprint=$(rustc -vV | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Cache Repeater Rust dependencies
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             app/target
-          key: repeater-${{ runner.os }}-${{ hashFiles('app/Cargo.lock') }}
-          restore-keys: repeater-${{ runner.os }}-
+          key: repeater-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-toolchain.outputs.fingerprint }}-${{ hashFiles('app/Cargo.lock', '**/Cargo.toml', '**/.cargo/config.toml') }}
+          # PR-only caches cannot warm another PR. Consume the desktop cache
+          # produced by workspace.yml on parity instead; Cargo checks freshness.
+          restore-keys: |
+            repeater-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-toolchain.outputs.fingerprint }}-
+            workspace-${{ runner.os }}-${{ hashFiles('app/Cargo.lock') }}
+            cargo-${{ runner.os }}-stable-${{ hashFiles('app/Cargo.lock') }}
       - run: |
           curl --fail --location --retry 3 https://repo.maven.apache.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar -o "$RUNNER_TEMP/montoya-api.jar"
           echo "cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94  $RUNNER_TEMP/montoya-api.jar" | sha256sum --check
