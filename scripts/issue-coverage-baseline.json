@@ -10,16 +10,16 @@
       "status": "excluded"
     },
     "Client-side SQL injection (DOM-based)": {
-      "note": "No detection path was found in the reference build: none of the 566 strings of the static analyser's tables (burp.Zeys) names a SQL sink, the dynamic decoder burp.Zcwh maps no sink to these types, and the only webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). Whether the types are retired is not established with certainty (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6)",
-      "status": "excluded"
+      "note": "NOT COVERED by WebProbe. Source reading found no detection path in the inspected reference build: the decoded static analyser tables (burp.Zeys) and dynamic decoder (burp.Zcwh) yielded no SQL sink mapping; the observed webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). This is build-scoped negative evidence, not proof of retirement, unreachability, or exclusion from parity. Support is deferred pending an explicit scope decision and further verification (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6).",
+      "status": "decision"
     },
     "Client-side SQL injection (reflected DOM-based)": {
-      "note": "No detection path was found in the reference build: none of the 566 strings of the static analyser's tables (burp.Zeys) names a SQL sink, the dynamic decoder burp.Zcwh maps no sink to these types, and the only webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). Whether the types are retired is not established with certainty (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6)",
-      "status": "excluded"
+      "note": "NOT COVERED by WebProbe. Source reading found no detection path in the inspected reference build: the decoded static analyser tables (burp.Zeys) and dynamic decoder (burp.Zcwh) yielded no SQL sink mapping; the observed webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). This is build-scoped negative evidence, not proof of retirement, unreachability, or exclusion from parity. Support is deferred pending an explicit scope decision and further verification (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6).",
+      "status": "decision"
     },
     "Client-side SQL injection (stored DOM-based)": {
-      "note": "No detection path was found in the reference build: none of the 566 strings of the static analyser's tables (burp.Zeys) names a SQL sink, the dynamic decoder burp.Zcwh maps no sink to these types, and the only webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). Whether the types are retired is not established with certainty (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6)",
-      "status": "excluded"
+      "note": "NOT COVERED by WebProbe. Source reading found no detection path in the inspected reference build: the decoded static analyser tables (burp.Zeys) and dynamic decoder (burp.Zcwh) yielded no SQL sink mapping; the observed webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). This is build-scoped negative evidence, not proof of retirement, unreachability, or exclusion from parity. Support is deferred pending an explicit scope decision and further verification (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6).",
+      "status": "decision"
     },
     "Client-side desync": {
       "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
