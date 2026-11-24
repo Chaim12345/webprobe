@@ -1136,7 +1136,8 @@ Content-Type: application/xml
         format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: {}\r\n\r\n{body}",
             body.len()
-        ).into_bytes()
+        )
+        .into_bytes()
     }
 
     #[test]
@@ -1148,7 +1149,10 @@ Content-Type: application/xml
             for (outer, inner) in [('"', '\''), ('\'', '"')] {
                 let attrs = format!("note={outer}prefix {name}={inner}*{inner}{outer}");
                 let response = quoted_policy_response(kind, &attrs);
-                assert!(crossdomain_findings(&response, "www.example.com", kind).is_empty(), "{kind:?}: {attrs}");
+                assert!(
+                    crossdomain_findings(&response, "www.example.com", kind).is_empty(),
+                    "{kind:?}: {attrs}"
+                );
             }
         }
     }
@@ -1163,7 +1167,11 @@ Content-Type: application/xml
                 // The fake wildcard must not mask the later real value.
                 let attrs = format!("note={outer}prefix {name}={inner}*{inner}{outer} {name} \t=\n {inner}example.com{inner}");
                 let response = quoted_policy_response(kind, &attrs);
-                assert_eq!(crossdomain_findings(&response, "www.example.com", kind), ["example.com"], "{kind:?}: {attrs}");
+                assert_eq!(
+                    crossdomain_findings(&response, "www.example.com", kind),
+                    ["example.com"],
+                    "{kind:?}: {attrs}"
+                );
             }
         }
     }
@@ -1177,10 +1185,18 @@ Content-Type: application/xml
             for (outer, inner) in [('"', '\''), ('\'', '"')] {
                 let attrs = format!("note={outer}before > {name}={inner}*{inner} after{outer} {name}={inner}example.com{inner}");
                 let response = quoted_policy_response(kind, &attrs);
-                assert_eq!(crossdomain_findings(&response, "www.example.com", kind), ["example.com"], "{kind:?}: {attrs}");
-                let decoy_only = format!("note={outer}before > {name}={inner}*{inner} after{outer}");
+                assert_eq!(
+                    crossdomain_findings(&response, "www.example.com", kind),
+                    ["example.com"],
+                    "{kind:?}: {attrs}"
+                );
+                let decoy_only =
+                    format!("note={outer}before > {name}={inner}*{inner} after{outer}");
                 let response = quoted_policy_response(kind, &decoy_only);
-                assert!(crossdomain_findings(&response, "www.example.com", kind).is_empty(), "{kind:?}: {decoy_only}");
+                assert!(
+                    crossdomain_findings(&response, "www.example.com", kind).is_empty(),
+                    "{kind:?}: {decoy_only}"
+                );
             }
         }
     }
@@ -1194,10 +1210,17 @@ Content-Type: application/xml
             for quote in ['"', '\''] {
                 let attrs = format!("note={quote}ordinary{quote} not{name}={quote}*{quote} {name}extra={quote}*{quote}");
                 let response = quoted_policy_response(kind, &attrs);
-                assert!(crossdomain_findings(&response, "www.example.com", kind).is_empty(), "{kind:?}: {attrs}");
+                assert!(
+                    crossdomain_findings(&response, "www.example.com", kind).is_empty(),
+                    "{kind:?}: {attrs}"
+                );
                 let with_real = format!("{attrs} {name} = {quote}example.com{quote}");
                 let response = quoted_policy_response(kind, &with_real);
-                assert_eq!(crossdomain_findings(&response, "www.example.com", kind), ["example.com"], "{kind:?}: {with_real}");
+                assert_eq!(
+                    crossdomain_findings(&response, "www.example.com", kind),
+                    ["example.com"],
+                    "{kind:?}: {with_real}"
+                );
             }
         }
     }
