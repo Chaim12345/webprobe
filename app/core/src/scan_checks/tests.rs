@@ -306,7 +306,8 @@ fn registry_order_is_pinned() {
             "active.css-injection-stored",
             "active.client-side-hpp-stored",
             "active.form-action-hijacking-stored",
-            "active.open-redirection-stored"
+            "active.open-redirection-stored",
+            "active.sql-injection-second-order"
         ]
     );
     let requests: Vec<(&str, Scope, Option<&str>)> = REQUEST_CHECKS

@@ -1,5 +1,5 @@
 {
-  "covered": 161,
+  "covered": 162,
   "not_covered": {
     "ASP.NET ViewState without MAC enabled": {
       "note": "in progress: branch feat/viewstate-mac-20261124",
@@ -68,10 +68,6 @@
     "Ruby code injection": {
       "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
       "status": "decision"
-    },
-    "SQL injection (second order)": {
-      "note": "stored-input variants (burp.Zse, Zr12; texts Zwup and Zwvi) of checks WebProbe has in their reflected form",
-      "status": "todo"
     },
     "Server-side JavaScript code injection": {
       "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",

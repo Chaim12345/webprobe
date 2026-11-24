@@ -3938,6 +3938,19 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                     .map(|x| format!("<style>{x}</style><div data-x=\"{x}\"></div><form action=\"{x}\"></form><a href=\"{x}\">l</a>"))
                     .collect::<String>();
                 Some(format!("<html><body>{shown}</body></html>"))
+            } else if head.starts_with("GET /report") {
+                // The newest comment goes into a query unescaped: an odd
+                // number of quotes breaks it (the second-order SQL lab).
+                let broken = comments
+                    .lock()
+                    .unwrap()
+                    .last()
+                    .is_some_and(|c| c.matches('\'').count() % 2 == 1);
+                Some(if broken {
+                    "<html><body>You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''' at line 1</body></html>".to_string()
+                } else {
+                    "<html><body>report ready</body></html>".to_string()
+                })
             } else if head.starts_with("POST /search") {
                 let q = field("q=").unwrap_or_default();
                 let shown = if post_only {
@@ -4199,6 +4212,58 @@ fn stage_a4_finds_stored_open_redirection() {
     assert!(
         run("/list").is_empty(),
         "a page that shows the input does not redirect"
+    );
+}
+
+/// Stage A4's second-order SQL injection: a quote stored by POST /comment
+/// breaks the query behind GET /report, two quotes do not. A retrieval
+/// page that only shows the input (GET /list) raises nothing.
+#[test]
+fn stage_a4_finds_second_order_sql_injection() {
+    let name = "SQL injection (second order)";
+    let run = |retrieval: &str| {
+        let (port, _) = guestbook(false);
+        let shared = Shared::new();
+        let item = |method: &str, path: &str, body: &str| {
+            let entry = guestbook_entry(port, method, path, body);
+            crate::stored::Item {
+                req: String::from_utf8_lossy(&entry.req_raw).into_owned(),
+                entry,
+                host: "127.0.0.1".into(),
+                port,
+                https: false,
+            }
+        };
+        let pair = crate::stored::Pair {
+            item: item("POST", "/comment", "c=hi"),
+            point: InsertionPoint::new(IpKind::Body, "c", "hi"),
+            retrieval: item("GET", retrieval, ""),
+            injection: (vec![], None),
+        };
+        let cx = checks::PairCtx::new(shared.clone(), pair);
+        checks::STORED_CHECKS
+            .iter()
+            .find(|c| c.issue() == name)
+            .unwrap()
+            .run(&cx);
+        issues_named(&shared, name)
+    };
+    let hits = run("/report");
+    let h = hits
+        .iter()
+        .find(|i| i.path == "/comment")
+        .expect("second-order SQL injection");
+    assert_eq!((h.sev.as_str(), h.confidence.as_str()), ("high", "Certain"));
+    assert!(
+        h.detail.contains("a database error message was returned in the response to the later request \"GET /report HTTP/1.1\"")
+            && h.detail.contains("Two single quotes were then submitted and the error message disappeared."),
+        "{}",
+        h.detail
+    );
+    assert_eq!(h.evidence.len(), 2, "injection and retrieval exchanges");
+    assert!(
+        run("/list").is_empty(),
+        "a page that shows the input has no SQL error"
     );
 }
 
