@@ -103,11 +103,16 @@ fn listen_address(api: &ApiConfig) -> Result<SocketAddr, String> {
 }
 
 fn acquire_client_slot(active: &AtomicUsize) -> bool {
-    active
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
-            (count < MAX_API_CLIENTS).then_some(count + 1)
-        })
-        .is_ok()
+    let mut count = active.load(Ordering::Acquire);
+    loop {
+        if count >= MAX_API_CLIENTS {
+            return false;
+        }
+        match active.compare_exchange_weak(count, count + 1, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return true,
+            Err(current) => count = current,
+        }
+    }
 }
 
 struct ClientSlot(Arc<AtomicUsize>);
