@@ -147,6 +147,103 @@ impl StoredCheck for OpenRedirectionStored {
     }
 }
 
+/// SQL injection (second order), burp.Zg_c in the stored stage: burp.Zcug
+/// registers the SQL check for SQL_INJECTION_2ND_ORDER and burp.Zppj picks
+/// the type by context (Zcrn.ZL). This is the error-based half
+/// (burp.Zppj.ZE): the quote series goes to the pair's injection request
+/// and the error test reads the response to the retrieval request replayed
+/// after each, against the retrieval response as it was before. Severity
+/// and confidence as in the reflected check. The boolean, time-based and
+/// Collaborator variants are not ported for stored input. Only a GET or
+/// HEAD retrieval is replayed.
+pub(crate) struct SqlInjectionSecondOrder;
+
+impl StoredCheck for SqlInjectionSecondOrder {
+    fn id(&self) -> &'static str {
+        "active.sql-injection-second-order"
+    }
+    fn issue(&self) -> &'static str {
+        "SQL injection (second order)"
+    }
+    /// As the reflected check (burp.Zg_c / Zppj have no point-type rule).
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        SqlErrorInjection.applies_to(ip)
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
+    fn run(&self, cx: &PairCtx) {
+        if cx.stopped() || !cx.retrieval_is_safe() {
+            return;
+        }
+        let pair = &cx.pair;
+        let ip = &pair.point;
+        let log: std::cell::RefCell<Vec<ScanEvidence>> = std::cell::RefCell::new(Vec::new());
+        let retrieve = |keep: bool| -> Option<Vec<u8>> {
+            if cx.stopped() {
+                return None;
+            }
+            let chain = cx.send_following(&pair.retrieval, &pair.retrieval.req);
+            let (req, resp) = chain.into_iter().last()?;
+            if keep {
+                log.borrow_mut()
+                    .push(cx.record_exchange(req.as_bytes(), resp.as_deref())?);
+            }
+            resp
+        };
+        let Some(baseline) = retrieve(false) else {
+            return;
+        };
+        let baseline = String::from_utf8_lossy(&baseline).into_owned();
+        let send = |payload: &str| -> Option<String> {
+            if cx.stopped() {
+                return None;
+            }
+            let injected = inject_payload(&pair.item.req, ip, payload);
+            let (req, resp) = cx
+                .send_following(&pair.item, &injected)
+                .into_iter()
+                .last()?;
+            log.borrow_mut()
+                .push(cx.record_exchange(req.as_bytes(), resp.as_deref())?);
+            resp?;
+            Some(String::from_utf8_lossy(&retrieve(true)?).into_owned())
+        };
+        let speed = ScanSpeed::from_u8(cx.shared.scan_speed.load(Ordering::SeqCst));
+        if let Some(hit) = run_sql_error_check(&ip.value, &baseline, speed, send) {
+            let general = hit.database == "General";
+            let text = format!(
+                "The {} appears to be vulnerable to second-order SQL injection attacks. A single quote was submitted in the {} in a previous request, and a {} error message was returned in the response to the later request {:?} ({}).{} You should review the contents of the error message, and the application's handling of other input, to confirm whether a vulnerability is present.",
+                ip.describe_short(true),
+                ip.describe_short(false),
+                if general { "general" } else { "database" },
+                pair.retrieval.req.lines().next().unwrap_or(""),
+                pair.retrieval.url(),
+                if hit.confirmed {
+                    " Two single quotes were then submitted and the error message disappeared."
+                } else {
+                    ""
+                }
+            );
+            let confidence = if general {
+                "Tentative"
+            } else if hit.confirmed {
+                "Certain"
+            } else {
+                "Firm"
+            };
+            // The first quote's injection and retrieval, the two exchanges
+            // the hit rests on.
+            let ev: Vec<ScanEvidence> = log.borrow().iter().take(2).cloned().collect();
+            cx.report(vec![
+                mk_point(self.issue(), "high", confidence, &pair.item.entry, ip, text)
+                    .with_evidence(ev),
+            ]);
+        }
+        cx.progress();
+    }
+}
+
 /// Stage A4 checks, in run order.
 pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[
     &StoredXss,
@@ -155,6 +252,7 @@ pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[
     &HppStored,
     &FormActionHijackingStored,
     &OpenRedirectionStored,
+    &SqlInjectionSecondOrder,
 ];
 
 /// One pair being audited in stage A4.
