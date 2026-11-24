@@ -42,6 +42,7 @@ pub use webprobe_support::{
 
 #[cfg(test)]
 mod intruder_run_edge_tests;
+pub(crate) mod h2_group;
 pub mod macros;
 pub mod net;
 pub mod oob;
@@ -57,6 +58,7 @@ pub mod scan;
 pub mod scan_config;
 pub mod scan_library;
 pub mod scan_run;
+pub mod send_group;
 pub mod setup_page;
 pub mod sitemap_compare;
 pub mod stored;
@@ -65,6 +67,7 @@ mod streaming_tests;
 pub mod tasks;
 pub mod tls_cert;
 pub mod upstream;
+pub(crate) mod url_payloads;
 mod util_tests;
 pub mod ws_history;
 pub mod ws_repeater;

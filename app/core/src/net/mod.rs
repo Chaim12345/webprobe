@@ -97,7 +97,11 @@ mod tls_client;
 pub use tls_client::*;
 
 mod attack;
+mod sni;
 pub use attack::*;
+#[cfg(test)]
+pub(crate) use sni::tls_sni_lab;
+pub use sni::{sni_scope, SniScope};
 
 #[cfg(test)]
 mod intercept_all_tests;

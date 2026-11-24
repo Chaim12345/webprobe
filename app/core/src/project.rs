@@ -390,6 +390,16 @@ impl ProjectRepeater {
     }
 }
 
+/// One Repeater tab group (R-12): its tabs by position in the project's
+/// repeater list.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct ProjectRepeaterGroup {
+    pub name: String,
+    #[serde(default)]
+    pub colour: u8,
+    pub tabs: Vec<usize>,
+}
+
 /// One scanner issue.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ProjectIssue {
@@ -1040,6 +1050,9 @@ pub struct ProjectData {
     pub macros: Vec<ProjectMacro>,
     #[serde(default)]
     pub repeaters: Vec<ProjectRepeater>,
+    /// Repeater tab groups (R-12); absent in projects from before groups.
+    #[serde(default)]
+    pub repeater_groups: Vec<ProjectRepeaterGroup>,
     #[serde(default)]
     pub issues: Vec<ProjectIssue>,
     #[serde(default)]
@@ -1111,6 +1124,7 @@ impl Default for ProjectData {
             intercept_rules: None,
             macros: Vec::new(),
             repeaters: Vec::new(),
+            repeater_groups: Vec::new(),
             issues: Vec::new(),
             websockets: Vec::new(),
             logger: Vec::new(),
@@ -1262,6 +1276,7 @@ pub fn settings_only(data: &ProjectData) -> ProjectData {
     ProjectData {
         history: Vec::new(),
         repeaters: Vec::new(),
+        repeater_groups: Vec::new(),
         issues: Vec::new(),
         websockets: Vec::new(),
         logger: Vec::new(),
@@ -1898,6 +1913,7 @@ mod tests {
                 result_line: "200 OK".into(),
                 response_b64: None,
             }],
+            repeater_groups: Vec::new(),
             issues: vec![ProjectIssue {
                 id: 11,
                 severity: "medium".into(),

@@ -380,6 +380,10 @@ pub fn send_tls_inner(
     let key = (host.to_string(), port);
     let choice = H2_CHOICE.with(|c| c.get());
     let want_h2 = choice.and_then(|c| c.want_h2);
+    // A custom SNI (D-12) needs its own connection, and that connection is
+    // not pooled under the host's key afterwards: a pooled connection was
+    // negotiated under another name.
+    let custom_sni = super::sni::sni_override().is_some();
     // Capture the effective TLS policy once: the pool key and any fresh
     // connection's TLS config below come from the same snapshot.
     let policy = EffectiveTlsPolicy::capture(shared, host);
@@ -387,7 +391,7 @@ pub fn send_tls_inner(
     // A pooled HTTP/2 connection answers on its next odd stream. Pooling is
     // off entirely when keep-alive is disabled or the sender pinned HTTP/1;
     // a dead socket, a GOAWAY connection or a retired connection is dropped.
-    let mut h2conn = if keep_alive && want_h2 != Some(false) {
+    let mut h2conn = if keep_alive && want_h2 != Some(false) && !custom_sni {
         shared.h2_pool.lock().unwrap().remove(&h2key)
     } else {
         None
@@ -430,7 +434,7 @@ pub fn send_tls_inner(
     }
     // Pooled HTTP/1 connections are HTTP/1.x: an HTTP/2 demand without a
     // pooled h2 connection needs a fresh one.
-    let mut pooled = if want_h2 == Some(true) {
+    let mut pooled = if want_h2 == Some(true) || custom_sni {
         None
     } else {
         shared.tls_pool.lock().unwrap().remove(&key)
@@ -450,8 +454,9 @@ pub fn send_tls_inner(
             let tcp = crate::upstream::connect_tls_target(&config, host, port)?;
             tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
                 .ok();
-            let name = rustls::pki_types::ServerName::try_from(host.to_string())
-                .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
+            let name =
+                rustls::pki_types::ServerName::try_from(super::sni::effective_server_name(host))
+                    .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
             let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
                 .map_err(|e| format!("configure upstream TLS: {e}"))?;
             UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(conn, tcp)))
@@ -488,7 +493,7 @@ pub fn send_tls_inner(
         match conn.exchange(&h2req, sink.as_deref_mut()) {
             Ok(resp) => {
                 // Pool the connection for the next request to this origin.
-                if keep_alive && conn.idle() {
+                if keep_alive && !custom_sni && conn.idle() {
                     shared.h2_pool.lock().unwrap().insert(h2key, conn);
                 }
                 return Ok(resp);
@@ -508,7 +513,7 @@ pub fn send_tls_inner(
                             #[cfg(test)]
                             scanner_send_admission(shared)?;
                             let r = retry_conn.exchange(&h2req, sink.as_deref_mut());
-                            if r.is_ok() && keep_alive && retry_conn.idle() {
+                            if r.is_ok() && keep_alive && !custom_sni && retry_conn.idle() {
                                 shared.h2_pool.lock().unwrap().insert(h2key, retry_conn);
                             }
                             r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
@@ -530,7 +535,7 @@ pub fn send_tls_inner(
     #[cfg(test)]
     scanner_send_admission(shared)?;
     let (result, reusable) = exchange(&mut stream, &req, sink)?;
-    if keep_alive && reusable && response_headers_allow_reuse(&result) {
+    if keep_alive && reusable && !custom_sni && response_headers_allow_reuse(&result) {
         shared.tls_pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -558,12 +563,11 @@ pub fn new_tls_conn(
         crate::upstream::connect_tls_target(config, host, port).map_err(NetError::Upstream)?;
     tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
         .ok();
-    let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|source| {
-        NetError::InvalidTlsName {
+    let name = rustls::pki_types::ServerName::try_from(super::sni::effective_server_name(host))
+        .map_err(|source| NetError::InvalidTlsName {
             host: host.to_string(),
             source,
-        }
-    })?;
+        })?;
     let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
         .map_err(|source| NetError::TlsConfig { source })?;
     Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(

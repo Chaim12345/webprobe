@@ -42,6 +42,7 @@ use webprobe_core::rest_api;
 mod project_start;
 mod proxy_settings;
 mod recovery;
+mod repeater_groups;
 mod repeater_ops;
 mod report;
 use webprobe_core::rules;
@@ -324,6 +325,13 @@ pub struct App {
     /// Reporting, engagement tools, content discovery, crash recovery.
     pub eng: engagement::State,
     pub repeater: tool_state::RepeaterState,
+    /// Repeater tab groups (R-12): membership, colours and bar order,
+    /// persisted in the project file and sent through core's send_group.
+    pub rep_groups: Vec<webprobe_core::send_group::RepGroup>,
+    /// The create/edit group dialog, when open.
+    pub rep_group_dialog: Option<repeater_groups::GroupDialog>,
+    /// The group send in flight, if any.
+    pub rep_group_send: Option<repeater_groups::GroupSend>,
     pub comparer: tool_state::ComparerState,
     pub decoder: tool_state::DecoderState,
     pub sequencer: tool_state::SequencerState,
@@ -954,6 +962,9 @@ impl App {
             screenshot: None,
             eng: engagement::State::default(),
             repeater: tool_state::RepeaterState::default(),
+            rep_groups: Vec::new(),
+            rep_group_dialog: None,
+            rep_group_send: None,
             comparer: tool_state::ComparerState::default(),
             decoder: tool_state::DecoderState::default(),
             sequencer: tool_state::SequencerState::default(),
@@ -1438,6 +1449,27 @@ fn main() {
         app.chooser.open = true;
         app.chooser.at_start = true;
         project_files::note_used(&app.project_path.clone());
+    }
+
+    // Test hook: WEBPROBE_SEED_REP_GROUP=1 seeds three Repeater tabs with
+    // the first two grouped ("login") and the group's edit dialog open —
+    // the R-12 group UI screenshot check.
+    if std::env::var("WEBPROBE_SEED_REP_GROUP").is_ok() {
+        {
+            let mut reps = app.shared.repeaters.lock().unwrap();
+            reps.clear();
+            for (n, path) in [(1, "/login"), (2, "/login/step2"), (3, "/account")] {
+                let id = app.shared.rep.new_tab_id();
+                let mut tab = repeater_ops::new_tab(id, "example.com", 443, true, format!("POST {path} HTTP/1.1\r\nHost: example.com\r\nContent-Length: 0\r\n\r\n"));
+                tab.name = format!("Rep {n}");
+                reps.push(tab);
+            }
+        }
+        let mut order: Vec<u64> = app.shared.repeaters.lock().unwrap().iter().map(|r| r.id).collect();
+        let gid = app.shared.rep.new_tab_id();
+        let members = order[..2].to_vec();
+        webprobe_core::send_group::create_group(&mut app.rep_groups, &mut order, gid, "login", 5, &members);
+        app.rep_group_dialog = Some(repeater_groups::GroupDialog { group: Some(gid), tab: members[0], name: "login".into(), colour: 5 });
     }
 
     let marker = app.eng.marker.clone();

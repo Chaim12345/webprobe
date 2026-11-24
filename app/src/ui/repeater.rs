@@ -10,6 +10,8 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     // a status line at the bottom (live 52685 reference). E-04: the tab
     // strip (rename, close, duplicate, reorder) lives in repeater_ops.
     crate::repeater_ops::tab_strip(app, ui);
+    crate::repeater_groups::dialog(app, ui.ctx());
+    crate::repeater_groups::tick(app);
     ui.add_space(4.0);
     // A WebSocket Repeater tab has its own view.
     let ws_session = {
@@ -67,14 +69,20 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
             })
             .0
             .on_hover_text("Repeater settings");
+        let group_busy = crate::repeater_groups::is_sending(app);
         if ui
             .add_enabled(
-                busy,
+                busy || group_busy,
                 egui::Button::new("Cancel").min_size(egui::vec2(64.0, 24.0)),
             )
             .clicked()
         {
-            cancel_repeater_send(&app.shared);
+            if busy {
+                cancel_repeater_send(&app.shared);
+            }
+            if group_busy {
+                crate::repeater_groups::cancel(app);
+            }
         }
         // E-02: Burp's "Follow redirection" button, shown for a 3xx response.
         if crate::repeater_ops::can_follow(app)
