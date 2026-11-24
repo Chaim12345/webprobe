@@ -382,7 +382,18 @@ fn registry_order_is_pinned() {
             ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
             ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
             ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
+            ("active.tls-certificate", Scope::Host, Some(BURP_GROUP)),
             ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
+            (
+                "active.flash-cross-domain-policy",
+                Scope::Host,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.silverlight-cross-domain-policy",
+                Scope::Host,
+                Some(BURP_GROUP)
+            ),
             ("active.collaborator-everywhere", Scope::Host, None),
             (
                 "active.server-trace-echo",
@@ -396,6 +407,11 @@ fn registry_order_is_pinned() {
             ),
             ("active.header-manipulation", Scope::Request, None),
             ("active.xxe-file-read", Scope::Request, None),
+            (
+                "active.xml-entity-expansion",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
             ("active.csrf", Scope::Request, None),
             ("active.http-put-enabled", Scope::Host, None),
             ("active.aspnet-tracing", Scope::Host, None),
@@ -405,6 +421,8 @@ fn registry_order_is_pinned() {
             ("active.graphql-content-type", Scope::Request, None),
             ("active.spoofable-client-ip", Scope::Request, None),
             ("active.broken-access-control", Scope::Request, None),
+            ("active.referer-dependent-response", Scope::Request, None),
+            ("active.user-agent-dependent-response", Scope::Request, None),
             ("active.backup-file", Scope::Request, None),
             ("active.graphql-endpoint-discovered", Scope::Host, None),
             ("active.web-cache-poisoning", Scope::Request, None),
