@@ -320,21 +320,11 @@ fn scan_status(
     id: &str,
 ) {
     let Ok(n) = id.parse::<usize>() else {
-        return respond(
-            stream,
-            404,
-            "Not Found",
-            json!({"error": "unknown task"}),
-        );
+        return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
     let st = state.lock().unwrap();
     let Some(task) = st.tasks.get(n) else {
-        return respond(
-            stream,
-            404,
-            "Not Found",
-            json!({"error": "unknown task"}),
-        );
+        return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
     let status = task.status.clone();
     let first_issue = task.first_issue;
@@ -488,8 +478,8 @@ mod tests {
         s.read_to_end(&mut resp).unwrap();
         let text = String::from_utf8_lossy(&resp).to_string();
         let code: u16 = text.split_whitespace().nth(1).unwrap().parse().unwrap();
-        let json: Value =
-            serde_json::from_str(text.split("\r\n\r\n").nth(1).unwrap_or("{}")).unwrap_or(Value::Null);
+        let json: Value = serde_json::from_str(text.split("\r\n\r\n").nth(1).unwrap_or("{}"))
+            .unwrap_or(Value::Null);
         (code, json)
     }
 
@@ -673,16 +663,15 @@ mod tests {
             port,
             "POST",
             "/test-key/v0.1/scan",
-            Some(&format!(
-                "{{\"urls\":[\"http://127.0.0.1:{lab_port}/\"]}}"
-            )),
+            Some(&format!("{{\"urls\":[\"http://127.0.0.1:{lab_port}/\"]}}")),
         );
         assert_eq!(code, 201, "{body}");
         let task_id = body["task_id"].as_str().unwrap().to_string();
         let mut status = String::new();
         for _ in 0..240 {
             std::thread::sleep(std::time::Duration::from_millis(500));
-            let (code, body) = request(port, "GET", &format!("/test-key/v0.1/scan/{task_id}"), None);
+            let (code, body) =
+                request(port, "GET", &format!("/test-key/v0.1/scan/{task_id}"), None);
             assert_eq!(code, 200);
             status = body["scan_status"].as_str().unwrap().to_string();
             if status != "running" {

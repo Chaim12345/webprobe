@@ -1473,9 +1473,18 @@ mod tests {
 
     #[test]
     fn suite_startup_hook_selects_suite() {
-        assert!(matches!(startup_settings_pane("suite"), ui::SettingsPane::Suite));
-        assert!(matches!(startup_settings_pane("hotkeys"), ui::SettingsPane::Hotkeys));
-        assert!(matches!(startup_settings_pane(""), ui::SettingsPane::Appearance));
+        assert!(matches!(
+            startup_settings_pane("suite"),
+            ui::SettingsPane::Suite
+        ));
+        assert!(matches!(
+            startup_settings_pane("hotkeys"),
+            ui::SettingsPane::Hotkeys
+        ));
+        assert!(matches!(
+            startup_settings_pane(""),
+            ui::SettingsPane::Appearance
+        ));
     }
 
     #[test]
@@ -1485,7 +1494,12 @@ mod tests {
             panic!("disabled extensions must not inspect startup source {key}")
         });
         ext_host::with_host(&shared, |host| assert!(host.extensions.is_empty()));
-        assert!(!shared.events.lock().unwrap().iter().any(|e| e.contains("extension")));
+        assert!(!shared
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|e| e.contains("extension")));
     }
 
     #[test]

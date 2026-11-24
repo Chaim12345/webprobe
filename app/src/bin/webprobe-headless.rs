@@ -49,7 +49,10 @@ fn burp_command_first(args: &mut Vec<String>) {
         let mut i = 0;
         while i < args.len() {
             let a = &args[i];
-            if matches!(a.as_str(), "--config-file" | "--user-config-file" | "--data-dir") {
+            if matches!(
+                a.as_str(),
+                "--config-file" | "--user-config-file" | "--data-dir"
+            ) {
                 i += 2;
                 continue;
             }
@@ -160,7 +163,9 @@ fn apply_scan_configs(shared: &net::Shared, configs: &[scan_library::LibraryConf
     );
     *slot.lock().unwrap() = applied.config;
     shared.scan_speed.store(applied.speed, Ordering::SeqCst);
-    shared.scan_accuracy.store(applied.accuracy, Ordering::SeqCst);
+    shared
+        .scan_accuracy
+        .store(applied.accuracy, Ordering::SeqCst);
 }
 
 /// Value of `--name V` in `args`, removing both.
@@ -177,7 +182,10 @@ fn take_opt(args: &mut Vec<String>, name: &str) -> Option<String> {
 /// Consume both project aliases in their original order, including repeats.
 fn take_project_file(args: &mut Vec<String>) -> Option<String> {
     let mut selected = None;
-    while let Some(index) = args.iter().position(|a| matches!(a.as_str(), "--project" | "--project-file")) {
+    while let Some(index) = args
+        .iter()
+        .position(|a| matches!(a.as_str(), "--project" | "--project-file"))
+    {
         if index + 1 >= args.len() {
             usage();
         }

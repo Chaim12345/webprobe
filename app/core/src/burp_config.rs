@@ -14,7 +14,12 @@
 use serde_json::{json, Map, Value};
 
 fn obj(pairs: Vec<(&str, Value)>) -> Value {
-    Value::Object(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect::<Map<String, Value>>())
+    Value::Object(
+        pairs
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect::<Map<String, Value>>(),
+    )
 }
 
 fn get_bool(v: &Map<String, Value>, key: &str) -> Option<bool> {
@@ -38,7 +43,11 @@ pub struct ProxyListener {
 impl Default for ProxyListener {
     fn default() -> Self {
         // Burp's default listener: 127.0.0.1:8080, running.
-        Self { port: 8080, running: true, listen_mode: "loopback_only".to_string() }
+        Self {
+            port: 8080,
+            running: true,
+            listen_mode: "loopback_only".to_string(),
+        }
     }
 }
 
@@ -61,7 +70,14 @@ pub struct ApiConfig {
 
 impl Default for ApiConfig {
     fn default() -> Self {
-        Self { enabled: false, listen_mode: "loopback_only".to_string(), address: None, port: 1337, insecure_mode: false, keys: Vec::new() }
+        Self {
+            enabled: false,
+            listen_mode: "loopback_only".to_string(),
+            address: None,
+            port: 1337,
+            insecure_mode: false,
+            keys: Vec::new(),
+        }
     }
 }
 
@@ -137,7 +153,10 @@ pub fn export_user_options(api: &ApiConfig) -> Value {
             obj(vec![(
                 "api",
                 obj(vec![
-                    ("address", api.address.as_ref().map_or(Value::Null, |a| json!(a))),
+                    (
+                        "address",
+                        api.address.as_ref().map_or(Value::Null, |a| json!(a)),
+                    ),
                     ("enabled", Value::Bool(api.enabled)),
                     ("insecure_mode", Value::Bool(api.insecure_mode)),
                     ("keys", json!(api.keys)),
@@ -157,11 +176,17 @@ pub fn apply_user_options(json: &Value, api: &mut ApiConfig, notes: &mut Vec<Str
     };
     for section in user_options.keys() {
         if section != "misc" {
-            notes.push(format!("unsupported user_options section `{section}` ignored"));
+            notes.push(format!(
+                "unsupported user_options section `{section}` ignored"
+            ));
         }
     }
     let misc = user_options.get("misc").and_then(Value::as_object).cloned();
-    let Some(api_obj) = misc.as_ref().and_then(|m| m.get("api")).and_then(Value::as_object) else {
+    let Some(api_obj) = misc
+        .as_ref()
+        .and_then(|m| m.get("api"))
+        .and_then(Value::as_object)
+    else {
         return;
     };
     if let Some(b) = get_bool(api_obj, "enabled") {
@@ -193,7 +218,11 @@ pub fn apply_user_options(json: &Value, api: &mut ApiConfig, notes: &mut Vec<Str
         api.insecure_mode = b;
     }
     if let Some(keys) = api_obj.get("keys").and_then(Value::as_array) {
-        api.keys = keys.iter().filter_map(Value::as_str).map(str::to_string).collect();
+        api.keys = keys
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
     }
 }
 
@@ -225,10 +254,20 @@ mod tests {
     /// and round-trips.
     #[test]
     fn project_options_round_trip() {
-        let listener = ProxyListener { port: 8081, running: false, listen_mode: "all_interfaces".to_string() };
+        let listener = ProxyListener {
+            port: 8081,
+            running: false,
+            listen_mode: "all_interfaces".to_string(),
+        };
         let json = export_project_options(&listener);
-        assert_eq!(json["proxy"]["request_listeners"][0]["listener_port"], json!(8081));
-        assert_eq!(json["proxy"]["request_listeners"][0]["running"], Value::Bool(false));
+        assert_eq!(
+            json["proxy"]["request_listeners"][0]["listener_port"],
+            json!(8081)
+        );
+        assert_eq!(
+            json["proxy"]["request_listeners"][0]["running"],
+            Value::Bool(false)
+        );
         let mut back = ProxyListener::default();
         let mut notes = Vec::new();
         apply_project_options(&json, &mut back, &mut notes);
@@ -280,7 +319,10 @@ mod tests {
         };
         let json = export_user_options(&api);
         assert_eq!(json["user_options"]["misc"]["api"]["port"], json!(1338));
-        assert_eq!(json["user_options"]["misc"]["api"]["insecure_mode"], Value::Bool(true));
+        assert_eq!(
+            json["user_options"]["misc"]["api"]["insecure_mode"],
+            Value::Bool(true)
+        );
         let mut back = ApiConfig::default();
         let mut notes = Vec::new();
         apply_user_options(&json, &mut back, &mut notes);
@@ -304,12 +346,16 @@ mod tests {
     /// file/section names only.
     #[test]
     fn api_keys_round_trip_without_logging() {
-        let json = json!({"user_options": {"misc": {"api": {"enabled": true, "keys": ["secret-key-1"]}}}});
+        let json =
+            json!({"user_options": {"misc": {"api": {"enabled": true, "keys": ["secret-key-1"]}}}});
         let mut api = ApiConfig::default();
         let mut notes = Vec::new();
         apply_user_options(&json, &mut api, &mut notes);
         assert_eq!(api.keys, vec!["secret-key-1".to_string()]);
         assert!(notes.iter().all(|n| !n.contains("secret-key-1")));
-        assert_eq!(export_user_options(&api)["user_options"]["misc"]["api"]["keys"], json!(["secret-key-1"]));
+        assert_eq!(
+            export_user_options(&api)["user_options"]["misc"]["api"]["keys"],
+            json!(["secret-key-1"])
+        );
     }
 }
