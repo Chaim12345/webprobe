@@ -264,15 +264,8 @@ fn proxy(mut args: Vec<String>) {
         // start without one instead).
         let defs = report::KnowledgeBase::discover().rest_api_definitions();
         match rest_api::start(&shared, &api, defs) {
-            Ok(api_port) => {
-                eprintln!(
-                    "REST API listening on {}:{api_port}",
-                    if api.listen_mode == "all_interfaces" {
-                        "0.0.0.0"
-                    } else {
-                        "127.0.0.1"
-                    }
-                );
+            Ok(api_address) => {
+                eprintln!("REST API listening on {api_address}");
                 shared.api_started.store(true, Ordering::SeqCst);
             }
             Err(e) => {
