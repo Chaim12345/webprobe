@@ -86,3 +86,15 @@ mod parser_fuzz_tests;
 mod strict_chunked_tests;
 #[cfg(test)]
 mod strict_request_tests;
+
+pub mod host_probe_state;
+
+// Experimental, fixture-only primitives. No production budget defaults.
+#[cfg(test)]
+mod scan_budget;
+
+#[cfg(test)]
+mod scan_resolver;
+
+#[cfg(test)]
+mod scan_lifecycle;

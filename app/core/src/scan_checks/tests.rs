@@ -1818,16 +1818,23 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
         }
         assert!(!shared.scan.is_busy(), "scan did not finish");
     };
-    // First scan: both probes die on the wire, so nothing is reported and
-    // both claims must be released.
+    // One task batch must never retry either uncertain attempt.
+    let batch = crate::scan::StoredBatch::open(&shared);
+    // First scan: both probes die on the wire, so nothing is reported.
     run_scan(&shared);
     assert_eq!(*attempts.lock().unwrap(), (1, 1), "one attempt each");
     assert!(
         shared.issues.lock().unwrap().is_empty(),
         "dropped probes report nothing"
     );
-    // Second scan of the same host: a retained claim would skip the probe;
-    // released claims mean both probes run again and both issues report.
+    run_scan(&shared);
+    assert_eq!(
+        *attempts.lock().unwrap(),
+        (1, 1),
+        "RST must not retry within batch"
+    );
+    drop(batch);
+    // Only a later explicit scan may retry uncertain probes.
     run_scan(&shared);
     assert_eq!(
         *attempts.lock().unwrap(),
@@ -3059,4 +3066,975 @@ fn xml_body_request_framing_is_always_valid() {
         util::get_header(&p.headers, "Content-Length").as_deref(),
         Some(body.len().to_string().as_str())
     );
+}
+
+#[test]
+fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    for check in ["active.robots-txt", "active.react2shell"] {
+        for (wire, complete) in [
+            ("", false),
+            ("HTTP/1.1 200 OK\r\nContent-Leng", false),
+            ("HTTP/1.1 100 Continue\r\n\r\n", false),
+            ("HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nno", false),
+            ("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nno", true),
+        ] {
+            let attempts = Arc::new(AtomicUsize::new(0));
+            let seen = attempts.clone();
+            let port = lab_serve(
+                std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+                move |method, path, _| {
+                    if (check == "active.robots-txt" && path == "/robots.txt")
+                        || (check == "active.react2shell" && method == "POST")
+                    {
+                        seen.fetch_add(1, Ordering::SeqCst);
+                        wire.to_string()
+                    } else {
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/x-component\r\nContent-Length: 0\r\n\r\n".into()
+                    }
+                },
+            );
+            let shared = crate::net::Shared::new();
+            let mut cfg = crate::scan_config::ScanConfig::default();
+            for (id, ..) in crate::scan::check_catalogue() {
+                if id != check {
+                    cfg.disabled_checks.insert(id.into());
+                }
+            }
+            *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+            let run = || {
+                let e = crate::net::HistEntry {
+                    method: "GET".into(),
+                    host: "127.0.0.1".into(),
+                    port,
+                    path: "/start".into(),
+                    req_raw: format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                        .into_bytes()
+                        .into(),
+                    ..Default::default()
+                };
+                crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+                assert!(shared
+                    .scan
+                    .wait_idle(Some(std::time::Duration::from_secs(10))));
+            };
+            let batch = crate::scan::StoredBatch::open(&shared);
+            run();
+            run();
+            assert_eq!(
+                attempts.load(Ordering::SeqCst),
+                1,
+                "same batch must not resend {wire:?}"
+            );
+            drop(batch);
+            run();
+            assert_eq!(
+                attempts.load(Ordering::SeqCst),
+                if complete { 1 } else { 2 },
+                "next explicit run {wire:?}"
+            );
+            assert!(shared.issues.lock().unwrap().is_empty());
+            if !complete {
+                assert!(shared
+                    .events
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|e| e.contains("incomplete")));
+            }
+        }
+    }
+}
+
+#[test]
+fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let direct = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    direct.set_nonblocking(true).unwrap();
+    let target = direct.local_addr().unwrap().port();
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let seen = attempts.clone();
+    let proxy_port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, path, _| {
+            if path.ends_with("/robots.txt") {
+                seen.fetch_add(1, Ordering::SeqCst);
+                String::new()
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".into()
+            }
+        },
+    );
+    let shared = crate::net::Shared::new();
+    *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+        kind: crate::upstream::UpstreamKind::Http,
+        host: "127.0.0.1".into(),
+        port: proxy_port.to_string(),
+        ..Default::default()
+    };
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if id != "active.robots-txt" {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    let run = || {
+        let e = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port: target,
+            path: "/start".into(),
+            req_raw: format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{target}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        assert!(shared
+            .scan
+            .wait_idle(Some(std::time::Duration::from_secs(10))));
+    };
+    let batch = crate::scan::StoredBatch::open(&shared);
+    run();
+    run();
+    assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    drop(batch);
+    run();
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    assert!(matches!(direct.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
+}
+
+#[test]
+fn parameterized_real_a4_link_registry_retains_meaningful_finding() {
+    real_a4_case(0);
+}
+
+#[test]
+fn real_a4_oversize_charges_record_before_skip() {
+    real_a4_case(1);
+}
+
+#[test]
+fn real_a4_failed_send_is_incomplete_not_negative() {
+    real_a4_case(2);
+}
+
+#[test]
+fn real_a4_paused_caller_expires_without_net_entry() {
+    real_a4_case(3);
+}
+
+#[test]
+fn real_a4_oversize_json_continues_to_valid_finding() {
+    real_a4_case(4);
+}
+
+#[test]
+fn real_a4_retention_exhaustion_never_claims_complete() {
+    real_a4_case(5);
+}
+
+#[test]
+fn real_a4_truncated_valid_payload_preserves_positive_incomplete() {
+    real_a4_case(6);
+}
+
+#[test]
+fn real_a4_compressed_partial_not_plain_positive() {
+    real_a4_case(7);
+}
+
+#[test]
+fn real_a4_malformed_partial_header_not_plain_positive() {
+    real_a4_case(8);
+}
+
+#[test]
+fn real_a4_partial_body_header_words_do_not_hide_proven_positive() {
+    real_a4_case(9);
+}
+
+fn real_a4_case(mode: u8) {
+    use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
+    let remembered = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let saved = remembered.clone();
+    let wire = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = wire.clone();
+    let port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, path, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            if path.starts_with("/inject?") {
+                let value = path
+                    .split_once("?x=")
+                    .map(|(_, v)| crate::util::url_decode(v))
+                    .unwrap_or_default();
+                *saved.lock().unwrap() = value;
+            }
+            let body = format!(
+                "<a href=\"{}\">saved</a>{}",
+                saved.lock().unwrap(),
+                if mode == 9 {
+                    "Transfer-Encoding: identity"
+                } else {
+                    ""
+                }
+            );
+            if path == "/retrieve" && mode == 7 {
+                return format!(
+                    "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len() + 20
+                );
+            }
+            if path == "/retrieve" && mode == 8 {
+                return format!(
+                    "HTTP/1.1 200 OK\r\nBad : syntax\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len() + 20
+                );
+            }
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()+if (mode==6 || mode==9) && path=="/retrieve"{20}else{0})
+        },
+    );
+    let port = if mode == 2 { 0 } else { port };
+    let shared = crate::net::Shared::new();
+    if mode == 3 {
+        shared.scan.paused.store(true, Ordering::SeqCst);
+    }
+
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for check in STORED_CHECKS {
+        if check.id() != "active.link-manipulation-stored" {
+            cfg.disabled_checks.insert(check.id().into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    let limits = crate::scan_budget::Limits {
+        duration: if mode == 3 {
+            std::time::Duration::from_millis(30)
+        } else {
+            std::time::Duration::from_secs(5)
+        },
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: if mode == 5 { 1 } else { 65536 },
+        evidence_records: 100,
+        records: 100,
+    };
+    let c = Coordinator::new(shared.clone(), limits).unwrap();
+    let batch = c.open().unwrap();
+    let make = |path: &str| crate::stored::Item {
+        entry: crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            ..Default::default()
+        },
+        req: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+        host: "127.0.0.1".into(),
+        port,
+        https: false,
+    };
+    let (a, _, injection) = c.admit(make("/inject?x=old")).unwrap();
+    assert!(matches!(a.complete(), Ok(Handoff::Joined)));
+    let point = InsertionPoint::new(IpKind::Query, "x", "old");
+    let token = shared.stored.token(injection, &point);
+    shared
+        .stored
+        .note_injection(&token, b"injected", Some(b"saved"));
+    let (a, _, retrieval) = c.admit(make("/retrieve")).unwrap();
+    assert!(matches!(a.complete(), Ok(Handoff::Joined)));
+    if mode == 4 {
+        let oversized = InsertionPoint::new(IpKind::Json(vec![String::new(); 10000]), "x", "old");
+        let huge = shared.stored.token(injection, &oversized);
+        shared
+            .stored
+            .observe(retrieval, b"GET /retrieve", huge.as_bytes());
+    }
+    assert_eq!(
+        shared
+            .stored
+            .observe(retrieval, b"GET /retrieve", token.as_bytes())
+            .len(),
+        1
+    );
+    let Handoff::Finalize(f) = batch.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    let thread_shared = shared.clone();
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let mut counts = (0, 0, 0, 0);
+        let outcome = f.run(|permit| {
+            let result = run_stored_stage_budgeted(
+                &thread_shared,
+                permit,
+                if mode == 4 { 2 } else { 1 },
+                if mode == 1 { 1 } else { 8192 },
+            );
+            use crate::scan_budget::Resource;
+            counts = (
+                permit.ledger().used(Resource::Record),
+                permit.ledger().used(Resource::Input),
+                permit.ledger().used(Resource::ConnectionAttempt),
+                permit.ledger().used(Resource::EvidenceRecord),
+            );
+            result
+        });
+        tx.send((outcome, counts)).unwrap();
+    });
+    let (outcome, counts) = rx
+        .recv_timeout(std::time::Duration::from_secs(3))
+        .expect("A4 completion watchdog");
+    worker.join().unwrap();
+    assert_eq!(
+        outcome,
+        if mode == 0 {
+            Finish::Complete
+        } else {
+            Finish::Incomplete
+        }
+    );
+    assert_eq!(counts.0, if mode == 4 { 2 } else { 1 });
+    if mode == 1 {
+        assert_eq!(counts.1, 0);
+    }
+    if mode == 3 {
+        assert_eq!(counts.2, 0);
+        assert_eq!(wire.load(Ordering::SeqCst), 0);
+        assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
+    }
+    if mode == 0 || mode == 4 || mode == 6 || mode == 9 {
+        assert!(counts.3 > 0);
+    }
+    if mode == 5 {
+        assert_eq!(counts.3, 0);
+    }
+    if mode == 6 || mode == 9 {
+        let issues = shared.issues.lock().unwrap();
+        let issue = issues
+            .iter()
+            .find(|i| i.name == "Link manipulation (stored)")
+            .unwrap();
+        assert_eq!(issue.confidence, "Tentative");
+        assert!(issue.detail.contains("received prefix"));
+        assert!(issue.detail.contains("Incomplete exchange"));
+        assert!(!issue.evidence.is_empty());
+    }
+    assert_eq!(
+        mode == 0 || mode == 4 || mode == 6 || mode == 9,
+        shared
+            .issues
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|i| i.name == "Link manipulation (stored)")
+    );
+}
+
+#[test]
+fn required_limits_actual_engine_rejects_busy_without_reset_or_egress() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    let wire = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = wire.clone();
+    let port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, _, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".into()
+        },
+    );
+    let shared = crate::net::Shared::new();
+    {
+        let config_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = config_slot.lock().unwrap();
+        for (id, ..) in crate::scan::check_catalogue() {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 100,
+        records: 100,
+    };
+    let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+    let batch = engine.open().unwrap();
+    let entry = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/base".into(),
+        req_raw: format!("GET /base HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into(),
+        ..Default::default()
+    };
+    let accepted = engine.audit(entry.clone()).unwrap();
+    assert_eq!(accepted.audit_phase_completion, Finish::Complete);
+    assert_eq!(accepted.error, None);
+    assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
+    assert_eq!(wire.load(Ordering::SeqCst), 1);
+    let Handoff::Finalize(finalizer) = batch.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    shared.scan.stop.store(true, Ordering::SeqCst);
+    shared.scan.done.store(77, Ordering::SeqCst);
+    assert!(matches!(engine.audit(entry), Err(AdmissionError::Busy)));
+    assert!(shared.scan.stop.load(Ordering::SeqCst));
+    assert_eq!(shared.scan.done.load(Ordering::SeqCst), 77);
+    assert_eq!(wire.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        finalizer.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Complete
+    );
+}
+
+#[test]
+fn required_limits_actual_engine_adopts_inflight_baseline_without_second_owner() {
+    use crate::scan_lifecycle::{Finish, Handoff};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (at_tx, at_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let server = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let mut raw = [0u8; 4096];
+        assert!(stream.read(&mut raw).unwrap() > 0);
+        at_tx.send(()).unwrap();
+        release_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            .unwrap();
+    });
+    let shared = crate::net::Shared::new();
+    {
+        let config_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = config_slot.lock().unwrap();
+        for (id, ..) in crate::scan::check_catalogue() {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 100,
+        records: 100,
+    };
+    let engine = Arc::new(crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap());
+    let running = engine.clone();
+    let entry = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/base".into(),
+        req_raw: format!("GET /base HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into(),
+        ..Default::default()
+    };
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        done_tx.send(running.audit(entry)).unwrap();
+    });
+    at_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    let batch = engine.open().unwrap();
+    release_tx.send(()).unwrap();
+    assert!(matches!(
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .unwrap(),
+        Ok(crate::scan::AcceptedAudit {
+            audit_phase_completion: Finish::Complete,
+            handoff: Ok(Handoff::Joined),
+            ..
+        })
+    ));
+    worker.join().unwrap();
+    server.join().unwrap();
+    let Handoff::Finalize(f) = batch.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(
+        f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Complete
+    );
+    assert!(!shared.scan.is_busy());
+}
+
+#[test]
+fn cancelled_batch_actual_engine_admission_cannot_reset_shared_stop() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    let shared = crate::net::Shared::new();
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 10,
+        connection_attempts: 10,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 10,
+        records: 10,
+    };
+    let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+    let b = engine.open().unwrap();
+    b.cancel_handle().cancel();
+    shared.scan.stop.store(true, Ordering::SeqCst);
+    shared.scan.done.store(99, Ordering::SeqCst);
+    let e = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port: 9,
+        req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n"
+            .to_vec()
+            .into(),
+        ..Default::default()
+    };
+    assert!(matches!(engine.audit(e), Err(AdmissionError::Busy)));
+    assert!(matches!(engine.open(), Err(AdmissionError::Busy)));
+    assert!(shared.scan.stop.load(Ordering::SeqCst));
+    assert_eq!(shared.scan.done.load(Ordering::SeqCst), 99);
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
+    let Handoff::Finalize(f) = b.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+}
+
+#[test]
+fn actual_engine_accepted_baseline_and_install_failures_carry_incomplete_handoff() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    for install_failure in [false, true] {
+        let shared = crate::net::Shared::new();
+        {
+            let config_slot = crate::scan_config::shared_config(&shared);
+            let mut cfg = config_slot.lock().unwrap();
+            for (id, ..) in crate::scan::check_catalogue() {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        let limits = crate::scan_budget::Limits {
+            duration: std::time::Duration::from_secs(1),
+            http_attempts: 10,
+            connection_attempts: 10,
+            outgoing: 65536,
+            response: 65536,
+            decompressed: 65536,
+            inputs: 65536,
+            evidence: 65536,
+            evidence_records: 10,
+            records: 10,
+        };
+        let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+        let b = engine.open().unwrap();
+        let context = b.context();
+        let mut guards = Vec::new();
+        if install_failure {
+            for _ in 0..64 {
+                guards.push(context.enter(&shared).unwrap());
+            }
+        }
+        let e = crate::net::HistEntry {
+            port: 0,
+            req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:0\r\n\r\n"
+                .to_vec()
+                .into(),
+            ..Default::default()
+        };
+        let accepted = engine.audit(e).unwrap();
+        assert_eq!(accepted.audit_phase_completion, Finish::Incomplete);
+        assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
+        assert_eq!(
+            accepted.error,
+            if install_failure {
+                Some(AdmissionError::Internal)
+            } else {
+                None
+            }
+        );
+        drop(guards);
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+        assert!(matches!(
+            engine.audit(Default::default()),
+            Err(AdmissionError::InvalidRequest)
+        ));
+    }
+}
+
+#[test]
+fn actual_engine_cancel_after_registration_cannot_reset_owner_or_start_baseline() {
+    use crate::scan_lifecycle::{Finish, Handoff};
+    let shared = crate::net::Shared::new();
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(1),
+        http_attempts: 10,
+        connection_attempts: 10,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 10,
+        records: 10,
+    };
+    let engine = Arc::new(crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap());
+    let b = engine.open().unwrap();
+    let cancel = b.cancel_handle();
+    let (admitted_tx, admitted_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+    let runner = engine.clone();
+    let worker = std::thread::spawn(move || {
+        let e = crate::net::HistEntry {
+            port: 9,
+            req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n"
+                .to_vec()
+                .into(),
+            ..Default::default()
+        };
+        let result = runner.audit_after_admission(e, || {
+            admitted_tx.send(()).unwrap();
+            release_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+        });
+        done_tx.send(result).unwrap();
+    });
+    admitted_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    cancel.cancel();
+    shared.scan.stop.store(true, Ordering::SeqCst);
+    release_tx.send(()).unwrap();
+    let result = done_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap()
+        .unwrap();
+    worker.join().unwrap();
+    assert_eq!(result.audit_phase_completion, Finish::Incomplete);
+    assert!(matches!(result.handoff, Ok(Handoff::Joined)));
+    assert!(shared.scan.stop.load(Ordering::SeqCst));
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
+    let Handoff::Finalize(f) = b.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+}
+
+#[test]
+fn actual_pair_partial_method_post_qualifies_head_does_not() {
+    use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
+    for method in ["POST", "HEAD"] {
+        let port = lab_serve(
+            std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+            |_, _, _| {
+                "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n<a href=\"https://probe.invalid/\">saved</a>".into()
+            },
+        );
+        let shared = crate::net::Shared::new();
+        let limits = crate::scan_budget::Limits {
+            duration: std::time::Duration::from_secs(1),
+            http_attempts: 10,
+            connection_attempts: 10,
+            outgoing: 65536,
+            response: 65536,
+            decompressed: 65536,
+            inputs: 65536,
+            evidence: 65536,
+            evidence_records: 10,
+            records: 10,
+        };
+        let c = Coordinator::new(shared.clone(), limits).unwrap();
+        let b = c.open().unwrap();
+        let item = crate::stored::Item {
+            entry: Default::default(),
+            req: format!(
+                "{method} / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n\r\n"
+            ),
+            host: "127.0.0.1".into(),
+            port,
+            https: false,
+        };
+        let pair = crate::stored::Pair {
+            item: item.clone(),
+            retrieval: item.clone(),
+            point: InsertionPoint::new(IpKind::Query, "x", "old"),
+            injection: (vec![], None),
+        };
+        let cx = PairCtx::new(shared.clone(), pair);
+        let mut observed = None;
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        let outcome = f.run(|_| {
+            observed = Some(cx.send_following(&item, &item.req));
+            Finish::Complete
+        });
+        assert_eq!(outcome, Finish::Incomplete);
+        let result = observed.unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].1.is_some(), method == "POST");
+        assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
+fn required_limits_actual_engine_preserves_enabled_host_registry_finding() {
+    use crate::scan_lifecycle::{Finish, Handoff};
+    let wire = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = wire.clone();
+    let port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, path, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            let body = if path == "/robots.txt" {
+                "User-agent: *\nDisallow: /admin"
+            } else {
+                "ok"
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        },
+    );
+    let shared = crate::net::Shared::new();
+    {
+        let config_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = config_slot.lock().unwrap();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if id != "active.robots-txt" {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+    }
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 100,
+        records: 100,
+    };
+    let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+    let entry = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/base".into(),
+        req_raw: format!("GET /base HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into(),
+        ..Default::default()
+    };
+    let accepted = engine.audit(entry).unwrap();
+    assert_eq!(accepted.audit_phase_completion, Finish::Complete);
+    let Handoff::Finalize(f) = accepted.handoff.unwrap() else {
+        panic!("standalone finalizer")
+    };
+    assert_eq!(
+        f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Complete
+    );
+    assert_eq!(wire.load(Ordering::SeqCst), 2);
+    let issues = shared.issues.lock().unwrap();
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].name, "Robots.txt file");
+}
+
+#[test]
+fn parameterized_actual_batch_caller_counts_only_complete_admissions_and_explicitly_finishes() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    for mode in [0, 1, 2] {
+        let shared = crate::net::Shared::new();
+        let port = lab_serve(
+            std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+            |_, _, _| "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".into(),
+        );
+        {
+            let slot = crate::scan_config::shared_config(&shared);
+            let mut cfg = slot.lock().unwrap();
+            for (id, ..) in crate::scan::check_catalogue() {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        let limits = crate::scan_budget::Limits {
+            duration: std::time::Duration::from_secs(1),
+            http_attempts: 10,
+            connection_attempts: 10,
+            outgoing: 65536,
+            response: 65536,
+            decompressed: 65536,
+            inputs: 65536,
+            evidence: 65536,
+            evidence_records: 10,
+            records: 10,
+        };
+        let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+        let entry = crate::net::HistEntry {
+            port,
+            req_raw: format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        let result = engine
+            .audit_batch(match mode {
+                1 => vec![Default::default()],
+                2 => vec![entry.clone(), entry],
+                _ => vec![],
+            })
+            .unwrap();
+        assert_eq!(result.completed_items, if mode == 2 { 2 } else { 0 });
+        assert_eq!(result.shared_owner_cancelled, mode == 1);
+        assert_eq!(
+            result.outcome,
+            if mode == 1 {
+                crate::scan::BatchOutcome::Incomplete
+            } else {
+                crate::scan::BatchOutcome::PendingFinalization
+            }
+        );
+        assert_eq!(
+            result.error,
+            if mode == 1 {
+                Some(AdmissionError::InvalidRequest)
+            } else {
+                None
+            }
+        );
+        assert_eq!(
+            result.audit_phase_completion,
+            if mode == 1 {
+                Finish::Incomplete
+            } else {
+                Finish::Complete
+            }
+        );
+        let Handoff::Finalize(f) = result.handoff.unwrap() else {
+            panic!("batch finalizer")
+        };
+        assert_eq!(
+            f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+            if mode == 1 {
+                Finish::Incomplete
+            } else {
+                Finish::Complete
+            }
+        );
+        assert!(!shared.scan.is_busy());
+        assert_eq!(
+            shared.conns_opened.load(Ordering::SeqCst),
+            if mode == 2 { 2 } else { 0 }
+        );
+    }
+}
+
+#[test]
+fn actual_batch_active_final_close_never_reports_complete() {
+    use crate::scan_lifecycle::{AdmissionError, Handoff};
+    let shared = crate::net::Shared::new();
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(1),
+        http_attempts: 10,
+        connection_attempts: 10,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 10,
+        records: 10,
+    };
+    let engine = Arc::new(crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap());
+    let runner = engine.clone();
+    let (admitted_tx, admitted_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let (start_tx, start_rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        start_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        runner.audit_after_admission(
+            crate::net::HistEntry {
+                req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:0\r\n\r\n"
+                    .to_vec()
+                    .into(),
+                ..Default::default()
+            },
+            || {
+                admitted_tx.send(()).unwrap();
+                release_rx
+                    .recv_timeout(std::time::Duration::from_secs(2))
+                    .unwrap();
+            },
+        )
+    });
+    // Separate batch starts before audit so final close owns the obligation.
+    let result = engine
+        .audit_batch_before_finish(vec![], || {
+            start_tx.send(()).unwrap();
+            admitted_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+        })
+        .unwrap();
+    assert_eq!(result.outcome, crate::scan::BatchOutcome::Incomplete);
+    assert_eq!(
+        result.audit_phase_completion,
+        crate::scan_lifecycle::Finish::Incomplete
+    );
+    assert_eq!(result.error, Some(AdmissionError::IncompleteActive));
+    assert!(!result.shared_owner_cancelled);
+    assert!(matches!(
+        result.handoff,
+        Err(AdmissionError::IncompleteActive)
+    ));
+    release_tx.send(()).unwrap();
+    let audit = worker.join().unwrap().unwrap();
+    assert!(matches!(
+        audit.handoff,
+        Err(AdmissionError::IncompleteActive)
+    ));
+    assert!(matches!(
+        engine.open().unwrap().finish(),
+        Ok(Handoff::Finalize(_))
+    ));
 }

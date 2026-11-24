@@ -72,7 +72,7 @@ pub fn start_active_scan(
     }
     // Claim the scanner before touching its progress: a refused second
     // scan must not reset the running one's counters.
-    let Some(guard) = crate::scan_run::try_claim(&shared.scan) else {
+    let Some((guard, host_scope)) = crate::host_probe_state::admit(&shared) else {
         shared.event(
             Level::Warn,
             "scan.busy",
@@ -143,6 +143,7 @@ pub fn start_active_scan(
                     oob,
                     smtp,
                     item,
+                    host_scope,
                 );
                 checks::run_stored_seeding(&cx, &points);
                 checks::run_point_checks(&cx, &points);
@@ -183,6 +184,239 @@ pub fn start_active_scan(
             );
         },
     );
+}
+
+/// Required-Limits synchronous engine adapter for isolated lifecycle fixtures.
+/// No production caller or default policy selects it. Returns the exact
+/// finalization obligation to the caller rather than hiding A4 in Drop.
+#[cfg(test)]
+pub(crate) struct ExperimentalEngine {
+    shared: Arc<Shared>,
+    coordinator: Arc<crate::scan_lifecycle::Coordinator>,
+}
+#[cfg(test)]
+pub(crate) struct AcceptedAudit {
+    /// Audit phase only, never finalization or overall scan success.
+    pub audit_phase_completion: crate::scan_lifecycle::Finish,
+    pub error: Option<crate::scan_lifecycle::AdmissionError>,
+    pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
+}
+#[cfg(test)]
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BatchOutcome {
+    PendingFinalization,
+    Incomplete,
+}
+#[cfg(test)]
+pub(crate) struct AcceptedBatch {
+    pub completed_items: usize,
+    /// Explicit conservative policy: failure cancels every adopted lease of
+    /// the same logical owner, not only this batch's work.
+    pub shared_owner_cancelled: bool,
+    pub audit_phase_completion: crate::scan_lifecycle::Finish,
+    pub outcome: BatchOutcome,
+    pub error: Option<crate::scan_lifecycle::AdmissionError>,
+    pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
+}
+#[cfg(test)]
+impl ExperimentalEngine {
+    pub fn new(
+        shared: Arc<Shared>,
+        limits: crate::scan_budget::Limits,
+    ) -> Result<Self, crate::scan_lifecycle::AdmissionError> {
+        let coordinator = crate::scan_lifecycle::Coordinator::new(shared.clone(), limits)?;
+        Ok(Self {
+            shared,
+            coordinator,
+        })
+    }
+    pub fn open(
+        &self,
+    ) -> Result<crate::scan_lifecycle::Batch, crate::scan_lifecycle::AdmissionError> {
+        self.coordinator.open()
+    }
+    /// Explicit parameterized batch caller. Every accepted path discharges
+    /// its lease through finish; no Item rejection is counted as successful.
+    pub fn audit_batch(
+        &self,
+        entries: Vec<HistEntry>,
+    ) -> Result<AcceptedBatch, crate::scan_lifecycle::AdmissionError> {
+        self.audit_batch_before_finish(entries, || {})
+    }
+    /// Fixture-only close barrier, not a runtime callback boundary.
+    pub(crate) fn audit_batch_before_finish(
+        &self,
+        entries: Vec<HistEntry>,
+        before_finish: impl FnOnce(),
+    ) -> Result<AcceptedBatch, crate::scan_lifecycle::AdmissionError> {
+        use crate::scan_lifecycle::{Finish, Handoff};
+        let batch = self.open()?;
+        let mut result = AcceptedBatch {
+            completed_items: 0,
+            shared_owner_cancelled: false,
+            audit_phase_completion: Finish::Complete,
+            outcome: BatchOutcome::PendingFinalization,
+            error: None,
+            handoff: Ok(Handoff::Joined),
+        };
+        for entry in entries {
+            match self.audit(entry) {
+                Ok(accepted) => {
+                    if accepted.audit_phase_completion == Finish::Complete {
+                        result.completed_items += 1
+                    } else {
+                        result.audit_phase_completion = Finish::Incomplete;
+                    }
+                    if let Some(error) = accepted.error {
+                        result.error = Some(error);
+                    }
+                    match accepted.handoff {
+                        Ok(Handoff::Joined) => {}
+                        Ok(Handoff::Finalize(_)) => {
+                            result.audit_phase_completion = Finish::Incomplete;
+                            result.error = Some(crate::scan_lifecycle::AdmissionError::Internal);
+                            break;
+                        }
+                        Err(error) => {
+                            result.error = Some(error);
+                            result.audit_phase_completion = Finish::Incomplete;
+                            break;
+                        }
+                    }
+                    if result.audit_phase_completion == Finish::Incomplete {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    result.error = Some(error);
+                    result.audit_phase_completion = Finish::Incomplete;
+                    break;
+                }
+            }
+        }
+        if result.audit_phase_completion == Finish::Incomplete {
+            result.shared_owner_cancelled = true;
+            batch.context().cancel_handle().cancel();
+            self.shared.log("Experimental batch incomplete: cancelling the shared logical owner, including all adopted leases");
+        }
+        if result.audit_phase_completion == Finish::Incomplete {
+            result.outcome = BatchOutcome::Incomplete;
+        }
+        before_finish();
+        result.handoff = batch.finish();
+        if let Err(error) = result.handoff {
+            result.audit_phase_completion = Finish::Incomplete;
+            result.error = Some(error);
+            result.outcome = BatchOutcome::Incomplete;
+        }
+        Ok(result)
+    }
+    pub fn audit(
+        &self,
+        entry: HistEntry,
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        self.audit_after_admission(entry, || {})
+    }
+    /// Deterministic fixture barrier, not a production callback hook.
+    pub(crate) fn audit_after_admission(
+        &self,
+        entry: HistEntry,
+        admitted: impl FnOnce(),
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        use crate::scan_lifecycle::{AdmissionError, ExecutionContext};
+        let shared = &self.shared;
+        let parts = util::parse_http(&entry.req_raw);
+        let host_header = util::get_header(&parts.headers, "Host")
+            .filter(|h| !h.is_empty())
+            .ok_or(AdmissionError::InvalidRequest)?;
+        let (host, port) = net::split_h_p(&host_header, entry.port);
+        let req = String::from_utf8_lossy(&entry.req_raw).into_owned();
+        let (a, legacy, item) = self.coordinator.admit(crate::stored::Item {
+            entry: entry.clone(),
+            req: req.clone(),
+            host: host.clone(),
+            port,
+            https: entry.https,
+        })?;
+        admitted();
+        // Admission succeeds before changing the accepted run's UI flags.
+        shared.scan.done.store(0, Ordering::SeqCst);
+        let context = ExecutionContext::Legacy(legacy.clone());
+        let _expected = match net::scanner_io::ExpectedScanner.install() {
+            Ok(v) => v,
+            Err(_) => {
+                a.mark_incomplete();
+                return Ok(AcceptedAudit {
+                    audit_phase_completion: crate::scan_lifecycle::Finish::Incomplete,
+                    error: Some(AdmissionError::Internal),
+                    handoff: a.complete(),
+                });
+            }
+        };
+        let installed = match context.enter(shared) {
+            Ok(i) => i,
+            Err(_) => {
+                a.mark_incomplete();
+                return Ok(AcceptedAudit {
+                    audit_phase_completion: crate::scan_lifecycle::Finish::Incomplete,
+                    error: Some(AdmissionError::Internal),
+                    handoff: a.complete(),
+                });
+            }
+        };
+        let _tool = net::tool_scope("Scanner");
+        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let config = crate::scan_config::shared_config(shared)
+                .lock()
+                .unwrap()
+                .clone();
+            let points = audit_points(&req, &config);
+            let settings = checks::Settings {
+                speed: ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)),
+                accuracy: crate::variations::Accuracy::from_u8(
+                    shared.scan_accuracy.load(Ordering::SeqCst),
+                ),
+            };
+            let cx = checks::ScanCtx::start(
+                shared.clone(),
+                entry,
+                req,
+                parts,
+                host,
+                port,
+                settings,
+                Vec::new(),
+                Vec::new(),
+                item,
+                legacy.owner,
+            );
+            let baseline_complete = cx.baseline.resp.is_some();
+            checks::run_stored_seeding(&cx, &points);
+            checks::run_point_checks(&cx, &points);
+            checks::run_request_checks(&cx);
+            checks::run_extension_checks(&cx, &points);
+            baseline_complete
+        }));
+        drop(installed);
+        let completion = if matches!(run, Ok(true))
+            && context.validate(shared).is_ok()
+            && !shared.scan.stop.load(Ordering::SeqCst)
+        {
+            crate::scan_lifecycle::Finish::Complete
+        } else {
+            a.mark_incomplete();
+            crate::scan_lifecycle::Finish::Incomplete
+        };
+        Ok(AcceptedAudit {
+            audit_phase_completion: completion,
+            error: if run.is_err() {
+                Some(AdmissionError::Internal)
+            } else {
+                None
+            },
+            handoff: a.complete(),
+        })
+    }
 }
 
 /// The progress bar's total for a scan: fifteen probes per insertion point,
@@ -299,15 +533,21 @@ pub fn run_stored_stage_claimed(shared: &Arc<Shared>) {
 pub struct StoredBatch {
     shared: Arc<Shared>,
     opened: bool,
+    host_owner: crate::host_probe_state::BatchOwner,
 }
 
 impl StoredBatch {
     pub fn open(shared: &Arc<Shared>) -> StoredBatch {
+        Self::open_with(shared, false)
+    }
+    fn open_with(shared: &Arc<Shared>, fresh_crawl: bool) -> StoredBatch {
+        let host_owner = crate::host_probe_state::open_batch(shared, fresh_crawl);
         let opened = shared.stored.open_batch();
         if opened {
             crate::scan::scan_dedup_of(shared).reset_dom();
         }
         StoredBatch {
+            host_owner,
             shared: shared.clone(),
             opened,
         }
@@ -717,15 +957,17 @@ pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
 
 impl Drop for StoredBatch {
     fn drop(&mut self) {
+        // Host scope stays open through the stored stage; only its owner closes it.
         if self.opened {
             run_stored_stage_claimed(&self.shared);
             self.shared.stored.close_batch();
         }
+        crate::host_probe_state::close_batch(&self.shared, &self.host_owner);
     }
 }
 
 pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: bool) {
-    let _stored = StoredBatch::open(shared);
+    let _stored = StoredBatch::open_with(shared, true);
     let _tool = crate::net::tool_scope("Scanner");
     // Ask the UI thread for Collaborator payloads for the whole run, so the
     // out-of-band checks work here as they do for a scan started on one item.
@@ -737,8 +979,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     }
     shared.oob.want(true);
     let _wanted = Wanted(shared);
-    // Fresh dedup sets for this run (reset by construction, #38).
-    *shared.scan_state.lock().unwrap() = Arc::new(webprobe_support::dedup::ScanDedup::default());
+    // Scope and dedup publication is atomic at batch admission above.
     for url in start_urls {
         let mut items = if audit_only {
             crate::crawl::crawl_single(shared, url)

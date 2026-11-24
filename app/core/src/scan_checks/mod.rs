@@ -28,6 +28,7 @@ mod context;
 mod dom;
 mod evidence;
 mod graphql;
+mod host_response;
 mod interface;
 mod point_checks;
 mod request_checks;

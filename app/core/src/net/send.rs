@@ -21,6 +21,29 @@ pub fn send_raw_with(
     request: &[u8],
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Upstream {
+    #[cfg(test)]
+    if let Err(error) = scanner_send_admission(shared) {
+        return Upstream {
+            resp: None,
+            error: Some(error),
+        };
+    }
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        if let Err(error) = scanner_io::supported(shared, host, sink.is_some()) {
+            permit.mark_incomplete();
+            return Upstream {
+                resp: None,
+                error: Some(error),
+            };
+        }
+        let outcome = scanner_io::send_budgeted(shared, &permit, false, host, port, request);
+        return Upstream {
+            resp: (outcome.status == scanner_io::ExchangeStatus::Complete)
+                .then_some(outcome.response),
+            error: outcome.diagnostic,
+        };
+    }
     let request = jar_request(shared, host, false, request);
     let request = match session_request(shared, port, false, request) {
         Ok(request) => request,
