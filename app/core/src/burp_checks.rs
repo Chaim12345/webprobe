@@ -310,7 +310,9 @@ pub struct CorsFinding {
 
 /// burp.Zwfk.Zf: the issue detail.
 pub fn cors_detail(f: &CorsFinding) -> String {
-    let mut s = String::from("The application implements an HTML5 cross-origin resource sharing (CORS) policy for this request");
+    let mut s = String::from(
+        "The application implements an HTML5 cross-origin resource sharing (CORS) policy for this request",
+    );
     s.push_str(match f.kind {
         CorsKind::Arbitrary => " that allows access from any domain.",
         CorsKind::Subdomains => " that allows access from arbitrary subdomains.",
@@ -935,25 +937,26 @@ pub fn prssi(resp: &[u8]) -> Option<(u32, Vec<String>)> {
         if attr(tag_low, "rel")
             .map(|r| r.trim() == "stylesheet")
             .unwrap_or(false)
-            && let Some(h) = attr(tag, "href") {
-                let v = h.trim().to_ascii_lowercase();
-                let relative = if v.starts_with("./") || v.starts_with("../") {
-                    true
-                } else if v.starts_with('/') || v.starts_with('#') || v.is_empty() {
-                    false
-                } else {
-                    // ^[a-z]+[^:]+ : starts with a letter, no scheme colon.
-                    v.chars()
-                        .next()
-                        .map(|c| c.is_ascii_lowercase())
-                        .unwrap_or(false)
-                        && !v.contains(':')
-                        && v.len() >= 2
-                };
-                if relative {
-                    hrefs.push(h.trim().to_string());
-                }
+            && let Some(h) = attr(tag, "href")
+        {
+            let v = h.trim().to_ascii_lowercase();
+            let relative = if v.starts_with("./") || v.starts_with("../") {
+                true
+            } else if v.starts_with('/') || v.starts_with('#') || v.is_empty() {
+                false
+            } else {
+                // ^[a-z]+[^:]+ : starts with a letter, no scheme colon.
+                v.chars()
+                    .next()
+                    .map(|c| c.is_ascii_lowercase())
+                    .unwrap_or(false)
+                    && !v.contains(':')
+                    && v.len() >= 2
+            };
+            if relative {
+                hrefs.push(h.trim().to_string());
             }
+        }
         i = e.max(s + 5);
     }
     if hrefs.is_empty() {
@@ -1082,33 +1085,39 @@ Content-Type: text/x-cross-domain-policy
         );
 
         // Not 200, or not XML: nothing. An unrelated-only policy: nothing.
-        assert!(crossdomain_findings(
-            br#"HTTP/1.1 404 Not Found
+        assert!(
+            crossdomain_findings(
+                br#"HTTP/1.1 404 Not Found
 Content-Type: text/xml
 
 <cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#,
-            "h",
-            CrossDomainKind::Flash
-        )
-        .is_empty());
-        assert!(crossdomain_findings(
-            br#"HTTP/1.1 200 OK
+                "h",
+                CrossDomainKind::Flash
+            )
+            .is_empty()
+        );
+        assert!(
+            crossdomain_findings(
+                br#"HTTP/1.1 200 OK
 Content-Type: text/html
 
 <html>login</html>"#,
-            "h",
-            CrossDomainKind::Flash
-        )
-        .is_empty());
-        assert!(crossdomain_findings(
-            br#"HTTP/1.1 200 OK
+                "h",
+                CrossDomainKind::Flash
+            )
+            .is_empty()
+        );
+        assert!(
+            crossdomain_findings(
+                br#"HTTP/1.1 200 OK
 Content-Type: text/xml
 
 <cross-domain-policy><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#,
-            "www.example.com",
-            CrossDomainKind::Flash
-        )
-        .is_empty());
+                "www.example.com",
+                CrossDomainKind::Flash
+            )
+            .is_empty()
+        );
 
         // Silverlight: domain uri, with an http:// prefix stripped before the
         // comparison (Zebv.java:69-83).
@@ -1163,7 +1172,9 @@ Content-Type: application/xml
         ] {
             for (outer, inner) in [('"', '\''), ('\'', '"')] {
                 // The fake wildcard must not mask the later real value.
-                let attrs = format!("note={outer}prefix {name}={inner}*{inner}{outer} {name} \t=\n {inner}example.com{inner}");
+                let attrs = format!(
+                    "note={outer}prefix {name}={inner}*{inner}{outer} {name} \t=\n {inner}example.com{inner}"
+                );
                 let response = quoted_policy_response(kind, &attrs);
                 assert_eq!(
                     crossdomain_findings(&response, "www.example.com", kind),
@@ -1181,7 +1192,9 @@ Content-Type: application/xml
             (CrossDomainKind::Silverlight, "uri"),
         ] {
             for (outer, inner) in [('"', '\''), ('\'', '"')] {
-                let attrs = format!("note={outer}before > {name}={inner}*{inner} after{outer} {name}={inner}example.com{inner}");
+                let attrs = format!(
+                    "note={outer}before > {name}={inner}*{inner} after{outer} {name}={inner}example.com{inner}"
+                );
                 let response = quoted_policy_response(kind, &attrs);
                 assert_eq!(
                     crossdomain_findings(&response, "www.example.com", kind),
@@ -1206,7 +1219,9 @@ Content-Type: application/xml
             (CrossDomainKind::Silverlight, "uri"),
         ] {
             for quote in ['"', '\''] {
-                let attrs = format!("note={quote}ordinary{quote} not{name}={quote}*{quote} {name}extra={quote}*{quote}");
+                let attrs = format!(
+                    "note={quote}ordinary{quote} not{name}={quote}*{quote} {name}extra={quote}*{quote}"
+                );
                 let response = quoted_policy_response(kind, &attrs);
                 assert!(
                     crossdomain_findings(&response, "www.example.com", kind).is_empty(),
@@ -1341,7 +1356,9 @@ Content-Type: application/xml
         let found = run_cors_check(base_req, &base_resp, true, own, &mut Fixed(0), |o| {
             Some((
                 Vec::new(),
-                resp(&format!("Access-Control-Allow-Origin: {o}\r\nAccess-Control-Allow-Credentials: true\r\nVary: Origin\r\n")),
+                resp(&format!(
+                    "Access-Control-Allow-Origin: {o}\r\nAccess-Control-Allow-Credentials: true\r\nVary: Origin\r\n"
+                )),
             ))
         });
         let arb = found
@@ -1417,21 +1434,27 @@ Content-Type: application/xml
         let (f, h) = prssi(&page("", "<!DOCTYPE html><html><head><link rel=\"stylesheet\" href=\"styles.css\"></head></html>")).unwrap();
         assert_eq!(h, vec!["styles.css".to_string()]);
         assert_eq!(f, 2);
-        assert!(prssi(&page(
-            "",
-            "<!DOCTYPE html><link rel=stylesheet href=/s.css>"
-        ))
-        .is_none());
-        assert!(prssi(&page(
-            "",
-            "<!DOCTYPE html><link rel=stylesheet href=https://cdn/s.css>"
-        ))
-        .is_none());
-        assert!(prssi(&page(
-            "",
-            "<!DOCTYPE html><base href=\"/\"><link rel=stylesheet href=s.css>"
-        ))
-        .is_none());
+        assert!(
+            prssi(&page(
+                "",
+                "<!DOCTYPE html><link rel=stylesheet href=/s.css>"
+            ))
+            .is_none()
+        );
+        assert!(
+            prssi(&page(
+                "",
+                "<!DOCTYPE html><link rel=stylesheet href=https://cdn/s.css>"
+            ))
+            .is_none()
+        );
+        assert!(
+            prssi(&page(
+                "",
+                "<!DOCTYPE html><base href=\"/\"><link rel=stylesheet href=s.css>"
+            ))
+            .is_none()
+        );
         let (f, _) = prssi(&page(
             "X-Frame-Options: DENY\r\n",
             "<html><link rel=stylesheet href=../s.css>",

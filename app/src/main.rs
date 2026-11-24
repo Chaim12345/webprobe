@@ -67,8 +67,8 @@ use webprobe_core::upstream;
 use webprobe_core::util;
 
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::sync::Mutex;
 
@@ -487,12 +487,13 @@ fn response_mime(entry: &net::HistEntry) -> String {
         let head = String::from_utf8_lossy(&resp[..head_end]);
         for line in head.split("\r\n").flat_map(|l| l.split('\n')) {
             if let Some((name, value)) = line.split_once(':')
-                && name.trim().eq_ignore_ascii_case("content-type") {
-                    let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
-                    if !essence.is_empty() {
-                        return essence;
-                    }
+                && name.trim().eq_ignore_ascii_case("content-type")
+            {
+                let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
+                if !essence.is_empty() {
+                    return essence;
                 }
+            }
         }
     }
     entry.extension.clone()
@@ -618,7 +619,9 @@ impl eframe::App for App {
                         let auth = rest.split('/').next().unwrap_or_default();
                         let path_rest = &url["http://".len() + auth.len()..];
                         let path = if path_rest.is_empty() { "/" } else { path_rest };
-                        let req = format!("GET {path} HTTP/1.1\r\nHost: {auth}\r\nUser-Agent: WebProbe/1.0\r\nConnection: close\r\n\r\n");
+                        let req = format!(
+                            "GET {path} HTTP/1.1\r\nHost: {auth}\r\nUser-Agent: WebProbe/1.0\r\nConnection: close\r\n\r\n"
+                        );
                         let out = crate::send_internal_probe(port, req.as_bytes());
                         sh.log(&format!(
                             "Selftest probe got {} byte(s) via proxy :{port}",
@@ -750,12 +753,10 @@ fn schedule_grab(
                 }
             }
 
-            match std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped))
-            { Ok(png) => {
-                std::fs::write(&path, png).is_ok()
-            } _ => {
-                false
-            }}
+            match std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped)) {
+                Ok(png) => std::fs::write(&path, png).is_ok(),
+                _ => false,
+            }
         };
         *done.lock().unwrap() = ok;
     });
@@ -1117,14 +1118,16 @@ fn main() {
                 // worker threads exist yet (gl_env ran, nothing else), so
                 // setting the environment is race-free here.
                 if let Some(v) = args.get(i + 1) {
-                    std::env::set_var("WEBPROBE_DATA_DIR", v);
+                    // SAFETY: no worker threads exist yet; gl_env ran first.
+                    unsafe { std::env::set_var("WEBPROBE_DATA_DIR", v) };
                 }
                 i += 2;
             }
             "--temporary-project" => {
                 // recovery.rs treats WEBPROBE_TEMP_PROJECT=1 as Burp's
                 // temporary project: nothing is saved or restored.
-                std::env::set_var("WEBPROBE_TEMP_PROJECT", "1");
+                // SAFETY: no worker threads exist yet; gl_env ran first.
+                unsafe { std::env::set_var("WEBPROBE_TEMP_PROJECT", "1") };
                 i += 1;
             }
             "--version" => {
@@ -1132,7 +1135,9 @@ fn main() {
                 return;
             }
             "--help" => {
-                println!("usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--disable-extensions] [--temporary-project] [--data-dir DIR] [--diagnostics] [--screenshot FILE]");
+                println!(
+                    "usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--disable-extensions] [--temporary-project] [--data-dir DIR] [--diagnostics] [--screenshot FILE]"
+                );
                 return;
             }
             _ => i += 1,
@@ -1147,11 +1152,11 @@ fn main() {
         );
         return;
     }
-    if let Some(f) = &project_file {
-        if !std::path::Path::new(f).is_file() {
-            eprintln!("could not open project file {f}");
-            std::process::exit(1);
-        }
+    if let Some(f) = &project_file
+        && !std::path::Path::new(f).is_file()
+    {
+        eprintln!("could not open project file {f}");
+        std::process::exit(1);
     }
     // Read and merge the config JSONs (notes name files and sections only;
     // API keys are never logged). Scan-configuration keys go through R-11's
@@ -1550,12 +1555,14 @@ mod tests {
             panic!("disabled extensions must not inspect startup source {key}")
         });
         ext_host::with_host(&shared, |host| assert!(host.extensions.is_empty()));
-        assert!(!shared
-            .events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|e| e.contains("extension")));
+        assert!(
+            !shared
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| e.contains("extension"))
+        );
     }
 
     #[test]

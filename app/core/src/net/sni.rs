@@ -110,7 +110,7 @@ pub(crate) fn tls_sni_lab(shared: &super::Shared) -> (u16, SniLog) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::{send_tls_raw, Shared};
+    use crate::net::{Shared, send_tls_raw};
     use std::sync::atomic::Ordering;
 
     /// D-12: a send under `sni_scope` puts the custom name in the

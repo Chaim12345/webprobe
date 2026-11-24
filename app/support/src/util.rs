@@ -160,36 +160,37 @@ pub fn html_decode(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'&'
-            && let Some(end) = s[i..].find(';') {
-                let entity = &s[i + 1..i + end];
-                let decoded = if let Some(num) = entity.strip_prefix('#') {
-                    let (digits, radix) =
-                        if num.len() > 1 && (num.starts_with('x') || num.starts_with('X')) {
-                            (&num[1..], 16u32)
-                        } else {
-                            (num, 10u32)
-                        };
-                    u32::from_str_radix(digits, radix)
-                        .ok()
-                        .and_then(char::from_u32)
-                        .map(|c| c.to_string())
-                } else {
-                    match entity {
-                        "amp" => Some("&".to_string()),
-                        "lt" => Some("<".to_string()),
-                        "gt" => Some(">".to_string()),
-                        "quot" => Some("\"".to_string()),
-                        "apos" => Some("'".to_string()),
-                        "nbsp" => Some("\u{00a0}".to_string()),
-                        _ => None,
-                    }
-                };
-                if let Some(d) = decoded {
-                    out.push_str(&d);
-                    i += end + 1;
-                    continue;
+            && let Some(end) = s[i..].find(';')
+        {
+            let entity = &s[i + 1..i + end];
+            let decoded = if let Some(num) = entity.strip_prefix('#') {
+                let (digits, radix) =
+                    if num.len() > 1 && (num.starts_with('x') || num.starts_with('X')) {
+                        (&num[1..], 16u32)
+                    } else {
+                        (num, 10u32)
+                    };
+                u32::from_str_radix(digits, radix)
+                    .ok()
+                    .and_then(char::from_u32)
+                    .map(|c| c.to_string())
+            } else {
+                match entity {
+                    "amp" => Some("&".to_string()),
+                    "lt" => Some("<".to_string()),
+                    "gt" => Some(">".to_string()),
+                    "quot" => Some("\"".to_string()),
+                    "apos" => Some("'".to_string()),
+                    "nbsp" => Some("\u{00a0}".to_string()),
+                    _ => None,
                 }
+            };
+            if let Some(d) = decoded {
+                out.push_str(&d);
+                i += end + 1;
+                continue;
             }
+        }
         let c = s[i..].chars().next().unwrap_or('\u{fffd}');
         out.push(c);
         i += c.len_utf8();
@@ -549,22 +550,23 @@ pub fn kill_process_tree(pid: u32, marker: Option<&str>, grace: std::time::Durat
             .args(["-KILL", "--", &group])
             .output();
         if let Some(m) = marker
-            && let Ok(entries) = std::fs::read_dir("/proc") {
-                for e in entries.flatten() {
-                    let Ok(p) = e.file_name().to_string_lossy().parse::<u32>() else {
-                        continue;
-                    };
-                    if p == std::process::id() {
-                        continue;
-                    }
-                    let cmdline = std::fs::read(format!("/proc/{p}/cmdline")).unwrap_or_default();
-                    if String::from_utf8_lossy(&cmdline).contains(m) {
-                        let _ = std::process::Command::new("kill")
-                            .args(["-KILL", &p.to_string()])
-                            .output();
-                    }
+            && let Ok(entries) = std::fs::read_dir("/proc")
+        {
+            for e in entries.flatten() {
+                let Ok(p) = e.file_name().to_string_lossy().parse::<u32>() else {
+                    continue;
+                };
+                if p == std::process::id() {
+                    continue;
+                }
+                let cmdline = std::fs::read(format!("/proc/{p}/cmdline")).unwrap_or_default();
+                if String::from_utf8_lossy(&cmdline).contains(m) {
+                    let _ = std::process::Command::new("kill")
+                        .args(["-KILL", &p.to_string()])
+                        .output();
                 }
             }
+        }
     }
     #[cfg(not(unix))]
     {
@@ -660,7 +662,7 @@ pub fn read_capped<R: std::io::Read + ?Sized>(
             }
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof && !out.is_empty() => {
-                return Ok(out)
+                return Ok(out);
             }
             Err(e) => return Err(e),
         }

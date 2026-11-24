@@ -37,7 +37,9 @@ fn history_host_omits_default_ports() {
 fn derived_fields_detect_params_extension_title_and_cookies() {
     let e = entry(
         "GET /static/app.JS?v=1 HTTP/1.1\r\nHost: h\r\n\r\n",
-        Some("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nSet-Cookie: a=1; Path=/\r\nSet-Cookie: b=2; HttpOnly\r\n\r\n<html><title> Hello </title></html>"),
+        Some(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nSet-Cookie: a=1; Path=/\r\nSet-Cookie: b=2; HttpOnly\r\n\r\n<html><title> Hello </title></html>",
+        ),
     );
     let (params, ext, title, cookies) = derive_history_fields(&e);
     assert!(params, "query string counts as params");

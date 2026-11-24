@@ -275,7 +275,11 @@ pub fn export_html(c: &Comparison, title: &str) -> String {
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>{t}</title><style>body{{font-family:sans-serif}}pre{{white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:12px;margin:0}}td{{vertical-align:top;width:50%;border:1px solid #ccc;padding:6px}}.mod{{background:#9FBBD4}}.del{{background:#EE95A1}}.add{{background:#9BCF88}}</style></head><body><h1>{t}</h1><p>{n} difference(s){cap}. Key: <span class=\"mod\">Modified</span> <span class=\"del\">Deleted</span> <span class=\"add\">Added</span></p><table><tr><td><pre>{l}</pre></td><td><pre>{r}</pre></td></tr></table></body></html>",
         t = html_encode(title),
         n = c.differences,
-        cap = if c.capped { " (inputs too different: the middle is shown as one block)" } else { "" },
+        cap = if c.capped {
+            " (inputs too different: the middle is shown as one block)"
+        } else {
+            ""
+        },
         l = side(&c.left),
         r = side(&c.right),
     )

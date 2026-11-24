@@ -6,13 +6,13 @@ use crate::util;
 pub use crate::ws_history::WsEntry;
 
 // Marker parsing moved to intruder (L8, #38); keep the old net path working.
-pub use crate::intruder::{parse_markers, MarkerSeg};
+pub use crate::intruder::{MarkerSeg, parse_markers};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 thread_local! {
@@ -101,7 +101,7 @@ mod sni;
 pub use attack::*;
 #[cfg(test)]
 pub(crate) use sni::tls_sni_lab;
-pub use sni::{sni_scope, SniScope};
+pub use sni::{SniScope, sni_scope};
 
 #[cfg(test)]
 mod intercept_all_tests;
@@ -146,7 +146,7 @@ mod tool_state_tests;
 /// unified patch, and this seam is not evidence of byte/attempt limits.
 #[cfg(test)]
 pub(crate) fn scanner_send_admission(shared: &Shared) -> Result<(), String> {
-    use crate::scan_lifecycle::{captured, ExecutionContext};
+    use crate::scan_lifecycle::{ExecutionContext, captured};
     let inherited = captured();
     // TOOL is a display/session label, not experimental admission evidence.
     // Unmigrated production callers retain legacy behavior in cfg(test) builds.

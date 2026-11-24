@@ -143,12 +143,14 @@ fn meta_charsets_accept_html_quoting_and_case_variants() {
 
 #[test]
 fn a_later_meta_tag_can_supply_the_charset() {
-    assert!(ids(&response(
-        200,
-        "Content-Type: text/html\r\n",
-        b"<meta name='viewport' content='width=device-width'><meta charset='utf-8'>"
-    ))
-    .is_empty());
+    assert!(
+        ids(&response(
+            200,
+            "Content-Type: text/html\r\n",
+            b"<meta name='viewport' content='width=device-width'><meta charset='utf-8'>"
+        ))
+        .is_empty()
+    );
 }
 
 #[test]
@@ -209,12 +211,14 @@ fn complete_meta_tag_ending_at_the_scan_boundary_is_seen() {
 fn meta_scan_is_limited_to_twenty_tags() {
     let mut body = "<meta name=x>".repeat(19);
     body.push_str("<meta charset=utf-8>");
-    assert!(ids(&response(
-        200,
-        "Content-Type: text/html\r\n",
-        body.as_bytes()
-    ))
-    .is_empty());
+    assert!(
+        ids(&response(
+            200,
+            "Content-Type: text/html\r\n",
+            body.as_bytes()
+        ))
+        .is_empty()
+    );
     let mut body = "<meta name=x>".repeat(20);
     body.push_str("<meta charset=utf-8>");
     assert_eq!(

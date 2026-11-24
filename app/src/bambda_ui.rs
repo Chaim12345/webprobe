@@ -1,7 +1,7 @@
 //! R-16 library/editor and explicit, worker-backed HTTP-history preview.
 use eframe::egui::{self, RichText, Ui};
 use std::{
-    sync::{mpsc, Arc},
+    sync::{Arc, mpsc},
     time::Duration,
 };
 use webprobe_core::{

@@ -364,16 +364,16 @@ pub(crate) fn looks_like_url(v: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn parts(
-        v: &str,
-    ) -> (
-        Option<&str>,
-        Option<&str>,
-        Option<&str>,
-        Option<&str>,
-        Option<&str>,
+    type PartsFields = (
+        Option<&'static str>,
+        Option<&'static str>,
+        Option<&'static str>,
+        Option<&'static str>,
+        Option<&'static str>,
         Option<String>,
-    ) {
+    );
+
+    fn parts(v: &str) -> PartsFields {
         // Leaked for terse assertions in tests only.
         let p: &'static UrlParts = Box::leak(Box::new(parse(v)));
         (

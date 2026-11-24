@@ -431,10 +431,11 @@ impl Shared {
             // loser's event is already visible to the winner's frame.
             let mut last = self.last_wake_ms.lock().unwrap();
             if let Some(prev) = *last
-                && now.saturating_sub(prev) < WAKE_COALESCE_MS {
-                    self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
-                    return;
-                }
+                && now.saturating_sub(prev) < WAKE_COALESCE_MS
+            {
+                self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
+                return;
+            }
             *last = Some(now);
         }
         f();
@@ -566,14 +567,18 @@ mod diagnostic_tests {
         }
         let events = shared.events.lock().unwrap();
         assert_eq!(events.len(), 500);
-        assert!(events
-            .first()
-            .unwrap()
-            .ends_with("test.event: Test event n=3"));
-        assert!(events
-            .last()
-            .unwrap()
-            .ends_with("test.event: Test event n=502"));
+        assert!(
+            events
+                .first()
+                .unwrap()
+                .ends_with("test.event: Test event n=3")
+        );
+        assert!(
+            events
+                .last()
+                .unwrap()
+                .ends_with("test.event: Test event n=502")
+        );
         // Wakes are coalesced (see `Shared::wake`): every event either woke the
         // frontend or was counted as coalesced, and the first one always woke it.
         let woke = wakes.load(Ordering::SeqCst) as u64;

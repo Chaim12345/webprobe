@@ -117,9 +117,17 @@ impl RequestCheck for DomPrototypePollution {
                 "location.hash+location.search" => "location.hash and location.search",
                 s => s,
             };
-            let mut issue = mk("info", self.issue(), &cx.entry, format!(
-                "The application may be vulnerable to client-side prototype pollution. Data is read from <b>{}</b> and a new own property was observed on <b>Object.prototype</b>.<br><br>The source value <b>{}</b> reached the prototype as <b>{}</b>.<br><br>Addition-only evidence: existing-property overwrites and stored pollution are not covered.",
-                util::html_encode(source), util::html_encode(&hit.source_value), util::html_encode(&hit.sink_value)));
+            let mut issue = mk(
+                "info",
+                self.issue(),
+                &cx.entry,
+                format!(
+                    "The application may be vulnerable to client-side prototype pollution. Data is read from <b>{}</b> and a new own property was observed on <b>Object.prototype</b>.<br><br>The source value <b>{}</b> reached the prototype as <b>{}</b>.<br><br>Addition-only evidence: existing-property overwrites and stored pollution are not covered.",
+                    util::html_encode(source),
+                    util::html_encode(&hit.source_value),
+                    util::html_encode(&hit.sink_value)
+                ),
+            );
             if !outcome.complete {
                 issue.detail.push_str(&format!("<br><br>DOM operation incomplete: {}. This finding retains independently observed evidence only.", util::html_encode(&outcome.diagnostic)));
             }

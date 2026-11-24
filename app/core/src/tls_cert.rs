@@ -29,8 +29,8 @@ use std::io::Read as _;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{
     ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, SignatureScheme,
@@ -310,24 +310,24 @@ pub fn analyze(capture: &TlsCapture, host: &str, now: SystemTime) -> Vec<CertFla
         }
     };
     let mut parsed = false;
-    if let Some(leaf) = capture.chain.first() {
-        if let Ok((_, cert)) = parse_x509_certificate(leaf) {
-            parsed = true;
-            let ts = now
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-            let validity = cert.validity();
-            if validity.not_before.timestamp() > ts {
-                push(CertFlag::NotYetValid);
-            }
-            if validity.not_after.timestamp() < ts {
-                push(CertFlag::Expired);
-            }
-            let names = cert_names(&cert);
-            if !names.is_empty() && !names.iter().any(|n| pattern_matches(n, host)) {
-                push(CertFlag::HostnameMismatch);
-            }
+    if let Some(leaf) = capture.chain.first()
+        && let Ok((_, cert)) = parse_x509_certificate(leaf)
+    {
+        parsed = true;
+        let ts = now
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let validity = cert.validity();
+        if validity.not_before.timestamp() > ts {
+            push(CertFlag::NotYetValid);
+        }
+        if validity.not_after.timestamp() < ts {
+            push(CertFlag::Expired);
+        }
+        let names = cert_names(&cert);
+        if !names.is_empty() && !names.iter().any(|n| pattern_matches(n, host)) {
+            push(CertFlag::HostnameMismatch);
         }
     }
     // The delegated verifier's outcome backs up (or, for a certificate we
@@ -464,8 +464,10 @@ mod tests {
         assert!(
             analyze(&cap, "example.com", SystemTime::now()).contains(&CertFlag::HostnameMismatch)
         );
-        assert!(analyze(&cap, "a.b.example.com", SystemTime::now())
-            .contains(&CertFlag::HostnameMismatch));
+        assert!(
+            analyze(&cap, "a.b.example.com", SystemTime::now())
+                .contains(&CertFlag::HostnameMismatch)
+        );
         // A plain mismatch, case-insensitive both ways.
         let cap = cap_for(leaf_der(&["Other.COM"], (2020, 1, 1), (2030, 1, 1)), None);
         assert_eq!(

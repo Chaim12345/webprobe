@@ -5,7 +5,7 @@
 //! permanently hung OS calls exhaust the pool; fail closed, never replace
 //! workers and silently grow the resource budget.
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Instant;
 
 const WORKERS: usize = 2;
@@ -41,38 +41,40 @@ impl Resolver {
             let lookup = lookup.clone();
             let worker = std::thread::Builder::new()
                 .name("scanner-dns".into())
-                .spawn(move || loop {
-                    let job = {
-                        let guard = rx.lock().unwrap_or_else(|p| p.into_inner());
-                        guard.recv()
-                    };
-                    let Ok(job) = job else { break };
-                    if job.owner.is_cancelled() {
-                        let _ = job.response.try_send(Err(ResolveError::Cancelled));
-                        continue;
+                .spawn(move || {
+                    loop {
+                        let job = {
+                            let guard = rx.lock().unwrap_or_else(|p| p.into_inner());
+                            guard.recv()
+                        };
+                        let Ok(job) = job else { break };
+                        if job.owner.is_cancelled() {
+                            let _ = job.response.try_send(Err(ResolveError::Cancelled));
+                            continue;
+                        }
+                        if Instant::now() >= job.deadline {
+                            let _ = job.response.try_send(Err(ResolveError::Expired));
+                            continue;
+                        }
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            lookup(&job.host, job.port)
+                        }))
+                        .unwrap_or(Err(ResolveError::Unavailable));
+                        let result = if job.owner.is_cancelled() {
+                            Err(ResolveError::Cancelled)
+                        } else if Instant::now() >= job.deadline {
+                            Err(ResolveError::Expired)
+                        } else {
+                            result.and_then(|items| {
+                                if items.len() > ADDRESSES {
+                                    Err(ResolveError::Unavailable)
+                                } else {
+                                    Ok(items)
+                                }
+                            })
+                        };
+                        let _ = job.response.try_send(result);
                     }
-                    if Instant::now() >= job.deadline {
-                        let _ = job.response.try_send(Err(ResolveError::Expired));
-                        continue;
-                    }
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        lookup(&job.host, job.port)
-                    }))
-                    .unwrap_or(Err(ResolveError::Unavailable));
-                    let result = if job.owner.is_cancelled() {
-                        Err(ResolveError::Cancelled)
-                    } else if Instant::now() >= job.deadline {
-                        Err(ResolveError::Expired)
-                    } else {
-                        result.and_then(|items| {
-                            if items.len() > ADDRESSES {
-                                Err(ResolveError::Unavailable)
-                            } else {
-                                Ok(items)
-                            }
-                        })
-                    };
-                    let _ = job.response.try_send(result);
                 })
                 .map_err(|_| ResolveError::Unavailable)?;
             workers.push(worker);
@@ -326,10 +328,12 @@ mod tests {
             pool.resolve(owner(), &"a".repeat(254), 80, deadline),
             Err(ResolveError::InvalidInput)
         );
-        assert!(!pool
-            .resolve(owner(), "127.0.0.1", 80, deadline)
-            .unwrap()
-            .is_empty());
+        assert!(
+            !pool
+                .resolve(owner(), "127.0.0.1", 80, deadline)
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(
             pool.resolve(owner(), "127.0.0.1", 80, Instant::now()),
             Err(ResolveError::Expired)
@@ -350,9 +354,10 @@ mod tests {
             pool.resolve(owner(), "test", 80, Instant::now() + Duration::from_secs(1)),
             Err(ResolveError::Unavailable)
         );
-        assert!(pool
-            .resolve(owner(), "test", 80, Instant::now() + Duration::from_secs(1))
-            .is_ok());
+        assert!(
+            pool.resolve(owner(), "test", 80, Instant::now() + Duration::from_secs(1))
+                .is_ok()
+        );
         pool.drain_and_join();
     }
 }

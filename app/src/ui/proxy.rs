@@ -89,12 +89,13 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
                 .color(theme::ink_faint()),
         );
         if ui.button("Restart listener").clicked()
-            && let Ok(p) = app.port_txt.trim().parse::<u16>() {
-                app.shared.proxy_port.store(p, Ordering::SeqCst);
-                app.shared.listener_restart.store(true, Ordering::SeqCst);
-                app.shared
-                    .log(&format!("Restarting listener on 127.0.0.1:{p}"));
-            }
+            && let Ok(p) = app.port_txt.trim().parse::<u16>()
+        {
+            app.shared.proxy_port.store(p, Ordering::SeqCst);
+            app.shared.listener_restart.store(true, Ordering::SeqCst);
+            app.shared
+                .log(&format!("Restarting listener on 127.0.0.1:{p}"));
+        }
     });
     ui.add_space(8.0);
     crate::proxy_settings::listeners_table(app, ui);
@@ -192,7 +193,10 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
             }
         }
     });
-    hint(ui, "For HTTPS without browser warnings, export and trust this CA in your browser or test profile. Its private key stays in memory and is never written to disk.");
+    hint(
+        ui,
+        "For HTTPS without browser warnings, export and trust this CA in your browser or test profile. Its private key stays in memory and is never written to disk.",
+    );
     ui.add_space(10.0);
     crate::tools::upstream_options(app, ui);
 
@@ -461,9 +465,9 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
                 .unwrap()
                 .iter_mut()
                 .find(|i| i.id == prev)
-            {
-                item.edited = app.intercept_text.clone();
-            }
+        {
+            item.edited = app.intercept_text.clone();
+        }
         app.intercept_cur = Some(id);
         app.intercept_text = edited;
     }
@@ -554,15 +558,15 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
 pub(crate) fn set_intercept(app: &mut App, on: bool) {
     if !on
         && let Some(id) = app.intercept_cur.take()
-            && let Some(item) = app
-                .shared
-                .queue
-                .lock()
-                .unwrap()
-                .iter_mut()
-                .find(|i| i.id == id)
-            {
-                item.edited = app.intercept_text.clone();
-            }
+        && let Some(item) = app
+            .shared
+            .queue
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .find(|i| i.id == id)
+    {
+        item.edited = app.intercept_text.clone();
+    }
     net::set_intercept(&app.shared, on);
 }

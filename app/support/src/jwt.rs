@@ -237,9 +237,10 @@ pub fn tokens_in_request(req: &crate::util::HttpParts, raw: &[u8]) -> Vec<Jwt> {
     let mut found: Vec<Jwt> = Vec::new();
     let mut add = |v: &str| {
         if let Some(t) = Jwt::parse(&crate::util::url_decode(v))
-            && !found.iter().any(|f| f.raw == t.raw) {
-                found.push(t);
-            }
+            && !found.iter().any(|f| f.raw == t.raw)
+        {
+            found.push(t);
+        }
     };
     for (k, v) in &req.headers {
         let v = if k.eq_ignore_ascii_case("authorization") {

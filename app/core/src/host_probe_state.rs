@@ -90,10 +90,10 @@ impl AttemptScope {
         if key.len() > 1024 || attempted.len() >= MAX_KEYS {
             return Acquire::Capacity;
         }
-        if let Some(Claim::Pending(owner)) = session.get(&key) {
-            if owner.upgrade().is_some() {
-                return Acquire::Suppressed;
-            }
+        if let Some(Claim::Pending(owner)) = session.get(&key)
+            && owner.upgrade().is_some()
+        {
+            return Acquire::Suppressed;
         }
         if !session.contains_key(&key) && session.len() >= MAX_KEYS {
             return Acquire::Capacity;
@@ -316,12 +316,14 @@ mod more_tests {
         let fresh = open_batch(&shared, true);
         assert!(!Arc::ptr_eq(&prior, &fresh.scope.dedup));
         close_batch(&shared, &fresh);
-        assert!(shared
-            .events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|e| e.contains("incomplete/deferred")));
+        assert!(
+            shared
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| e.contains("incomplete/deferred"))
+        );
     }
     #[test]
     fn completed_session_claim_survives_a_later_fresh_crawl() {
@@ -350,10 +352,12 @@ mod more_tests {
         close_batch(&shared, &first);
         let state = shared.host_admission.0.lock().unwrap();
         assert!(state.lease_overflow);
-        assert!(state
-            .batch
-            .as_ref()
-            .is_some_and(|s| Arc::ptr_eq(s, &first.scope)));
+        assert!(
+            state
+                .batch
+                .as_ref()
+                .is_some_and(|s| Arc::ptr_eq(s, &first.scope))
+        );
     }
     #[test]
     fn stale_claim_drop_cannot_clear_a_different_owner() {

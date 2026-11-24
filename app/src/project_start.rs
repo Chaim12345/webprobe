@@ -5,9 +5,9 @@
 use eframe::egui::{self, RichText, Ui};
 use webprobe_core::project_files;
 
+use crate::App;
 use crate::feedback::{self, Level};
 use crate::theme;
-use crate::App;
 
 /// State of the project chooser.
 #[derive(Default)]

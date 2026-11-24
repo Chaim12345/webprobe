@@ -1,6 +1,6 @@
 use webprobe_core::net::{
-    apply_session_rules_for, expand_placeholders, in_session, set_request_cookie, SessionRule,
-    Shared,
+    SessionRule, Shared, apply_session_rules_for, expand_placeholders, in_session,
+    set_request_cookie,
 };
 use webprobe_core::util;
 

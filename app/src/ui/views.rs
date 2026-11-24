@@ -150,13 +150,14 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         .desired_width(btn_w),
                 );
                 if b(ui, "Remove")
-                    && let Some(i) = app.comparer.sel1.or(app.comparer.sel2) {
-                        if i < app.comparer.items.len() {
-                            app.comparer.items.remove(i);
-                        }
-                        app.comparer.sel1 = None;
-                        app.comparer.sel2 = None;
+                    && let Some(i) = app.comparer.sel1.or(app.comparer.sel2)
+                {
+                    if i < app.comparer.items.len() {
+                        app.comparer.items.remove(i);
                     }
+                    app.comparer.sel1 = None;
+                    app.comparer.sel2 = None;
+                }
                 if b(ui, "Clear") {
                     app.comparer.items.clear();
                     app.comparer.sel1 = None;

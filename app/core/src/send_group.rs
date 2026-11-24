@@ -277,11 +277,19 @@ impl Problem {
     pub fn text(self) -> &'static str {
         match self {
             Problem::EmptyRequest => "There are empty tabs in this group",
-            Problem::TargetMissing => "You have not specified a target for one or more requests in this group",
+            Problem::TargetMissing => {
+                "You have not specified a target for one or more requests in this group"
+            }
             Problem::WebSocketTab => "There are WebSocket tabs in this group",
-            Problem::ServiceMismatch => "The selected target is not the same for all requests in this group",
-            Problem::ProtocolMismatch => "The selected protocol (HTTP/1 or HTTP/2) is not the same for all requests in this group",
-            Problem::Http1KeepAlive => "HTTP/1 connection reuse is enabled for one or more requests in this group",
+            Problem::ServiceMismatch => {
+                "The selected target is not the same for all requests in this group"
+            }
+            Problem::ProtocolMismatch => {
+                "The selected protocol (HTTP/1 or HTTP/2) is not the same for all requests in this group"
+            }
+            Problem::Http1KeepAlive => {
+                "HTTP/1 connection reuse is enabled for one or more requests in this group"
+            }
         }
     }
 
@@ -336,6 +344,10 @@ pub fn validate(mode: GroupMode, items: &[GroupItem], keep_alive: bool) -> Vec<P
     out
 }
 
+/// Raw upstream exchange for one group item: response bytes and, for a
+/// parallel group, the arrival position once all are in.
+type ItemOutcome = Result<(Vec<u8>, Option<(usize, usize)>), String>;
+
 /// Per-item result handed to the UI callback.
 #[derive(Debug, Clone)]
 pub struct GroupResult {
@@ -373,7 +385,6 @@ pub(crate) fn unknown_host(error: &str) -> bool {
 /// Shared HTTP/2 group transport lives in h2_group (split out for the
 /// file-length gate). run_sequence dispatches there for the single-
 /// connection mode; the parallel mode's single-packet h2 burst too.
-
 /// Open a fresh connection to the target, TLS with an h2 ALPN offer when
 /// the tab spoke HTTP/2 (mirrors the conn_reuse upstream-TLS pattern).
 pub(crate) fn open_conn(
@@ -427,7 +438,7 @@ pub(crate) fn finish_item(
     shared: &Shared,
     item: &GroupItem,
     request: &[u8],
-    outcome: Result<(Vec<u8>, Option<(usize, usize)>), String>,
+    outcome: ItemOutcome,
     hooked: Option<Vec<u8>>,
 ) -> GroupResult {
     let shown = hooked.unwrap_or_else(|| request.to_vec());
@@ -886,9 +897,11 @@ mod tests {
         );
     }
 
+    type LabLog = std::sync::Arc<std::sync::Mutex<Vec<(usize, String)>>>;
+
     /// A lab recording (connection index, request line) for each request,
     /// answering keep-alive.
-    fn h1_lab() -> (u16, std::sync::Arc<std::sync::Mutex<Vec<(usize, String)>>>) {
+    fn h1_lab() -> (u16, LabLog) {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
         let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -985,12 +998,9 @@ mod tests {
                     seen.lock().unwrap().push("prefix");
                     // Every prefix is in: now the last bytes may come.
                     gate.wait();
-                    match s.read(&mut byte) {
-                        Ok(1) => {
-                            seen.lock().unwrap().push("last");
-                            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
-                        }
-                        _ => return,
+                    if let Ok(1) = s.read(&mut byte) {
+                        seen.lock().unwrap().push("last");
+                        let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
                     }
                 });
             }
@@ -1019,12 +1029,14 @@ mod tests {
         assert_eq!(end, SequenceEnd::Completed);
         let got = got.lock().unwrap();
         assert_eq!(got.len(), 20);
-        assert!(got
-            .iter()
-            .all(|(_, r)| r.error.is_none() && r.response.is_some()));
-        assert!(got
-            .iter()
-            .all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == 20)));
+        assert!(
+            got.iter()
+                .all(|(_, r)| r.error.is_none() && r.response.is_some())
+        );
+        assert!(
+            got.iter()
+                .all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == 20))
+        );
         let ev = events.lock().unwrap();
         assert_eq!(ev.iter().filter(|e| **e == "prefix").count(), 20, "{ev:?}");
         assert_eq!(ev.iter().filter(|e| **e == "last").count(), 20, "{ev:?}");
@@ -1101,14 +1113,16 @@ mod tests {
         assert_eq!(end, SequenceEnd::Completed);
         let got = got.lock().unwrap();
         assert_eq!(got.len(), 2);
-        assert!(got
-            .iter()
-            .find(|(n, _)| *n == 0)
-            .is_some_and(|(_, r)| r.error.is_none() && r.response.is_some()));
-        assert!(got
-            .iter()
-            .find(|(n, _)| *n == 1)
-            .is_some_and(|(_, r)| r.error.is_some()));
+        assert!(
+            got.iter()
+                .find(|(n, _)| *n == 0)
+                .is_some_and(|(_, r)| r.error.is_none() && r.response.is_some())
+        );
+        assert!(
+            got.iter()
+                .find(|(n, _)| *n == 1)
+                .is_some_and(|(_, r)| r.error.is_some())
+        );
     }
 
     fn get(path: &str, port: u16) -> String {

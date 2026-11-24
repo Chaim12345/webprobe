@@ -79,10 +79,12 @@ fn source_http_proxy_uses_absolute_form_without_connect_for_both_h1_modes() {
             });
         }
         assert!(got.lock().unwrap()[0].error.is_none());
-        assert!(server
-            .join()
-            .unwrap()
-            .starts_with(b"GET http://target.invalid:8081/resource HTTP/1.1\r\n"));
+        assert!(
+            server
+                .join()
+                .unwrap()
+                .starts_with(b"GET http://target.invalid:8081/resource HTTP/1.1\r\n")
+        );
         assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
     }
 }
@@ -265,11 +267,13 @@ fn source_closed_single_connection_is_not_used_for_another_request() {
         |_, r| got.push(r),
     );
     assert!(got[0].error.is_none());
-    assert!(got[1]
-        .error
-        .as_deref()
-        .unwrap()
-        .contains("closed the group's connection"));
+    assert!(
+        got[1]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("closed the group's connection")
+    );
     server.join().unwrap();
 }
 
@@ -305,12 +309,14 @@ fn source_error_path_runs_post_request_macro_once_and_logs_error() {
     );
     assert_eq!(r.error.as_deref(), Some("fixture failure"));
     server.join().unwrap();
-    assert!(shared
-        .events
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|e| e.contains("post-request macro after: ok")));
+    assert!(
+        shared
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|e| e.contains("post-request macro after: ok"))
+    );
 }
 
 #[test]
@@ -333,11 +339,13 @@ fn source_session_failure_is_not_silently_replaced_by_original_request() {
         got.push(r)
     });
     server.join().unwrap();
-    assert!(got[0]
-        .error
-        .as_deref()
-        .unwrap()
-        .contains("session validation"));
+    assert!(
+        got[0]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("session validation")
+    );
     // Only the failed session probe opened a socket, not a second original send.
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
 }
@@ -389,11 +397,15 @@ fn source_registry_import_validation_and_settings_export_invariants() {
         validate(GroupMode::Separate, &[a], false),
         vec![Problem::TargetMissing]
     );
-    let mut data = crate::project::ProjectData::default();
-    data.repeater_groups = saved;
-    assert!(crate::project::settings_only(&data)
-        .repeater_groups
-        .is_empty());
+    let data = crate::project::ProjectData {
+        repeater_groups: saved,
+        ..Default::default()
+    };
+    assert!(
+        crate::project::settings_only(&data)
+            .repeater_groups
+            .is_empty()
+    );
 }
 
 include!("send_group_route_tests.rs");
@@ -447,12 +459,14 @@ fn exchange_error_retires_group_socket_without_second_send_or_reconnect() {
             got[0].1.response.is_some(),
             "parity codec preserves partial bytes"
         );
-        assert!(got[1]
-            .1
-            .error
-            .as_deref()
-            .unwrap()
-            .contains("closed the group's connection"));
+        assert!(
+            got[1]
+                .1
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("closed the group's connection")
+        );
         assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
         server.join().unwrap();
     }

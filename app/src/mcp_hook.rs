@@ -295,29 +295,29 @@ pub fn key_events(key: &str) -> Vec<egui::Event> {
     if let (Some(c), None) = (chars.next(), chars.next())
         && let Some(k) = egui::Key::from_name(&c.to_ascii_uppercase().to_string())
             .filter(|_| c.is_ascii_alphanumeric())
-        {
-            let modifiers = if c.is_ascii_uppercase() {
-                egui::Modifiers::SHIFT
-            } else {
-                egui::Modifiers::NONE
-            };
-            events.push(egui::Event::Key {
-                key: k,
-                physical_key: Some(k),
-                pressed: true,
-                repeat: false,
-                modifiers,
-            });
-            events.push(egui::Event::Text(key.to_string()));
-            events.push(egui::Event::Key {
-                key: k,
-                physical_key: Some(k),
-                pressed: false,
-                repeat: false,
-                modifiers,
-            });
-            return events;
-        }
+    {
+        let modifiers = if c.is_ascii_uppercase() {
+            egui::Modifiers::SHIFT
+        } else {
+            egui::Modifiers::NONE
+        };
+        events.push(egui::Event::Key {
+            key: k,
+            physical_key: Some(k),
+            pressed: true,
+            repeat: false,
+            modifiers,
+        });
+        events.push(egui::Event::Text(key.to_string()));
+        events.push(egui::Event::Key {
+            key: k,
+            physical_key: Some(k),
+            pressed: false,
+            repeat: false,
+            modifiers,
+        });
+        return events;
+    }
     vec![egui::Event::Text(key.to_string())]
 }
 

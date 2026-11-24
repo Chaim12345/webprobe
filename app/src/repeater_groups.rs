@@ -5,8 +5,8 @@
 //! colours, ordering, validation, the senders — is core's `send_group`;
 //! this module only wires it to widgets and to the shared tab list.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use eframe::egui::{self, RichText, Ui};
 
@@ -251,8 +251,8 @@ pub fn dialog(app: &mut crate::App, ctx: &egui::Context) {
                     for i in 0..send_group::GROUP_COLOURS {
                         let (rect, resp) =
                             ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
-                        ui.painter().rect_filled(rect, 3.0, colour(i as u8));
-                        if d.colour == i as u8 {
+                        ui.painter().rect_filled(rect, 3.0, colour(i));
+                        if d.colour == i {
                             ui.painter().rect_stroke(
                                 rect,
                                 3.0,
@@ -261,7 +261,7 @@ pub fn dialog(app: &mut crate::App, ctx: &egui::Context) {
                             );
                         }
                         if resp.clicked() {
-                            d.colour = i as u8;
+                            d.colour = i;
                         }
                     }
                 });

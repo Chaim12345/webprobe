@@ -12,7 +12,7 @@
 // DarkTheme.json via theme::editor_colours(). Search matches are painted with
 // editor.message.highlight.search and counted in the "N highlights" label.
 
-use eframe::egui::{self, text::LayoutJob, Color32, FontId, RichText, TextFormat, Ui};
+use eframe::egui::{self, Color32, FontId, RichText, TextFormat, Ui, text::LayoutJob};
 
 use crate::theme::{self, c};
 use crate::util;
@@ -195,15 +195,18 @@ pub enum LineKind {
 /// raw body. Burp's Pretty tab reformats JSON/XML/HTML; JSON is the common case.
 pub fn pretty_body(body: &str) -> String {
     let t = body.trim();
-    if (t.starts_with('{') || t.starts_with('[')) && t.len() < 2_000_000
+    if (t.starts_with('{') || t.starts_with('['))
+        && t.len() < 2_000_000
         && let Ok(v) = serde_json::from_str::<serde_json::Value>(t)
-            && let Ok(s) = serde_json::to_string_pretty(&v) {
-                return s;
-            }
+        && let Ok(s) = serde_json::to_string_pretty(&v)
+    {
+        return s;
+    }
     if t.len() < 2_000_000
-        && let Some(xml) = pretty_xml(t) {
-            return xml;
-        }
+        && let Some(xml) = pretty_xml(t)
+    {
+        return xml;
+    }
     body.to_string()
 }
 
@@ -318,9 +321,11 @@ fn cached_lines(
 ) -> std::sync::Arc<Vec<(LineKind, String)>> {
     let key = fingerprint(bytes);
     if let Some((k, p, lines)) = &st.lines_cache
-        && *k == key && *p == pretty {
-            return lines.clone();
-        }
+        && *k == key
+        && *p == pretty
+    {
+        return lines.clone();
+    }
     let lines = std::sync::Arc::new(message_lines(bytes, pretty));
     st.lines_cache = Some((key, pretty, lines.clone()));
     lines
@@ -1053,19 +1058,18 @@ pub fn editable_pane_ex(
                                     || i.pointer.secondary_down()
                                     || i.pointer.secondary_released()
                             });
-                        if secondary
-                            && let Some((a, b)) = prev_sel.filter(|(a, b)| a < b) {
-                                let mut state = egui::TextEdit::load_state(ui.ctx(), edit_id)
-                                    .unwrap_or_default();
-                                state
-                                    .cursor
-                                    .set_char_range(Some(egui::text::CCursorRange::two(
-                                        egui::text::CCursor::new(a),
-                                        egui::text::CCursor::new(b),
-                                    )));
-                                state.store(ui.ctx(), edit_id);
-                                st.sel = prev_sel;
-                            }
+                        if secondary && let Some((a, b)) = prev_sel.filter(|(a, b)| a < b) {
+                            let mut state =
+                                egui::TextEdit::load_state(ui.ctx(), edit_id).unwrap_or_default();
+                            state
+                                .cursor
+                                .set_char_range(Some(egui::text::CCursorRange::two(
+                                    egui::text::CCursor::new(a),
+                                    egui::text::CCursor::new(b),
+                                )));
+                            state.store(ui.ctx(), edit_id);
+                            st.sel = prev_sel;
+                        }
                         if let Some(menu) = menu.as_mut() {
                             let sel = st.sel.and_then(|(a, b)| {
                                 (a < b)
@@ -1073,11 +1077,13 @@ pub fn editable_pane_ex(
                             });
                             out.response.context_menu(|ui| menu(ui, sel));
                         }
-                        if out.response.has_focus() && !secondary
-                            && let Some(cr) = out.cursor_range {
-                                let [a, b] = cr.sorted_cursors();
-                                st.sel = Some((a.index.0, b.index.0));
-                            }
+                        if out.response.has_focus()
+                            && !secondary
+                            && let Some(cr) = out.cursor_range
+                        {
+                            let [a, b] = cr.sorted_cursors();
+                            st.sel = Some((a.index.0, b.index.0));
+                        }
                         // Line numbers: one per logical line, at the row it starts on.
                         let mut n = 1;
                         let mut new_line = true;

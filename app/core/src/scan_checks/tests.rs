@@ -13,7 +13,10 @@ fn dom_xss_hash_slice_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -61,7 +64,10 @@ fn dom_families_batch1_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
@@ -137,7 +143,10 @@ fn dom_families_batch2_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
@@ -629,10 +638,16 @@ fn r10_host_checks_against_a_live_lab() {
                         .to_string()
                 } else if method == "GET" && path == "/trace.axd" {
                     let b = "<html><body><span class=\"tracecontent\">trace</span></body></html>";
-                    format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                        b.len()
+                    )
                 } else if method == "DEBUG" {
                     let b = "DebugSessionID corrupted or not provided.";
-                    format!("HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    format!(
+                        "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                        b.len()
+                    )
                 } else if method == "GET" {
                     match files.lock().unwrap().get(&path) {
                         Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", b.len(), String::from_utf8_lossy(b)),
@@ -804,7 +819,10 @@ fn dom_families_batch3_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
@@ -891,7 +909,10 @@ fn dom_families_batch4_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
@@ -992,7 +1013,10 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -1028,7 +1052,10 @@ fn dom_web_message_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -1090,7 +1117,10 @@ fn dom_ajax_header_name_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -1131,7 +1161,10 @@ fn dom_setattribute_variants_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     for (page, id, name) in [
@@ -1203,7 +1236,10 @@ jQuery.globalEval = function (v) {};
         } else {
             "<html><body><p>hello</p></body></html>".to_string()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -1271,7 +1307,10 @@ try { document.evaluate(s, document, null, 0, null); } catch (e) {}
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -1318,9 +1357,15 @@ fn dom_families_skip_non_get_and_non_html() {
         let (body, ct) = if path.starts_with("/plain") {
             ("plain text, no script context", "text/plain")
         } else {
-            ("<html><body><script>document.write(location.hash.slice(1));</script></body></html>", "text/html")
+            (
+                "<html><body><script>document.write(location.hash.slice(1));</script></body></html>",
+                "text/html",
+            )
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -1381,7 +1426,10 @@ var a = document.createElement('a'); a.href = location.hash.slice(1);
         } else {
             "<html><body><p>hello</p></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -1441,10 +1489,15 @@ fn r10_graphql_checks_against_a_live_lab() {
                 "application/json",
             )
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
-    let req = format!("POST /graphql HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 32\r\n\r\n{{\"query\":\"query{{ user {{ name }} }}\"}}");
+    let req = format!(
+        "POST /graphql HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 32\r\n\r\n{{\"query\":\"query{{ user {{ name }} }}\"}}"
+    );
     let got = lab_scan(
         port,
         &[
@@ -1496,7 +1549,10 @@ fn r10_spoofable_ip_and_backup_file_against_a_live_lab() {
             "/files/index.php~" => ("200 OK", "<?php // backup source ?>".to_string()),
             _ => ("404 Not Found", String::new()),
         };
-        format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /files/index.php HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -1541,7 +1597,10 @@ fn r10_broken_access_control_against_a_live_lab() {
             ),
             _ => ("404 Not Found", String::new()),
         };
-        format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     // Session material removed (cookie + x-*) and the page unchanged:
@@ -1572,8 +1631,8 @@ fn r10_broken_access_control_against_a_live_lab() {
 #[test]
 fn bac_non_get_sends_no_requests_beyond_the_scanner_baseline() {
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
     let requests = Arc::new(AtomicUsize::new(0));
     let seen = requests.clone();
@@ -1631,7 +1690,10 @@ fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
             } else {
                 ("200 OK", "text/x-component", "ok")
             };
-            format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
         });
         let req = format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
         let issues = lab_scan(
@@ -1663,8 +1725,8 @@ fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
 #[test]
 fn react2shell_does_not_post_without_a_fingerprint() {
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
     let count = Arc::new(AtomicUsize::new(0));
     let seen = count.clone();
@@ -1765,11 +1827,17 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
                 let resp = match probe {
                     Some((_, false)) => {
                         let body = "User-agent: *\nDisallow: /admin";
-                        format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
                     }
                     Some((_, true)) => {
                         let body = "0:E{\"digest\":\"abc\"}";
-                        format!("HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/x-component\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+                        format!(
+                            "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/x-component\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
                     }
                     None => {
                         // Baseline: Next.js/RSC fingerprint so React2Shell arms.
@@ -1845,10 +1913,9 @@ fn cache_lab(cache: bool) -> u16 {
     >::new()));
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     lab_serve(l, move |_method, target, raw| {
-        if cache
-            && let Some(hit) = store.lock().unwrap().get(target) {
-                return hit.clone();
-            }
+        if cache && let Some(hit) = store.lock().unwrap().get(target) {
+            return hit.clone();
+        }
         let xfh = raw
             .lines()
             .find_map(|l| {
@@ -1861,7 +1928,10 @@ fn cache_lab(cache: bool) -> u16 {
         let body = format!(
             "<html><head><script src=\"//{xfh}/app.js\"></script></head><body>home</body></html>"
         );
-        let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: public, max-age=60\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: public, max-age=60\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
         if cache {
             store
                 .lock()
@@ -1922,7 +1992,10 @@ fn r10_el_and_xpath_against_a_live_lab() {
         } else {
             "<html><body>profile page</body></html>".to_string()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /profile?name=x HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -1971,12 +2044,16 @@ fn collaborator_everywhere_builds_burps_request_set() {
         ]
     );
     assert!(probes[0].request.contains("\r\nHost: host.oast.test\r\nPragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n\r\n"));
-    assert!(probes[1]
-        .request
-        .contains("\r\nHost: shop.test:8080\r\nX-Forwarded-Host: xfh.oast.test\r\n"));
-    assert!(probes[2]
-        .request
-        .contains("\r\nHost: shop.test:8080@hostauth.oast.test\r\n"));
+    assert!(
+        probes[1]
+            .request
+            .contains("\r\nHost: shop.test:8080\r\nX-Forwarded-Host: xfh.oast.test\r\n")
+    );
+    assert!(
+        probes[2]
+            .request
+            .contains("\r\nHost: shop.test:8080@hostauth.oast.test\r\n")
+    );
     // One request carries the six client-IP / Referer headers, an id each.
     let combined = &probes[5];
     assert_eq!(
@@ -2215,8 +2292,8 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
         return;
     }
     use std::sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
     let vulnerable = Arc::new(AtomicBool::new(true));
     let enabled = vulnerable.clone();
@@ -2242,7 +2319,10 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
         } else {
             "<html><body>benign<script>void 0</script></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let shared = crate::net::Shared::new();
     let mut config = crate::scan_config::ScanConfig::default();
@@ -2323,7 +2403,10 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
         } else {
             "<html><body><p>hello</p><script>void 0</script></body></html>"
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let shared = crate::net::Shared::new();
@@ -2421,13 +2504,18 @@ fn dom_xss_reflected_variant_against_a_live_lab() {
     let port = lab_serve(l, |_method, path, _raw| {
         let body = if path.starts_with("/reflxss") {
             let q = path.split('?').nth(1).unwrap_or("");
-            format!("<html><body><script>var t = '{q}'; document.write('<p>' + t + '</p>');</script></body></html>")
+            format!(
+                "<html><body><script>var t = '{q}'; document.write('<p>' + t + '</p>');</script></body></html>"
+            )
         } else if path.starts_with("/xss") {
             "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>".to_string()
         } else {
             "<html><body><p>hello</p></body></html>".to_string()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -2491,11 +2579,16 @@ fn dom_xss_stored_variant_against_a_live_lab() {
             *st.lock().unwrap() = q.to_string();
         }
         let body = if path.starts_with("/storexss") {
-            format!("<html><body><script>var t = '{embed}'; document.write('<p>' + t + '</p>');</script></body></html>")
+            format!(
+                "<html><body><script>var t = '{embed}'; document.write('<p>' + t + '</p>');</script></body></html>"
+            )
         } else {
             "<html><body><p>hello</p></body></html>".to_string()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let got = lab_scan(
@@ -2541,11 +2634,23 @@ fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
         if !raw.is_empty() {
             captured.lock().unwrap().push(raw.into());
         }
-        let body = format!("<html><head><link rel='icon' href='data:,'></head><body><script>document.write('<p>'+location.hash+'</p>');document.write('<p>{prior}</p>');</script></body></html>");
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        let body = format!(
+            "<html><head><link rel='icon' href='data:,'></head><body><script>document.write('<p>'+location.hash+'</p>');document.write('<p>{prior}</p>');</script></body></html>"
+        );
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/mixed",
-        format!("GET /mixed HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: session=kept\r\nAuthorization: Bearer lab-only\r\nConnection: X-Remove\r\nX-Remove: unsafe\r\nProxy-Authorization: lab-proxy\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/mixed",
+        format!(
+            "GET /mixed HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: session=kept\r\nAuthorization: Bearer lab-only\r\nConnection: X-Remove\r\nX-Remove: unsafe\r\nProxy-Authorization: lab-proxy\r\n\r\n"
+        ),
+    );
     // Stored submissions are disabled by default, so only the plain
     // location.hash variant is expected from this mixed page.
     assert!(
@@ -2612,7 +2717,11 @@ fn dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab() {
                     capture.lock().unwrap().push(raw);
                     if !is_submission {
                         let body = "<html><script>document.write(location.hash)</script></html>";
-                        let _=write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
+                        let _ = write!(
+                            stream,
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        );
                     }
                 }
                 Err(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
@@ -2661,7 +2770,10 @@ fn dom_reflection_uses_only_fulfilled_navigation_response_against_a_live_lab() {
         } else {
             "<html><head><link rel='icon' href='data:,'></head><script>document.write(location.search)</script></html>".into()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let got = lab_scan(
         port,
@@ -2706,11 +2818,16 @@ fn dom_outer_submission_and_resources_share_request_cap_against_a_live_lab() {
             let imgs = (0..100)
                 .map(|i| format!("<img src='/resource/{i}'>"))
                 .collect::<String>();
-            format!("<html><head><link rel='icon' href='data:,'></head><script>void 0</script>{imgs}</html>")
+            format!(
+                "<html><head><link rel='icon' href='data:,'></head><script>void 0</script>{imgs}</html>"
+            )
         } else {
             String::new()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let got = lab_scan(
         port,
@@ -2739,8 +2856,13 @@ fn dom_form_action_real_properties_against_a_live_lab() {
         } else {
             "input"
         };
-        let body=format!("<html><head><link rel='icon' href='data:,'></head><script>var e=document.createElement('{tag}');e.formAction=location.hash;</script></html>");
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        let body = format!(
+            "<html><head><link rel='icon' href='data:,'></head><script>var e=document.createElement('{tag}');e.formAction=location.hash;</script></html>"
+        );
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     for path in ["/button", "/input"] {
         let got = lab_scan(
@@ -2778,17 +2900,26 @@ fn dom_prototype_pollution_against_a_live_lab() {
         let merge = r#"function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
 function parseqs(s, filter) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(function (p) { if (!p) { return; } var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); if (filter && (parts[0] === '__proto__' || parts[0] === 'constructor' || parts[0] === 'prototype')) { return; } setpath(cfg, parts, decodeURIComponent(kv[1] || '')); }); }"#;
         let body = if path.starts_with("/vulnpp-hash") {
-            format!("<html><body><script>\n{merge}\nparseqs(location.hash, false);\n</script></body></html>")
+            format!(
+                "<html><body><script>\n{merge}\nparseqs(location.hash, false);\n</script></body></html>"
+            )
         } else if path.starts_with("/vulnpp") {
-            format!("<html><body><script>\n{merge}\nparseqs(location.search, false);\n</script></body></html>")
+            format!(
+                "<html><body><script>\n{merge}\nparseqs(location.search, false);\n</script></body></html>"
+            )
         } else if path.starts_with("/reflectpp") {
             "<html><body><script>document.write('<p>' + location.hash + '</p>');</script></body></html>".to_string()
         } else if path.starts_with("/safepp") {
-            format!("<html><body><script>\n{merge}\nparseqs(location.search, true);\nparseqs(location.hash, true);\n</script></body></html>")
+            format!(
+                "<html><body><script>\n{merge}\nparseqs(location.search, true);\nparseqs(location.hash, true);\n</script></body></html>"
+            )
         } else {
             "<html><body><p>hello</p></body></html>".to_string()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     for (page, confidence) in [
@@ -2832,8 +2963,8 @@ fn dom_prototype_pollution_multi_family_isolation_against_a_live_lab() {
         return;
     }
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
     let visits = Arc::new(AtomicUsize::new(0));
     let count = visits.clone();
@@ -2847,7 +2978,9 @@ function parseqs(s) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(fu
         let body = if path.starts_with("/mixed") {
             // Query token pollutes the prototype; fragment token reaches
             // an HTML sink. One navigation, two families.
-            format!("<html><body><script>\n{merge}\nparseqs(location.search);\ndocument.body.innerHTML = '<p>' + location.hash + '</p>';\n</script></body></html>")
+            format!(
+                "<html><body><script>\n{merge}\nparseqs(location.search);\ndocument.body.innerHTML = '<p>' + location.hash + '</p>';\n</script></body></html>"
+            )
         } else if path.starts_with("/reflectonly") {
             "<html><body><script>document.body.innerHTML = '<p>' + location.hash + '</p>';</script></body></html>".to_string()
         } else if path.starts_with("/unchanged") {
@@ -2856,7 +2989,10 @@ function parseqs(s) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(fu
         } else {
             "<html><body><p>hello</p></body></html>".to_string()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let run = |path: &str| {
         let shared = crate::net::Shared::new();
@@ -2982,9 +3118,13 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
         }
         let merge = r#"function merge(s) { s.replace(/^[?#]/,'').split('&').forEach(function(p) {var m=/^__proto__\[([^\]]+)\]=(.*)$/.exec(p);if(m) Object.prototype[m[1]]=decodeURIComponent(m[2]);}); }"#;
         let script = match route {
-            "/ppmixed" | "/ppcap" => format!("{merge} merge('{prior}');merge(location.search);merge(location.hash);document.write('<p>{prior}</p>');document.write('<p>{prior}</p>');"),
+            "/ppmixed" | "/ppcap" => format!(
+                "{merge} merge('{prior}');merge(location.search);merge(location.hash);document.write('<p>{prior}</p>');document.write('<p>{prior}</p>');"
+            ),
             "/ppstored" => format!("{merge} merge('{prior}');document.write('<p>{prior}</p>');"),
-            "/ppmixedtoken" => format!("var m=/__proto__\\[([^\\]]+)\\]/.exec(location.search);if(m)Object.prototype[m[1]]='{prior}';document.write('<p>{prior}</p>');"),
+            "/ppmixedtoken" => format!(
+                "var m=/__proto__\\[([^\\]]+)\\]/.exec(location.search);if(m)Object.prototype[m[1]]='{prior}';document.write('<p>{prior}</p>');"
+            ),
             "/ppreflect" => "document.write('<p>'+location.hash+'</p>');".into(),
             _ => "void 0".into(),
         };
@@ -2995,8 +3135,13 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
         } else {
             String::new()
         };
-        let body = format!("<html><head><link rel='icon' href='data:,'></head><body><script>{script}</script>{resources}</body></html>");
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        let body = format!(
+            "<html><head><link rel='icon' href='data:,'></head><body><script>{script}</script>{resources}</body></html>"
+        );
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     for route in [
         "/ppmixed",
@@ -3192,7 +3337,10 @@ fn file_param_lab(known_file: bool, seen: std::sync::Arc<std::sync::Mutex<Vec<St
             ),
             _ => ("404 Not Found", "<h1>404 Not Found</h1>".to_string()),
         };
-        format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     })
 }
 
@@ -3295,7 +3443,10 @@ fn r10_crossdomain_policy_against_a_live_lab() {
             ),
             _ => ("404 Not Found", "text/html", "<h1>404</h1>".to_string()),
         };
-        format!("HTTP/1.1 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -3348,7 +3499,10 @@ fn r10_crossdomain_policy_against_a_live_lab() {
             ),
             _ => ("404 Not Found", "text/html", "<h1>404</h1>".to_string()),
         };
-        format!("HTTP/1.1 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -3396,7 +3550,10 @@ fn r10_header_dependent_response_against_a_live_lab() {
             body.push_str(" mobile");
         }
         body.push_str("</body></html>");
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     };
     let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
     let count2 = count.clone();
@@ -3406,7 +3563,9 @@ fn r10_header_dependent_response_against_a_live_lab() {
         dependent(m, p, r)
     });
     let host = format!("127.0.0.1:{port}");
-    let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0\r\n\r\n");
+    let req = format!(
+        "GET /home HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0\r\n\r\n"
+    );
     let got = lab_scan(
         port,
         &[
@@ -3437,7 +3596,10 @@ fn r10_header_dependent_response_against_a_live_lab() {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, |_m, _p, _r| {
         let body = "<html><body>home</body></html>";
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -3484,7 +3646,10 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
     };
     let audit = |host: &str| {
         let body = r#"<?xml version="1.0"?><order><id>7</id></order>"#;
-        format!("POST /order HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "POST /order HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     };
     let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
     let count2 = count.clone();
@@ -3534,7 +3699,7 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
 /// clean request with the probe's cache buster gets the poisoned page
 /// back. The lab reflects X-Forwarded-Host; with `cache` on it caches
 /// whole responses keyed on the full request target (path + query).
-
+#[test]
 fn xml_body_request_framing_is_always_valid() {
     let base = "POST /order HTTP/1.1\r\nHost: h\r\nContent-Type: application/xml\r\nContent-Encoding: gzip\r\nTransfer-Encoding: chunked\r\nContent-Length: 99\r\n\r\n".as_bytes();
     let body = "<?xml version=\"1.0\"?><order><id>7</id></order>";
@@ -3569,8 +3734,8 @@ fn xml_body_request_framing_is_always_valid() {
 #[test]
 fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
     for check in ["active.robots-txt", "active.react2shell"] {
         for (wire, complete) in [
@@ -3615,9 +3780,11 @@ fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
                     ..Default::default()
                 };
                 crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
-                assert!(shared
-                    .scan
-                    .wait_idle(Some(std::time::Duration::from_secs(10))));
+                assert!(
+                    shared
+                        .scan
+                        .wait_idle(Some(std::time::Duration::from_secs(10)))
+                );
             };
             let batch = crate::scan::StoredBatch::open(&shared);
             run();
@@ -3636,12 +3803,14 @@ fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
             );
             assert!(shared.issues.lock().unwrap().is_empty());
             if !complete {
-                assert!(shared
-                    .events
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|e| e.contains("incomplete")));
+                assert!(
+                    shared
+                        .events
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .any(|e| e.contains("incomplete"))
+                );
             }
         }
     }
@@ -3650,8 +3819,8 @@ fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
 #[test]
 fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
     let direct = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     direct.set_nonblocking(true).unwrap();
@@ -3695,9 +3864,11 @@ fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
             ..Default::default()
         };
         crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
-        assert!(shared
-            .scan
-            .wait_idle(Some(std::time::Duration::from_secs(10))));
+        assert!(
+            shared
+                .scan
+                .wait_idle(Some(std::time::Duration::from_secs(10)))
+        );
     };
     let batch = crate::scan::StoredBatch::open(&shared);
     run();

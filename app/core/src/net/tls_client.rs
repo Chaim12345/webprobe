@@ -18,15 +18,16 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
         return true;
     }
     if let Some(rest) = pattern.strip_prefix('*')
-        && let Some(suffix) = rest.strip_prefix('.') {
-            let dotted = format!(".{suffix}");
-            if let Some(prefix) = host
-                .to_ascii_lowercase()
-                .strip_suffix(&dotted.to_ascii_lowercase())
-            {
-                return !prefix.is_empty() && !prefix.contains('.');
-            }
+        && let Some(suffix) = rest.strip_prefix('.')
+    {
+        let dotted = format!(".{suffix}");
+        if let Some(prefix) = host
+            .to_ascii_lowercase()
+            .strip_suffix(&dotted.to_ascii_lowercase())
+        {
+            return !prefix.is_empty() && !prefix.contains('.');
         }
+    }
     false
 }
 

@@ -6,11 +6,11 @@
 //! stderr show how many repaints the engine requested, so wake coalescing
 //! is measurable without a UI. The harness in qa/perf-load drives traffic.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use webprobe_core::net::{start_proxy, Shared};
+use webprobe_core::net::{Shared, start_proxy};
 
 static WAKES: AtomicU64 = AtomicU64::new(0);
 
@@ -37,14 +37,16 @@ fn main() {
     }
     println!("READY {port}");
     let stats = Arc::clone(&shared);
-    std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_secs(2));
-        eprintln!(
-            "STATS messages={} wakes={} coalesced={}",
-            stats.messages.load(Ordering::SeqCst),
-            WAKES.load(Ordering::SeqCst),
-            stats.wakes_coalesced.load(Ordering::SeqCst),
-        );
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(Duration::from_secs(2));
+            eprintln!(
+                "STATS messages={} wakes={} coalesced={}",
+                stats.messages.load(Ordering::SeqCst),
+                WAKES.load(Ordering::SeqCst),
+                stats.wakes_coalesced.load(Ordering::SeqCst),
+            );
+        }
     });
     loop {
         std::thread::park();

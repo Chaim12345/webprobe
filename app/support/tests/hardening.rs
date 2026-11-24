@@ -18,13 +18,15 @@ fn hardening_repeated_poison_recovery_keeps_mutations_visible() {
     let value = Arc::new(Mutex::new(Vec::new()));
     for n in 0..3 {
         let worker = value.clone();
-        assert!(std::thread::spawn(move || {
-            let mut guard = worker.lock().unwrap();
-            guard.push(n);
-            panic!("worker failure");
-        })
-        .join()
-        .is_err());
+        assert!(
+            std::thread::spawn(move || {
+                let mut guard = worker.lock().unwrap();
+                guard.push(n);
+                panic!("worker failure");
+            })
+            .join()
+            .is_err()
+        );
         assert_eq!(value.lock().unwrap().len(), n + 1);
     }
     assert_eq!(

@@ -394,10 +394,14 @@ mod tests {
 
     #[test]
     fn query_edits_encode_and_keep_the_rest() {
-        assert!(ed(Section::Query, 0, Some(("x", "a&b c")))
-            .starts_with("POST /a/b?x=a%26b%20c&y=two%20words HTTP/1.1\r\n"));
-        assert!(ed(Section::Query, 2, Some(("z", "3")))
-            .starts_with("POST /a/b?x=1&y=two%20words&z=3 HTTP/1.1\r\n"));
+        assert!(
+            ed(Section::Query, 0, Some(("x", "a&b c")))
+                .starts_with("POST /a/b?x=a%26b%20c&y=two%20words HTTP/1.1\r\n")
+        );
+        assert!(
+            ed(Section::Query, 2, Some(("z", "3")))
+                .starts_with("POST /a/b?x=1&y=two%20words&z=3 HTTP/1.1\r\n")
+        );
         assert!(ed(Section::Query, 1, None).starts_with("POST /a/b?x=1 HTTP/1.1\r\n"));
         let e = Edit {
             section: Section::Query,
@@ -448,26 +452,34 @@ mod tests {
         .unwrap();
         assert!(!String::from_utf8(gone).unwrap().contains("Cookie"));
         assert!(ed(Section::Headers, 0, Some(("Host", "other"))).contains("\r\nHost: other\r\n"));
-        assert!(ed(Section::Headers, 4, Some(("X-New", "1")))
-            .contains("Content-Length: 7\r\nX-New: 1\r\n\r\nu=a"));
+        assert!(
+            ed(Section::Headers, 4, Some(("X-New", "1")))
+                .contains("Content-Length: 7\r\nX-New: 1\r\n\r\nu=a")
+        );
         assert!(!ed(Section::Headers, 1, None).contains("Cookie:"));
     }
 
     #[test]
     fn attribute_edits_keep_the_query() {
-        assert!(ed(Section::Attributes, 0, Some(("Method", "PUT")))
-            .starts_with("PUT /a/b?x=1&y=two%20words HTTP/1.1\r\n"));
-        assert!(ed(Section::Attributes, 1, Some(("Path", "/c")))
-            .starts_with("POST /c?x=1&y=two%20words HTTP/1.1\r\n"));
-        assert!(apply(
-            REQ.as_bytes(),
-            &Edit {
-                section: Section::Attributes,
-                index: 0,
-                item: None
-            }
-        )
-        .is_none());
+        assert!(
+            ed(Section::Attributes, 0, Some(("Method", "PUT")))
+                .starts_with("PUT /a/b?x=1&y=two%20words HTTP/1.1\r\n")
+        );
+        assert!(
+            ed(Section::Attributes, 1, Some(("Path", "/c")))
+                .starts_with("POST /c?x=1&y=two%20words HTTP/1.1\r\n")
+        );
+        assert!(
+            apply(
+                REQ.as_bytes(),
+                &Edit {
+                    section: Section::Attributes,
+                    index: 0,
+                    item: None
+                }
+            )
+            .is_none()
+        );
     }
 
     #[test]

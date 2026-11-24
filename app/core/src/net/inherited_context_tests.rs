@@ -49,14 +49,16 @@ fn inherited_net_missing_and_wrong_shared_fail_closed_other_tools_unchanged() {
     let port = l.local_addr().unwrap().port();
     let _scanner = tool_scope("Scanner");
     let expected = scanner_io::ExpectedScanner.install().unwrap();
-    assert!(send_raw(
-        &shared,
-        "127.0.0.1",
-        port,
-        b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
-    )
-    .resp
-    .is_none());
+    assert!(
+        send_raw(
+            &shared,
+            "127.0.0.1",
+            port,
+            b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
+        )
+        .resp
+        .is_none()
+    );
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
     let c = Coordinator::new(shared.clone(), limits()).unwrap();
     let b = c.open().unwrap();
@@ -131,14 +133,16 @@ fn inherited_net_old_cancel_new_owner_reset_blocks_plain_tls_helpers_and_macro()
         });
         let ctx = new.context();
         let _installed = ctx.enter(&shared).unwrap();
-        assert!(send_raw(
-            &shared,
-            "127.0.0.1",
-            port,
-            b"GET /new HTTP/1.1\r\nHost: h\r\n\r\n"
-        )
-        .resp
-        .is_some());
+        assert!(
+            send_raw(
+                &shared,
+                "127.0.0.1",
+                port,
+                b"GET /new HTTP/1.1\r\nHost: h\r\n\r\n"
+            )
+            .resp
+            .is_some()
+        );
         assert!(join(server).contains("/new"));
     }
 }
@@ -158,10 +162,11 @@ fn inherited_net_budgeted_finalizer_installs_exact_ledger_and_denies_exhaustion(
                 Some(ExecutionContext::Budgeted(_))
             ));
             assert!(scanner_send_admission(&shared).is_ok());
-            assert!(p
-                .ledger()
-                .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 101)])
-                .is_err());
+            assert!(
+                p.ledger()
+                    .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 101)])
+                    .is_err()
+            );
             assert!(scanner_send_admission(&shared).is_err());
             Finish::Incomplete
         }),
@@ -193,7 +198,9 @@ fn inherited_net_macro_continuation_keeps_cancelled_owner_after_reset() {
             .unwrap();
         l
     });
-    let text=format!("GET /first HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n###\nGET /second HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let text = format!(
+        "GET /first HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n###\nGET /second HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"
+    );
     let results = run_macro_text(&shared, &text);
     assert_eq!(results.len(), 2);
     assert!(results[0].response.is_some());

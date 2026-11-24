@@ -1,6 +1,6 @@
 use crate::diagnostics::Field;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use super::*;
 
@@ -148,7 +148,7 @@ impl PairCtx {
             #[cfg(test)]
             let resp = match crate::scan_lifecycle::captured() {
                 Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) => {
-                    use crate::net::scanner_io::{send_budgeted, ExchangeStatus};
+                    use crate::net::scanner_io::{ExchangeStatus, send_budgeted};
                     let outcome = send_budgeted(
                         &self.shared,
                         &p,
@@ -345,6 +345,7 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
 /// Experimental real A4 registry path. Explicit limits/permit only, no legacy
 /// fallback. Network accounting/deadline integration remains a separate gate.
 #[cfg(test)]
+#[allow(dead_code)] // experimental A4 registry path, not wired to a production caller yet
 pub(crate) fn run_stored_stage_budgeted(
     shared: &Arc<Shared>,
     permit: &crate::scan_lifecycle::BudgetedExecution,
@@ -352,7 +353,7 @@ pub(crate) fn run_stored_stage_budgeted(
     max_pair_bytes: usize,
 ) -> crate::scan_lifecycle::Finish {
     use crate::scan_budget::Resource;
-    use crate::scan_lifecycle::{captured, ExecutionContext, Finish};
+    use crate::scan_lifecycle::{ExecutionContext, Finish, captured};
     if max_pairs == 0
         || max_pairs > 65536
         || max_pair_bytes == 0
@@ -407,7 +408,7 @@ pub(crate) fn run_stored_stage_budgeted(
                     Finish::Incomplete
                 } else {
                     Finish::Complete
-                }
+                };
             }
             Err(()) => {
                 incomplete = true;

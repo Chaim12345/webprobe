@@ -11,6 +11,7 @@ use crate::{
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // Internal/InvalidRequest are constructed by the cfg(test) experimental engine
 pub(crate) enum AdmissionError {
     Busy,
     Internal,
@@ -305,15 +306,16 @@ impl Coordinator {
     }
     fn cleanup_outcome(&self, owner: &Arc<AttemptScope>, outcome: Finish) {
         let mut state = self.state.lock().unwrap();
-        if let Some(run) = state.as_mut() {
-            if Arc::ptr_eq(&run.owner, owner) && !run.active {
-                *owner.terminal.lock().unwrap() = Some(outcome);
-                *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
-                run.owner.cancel();
-                run.phase = Phase::Closed;
-                self.shared.stored.close_batch();
-                *state = None;
-            }
+        if let Some(run) = state.as_mut()
+            && Arc::ptr_eq(&run.owner, owner)
+            && !run.active
+        {
+            *owner.terminal.lock().unwrap() = Some(outcome);
+            *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
+            run.owner.cancel();
+            run.phase = Phase::Closed;
+            self.shared.stored.close_batch();
+            *state = None;
         }
     }
     fn make_finalizer(
@@ -390,27 +392,29 @@ impl Drop for Batch {
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         let mut state = self.coordinator.state.lock().unwrap();
-        if let Some(run) = state.as_mut() {
-            if Arc::ptr_eq(&run.owner, &self.owner) && run.phase == Phase::Open {
-                run.incomplete = true;
-                run.leases = run.leases.saturating_sub(1);
-                if run.leases == 0 {
-                    run.phase = Phase::Closing;
-                    if !run.active {
-                        drop(state);
-                        self.coordinator.cleanup(&self.owner);
-                    }
+        if let Some(run) = state.as_mut()
+            && Arc::ptr_eq(&run.owner, &self.owner)
+            && run.phase == Phase::Open
+        {
+            run.incomplete = true;
+            run.leases = run.leases.saturating_sub(1);
+            if run.leases == 0 {
+                run.phase = Phase::Closing;
+                if !run.active {
+                    drop(state);
+                    self.coordinator.cleanup(&self.owner);
                 }
             }
         }
     }
 }
 impl Audit {
+    #[allow(dead_code)] // used by the cfg(test) experimental engine adapter
     pub fn mark_incomplete(&self) {
-        if let Some(run) = self.coordinator.state.lock().unwrap().as_mut() {
-            if Arc::ptr_eq(&run.owner, &self.owner) {
-                run.incomplete = true;
-            }
+        if let Some(run) = self.coordinator.state.lock().unwrap().as_mut()
+            && Arc::ptr_eq(&run.owner, &self.owner)
+        {
+            run.incomplete = true;
         }
     }
     pub fn complete(mut self) -> Result<Handoff, AdmissionError> {
@@ -451,16 +455,16 @@ impl Drop for Audit {
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         let mut state = self.coordinator.state.lock().unwrap();
-        if let Some(run) = state.as_mut() {
-            if Arc::ptr_eq(&run.owner, &self.owner) {
-                run.active = false;
-                run.incomplete = true;
-                drop(self.guard.take());
-                if run.leases == 0 {
-                    run.phase = Phase::Closing;
-                    drop(state);
-                    self.coordinator.cleanup(&self.owner);
-                }
+        if let Some(run) = state.as_mut()
+            && Arc::ptr_eq(&run.owner, &self.owner)
+        {
+            run.active = false;
+            run.incomplete = true;
+            drop(self.guard.take());
+            if run.leases == 0 {
+                run.phase = Phase::Closing;
+                drop(state);
+                self.coordinator.cleanup(&self.owner);
             }
         }
     }
@@ -716,10 +720,11 @@ mod tests {
         let retired = b.owner.clone();
         assert_eq!(
             finalizer(b.finish().unwrap()).run(|p| {
-                assert!(p
-                    .ledger
-                    .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 100)])
-                    .is_err());
+                assert!(
+                    p.ledger
+                        .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 100)])
+                        .is_err()
+                );
                 Finish::Complete
             }),
             Finish::Incomplete
@@ -776,11 +781,12 @@ mod tests {
         let c = Coordinator::new(Shared::new(), limits()).unwrap();
         let b = c.open().unwrap();
         let f = finalizer(b.finish().unwrap());
-        assert!(f
-            .permit
-            .ledger
-            .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 999)])
-            .is_err());
+        assert!(
+            f.permit
+                .ledger
+                .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 999)])
+                .is_err()
+        );
         let calls = AtomicUsize::new(0);
         assert_eq!(
             f.run(|_| {

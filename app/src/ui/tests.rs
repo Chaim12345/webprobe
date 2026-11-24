@@ -309,9 +309,11 @@ mod repeater_fix_tests {
                 if mode == crate::repeater_ops::FollowMode::OnSite {
                     assert!(!tabs[0].request.contains("X-Parity-Probe"));
                 }
-                assert!(tabs[0]
-                    .request
-                    .contains(&format!("Host: 127.0.0.1:{pb}\r\n")));
+                assert!(
+                    tabs[0]
+                        .request
+                        .contains(&format!("Host: 127.0.0.1:{pb}\r\n"))
+                );
             }
             let clicked_request = sh.repeaters.lock().unwrap()[0].request.clone();
             repeater_send(&mut app);
@@ -322,10 +324,12 @@ mod repeater_fix_tests {
             assert!(!sh.rep.is_busy());
             assert_eq!(sh.repeaters.lock().unwrap()[0].request, clicked_request);
             origin_a.join().unwrap();
-            assert!(origin_b
-                .join()
-                .unwrap()
-                .starts_with("GET /b/next HTTP/1.1\r\n"));
+            assert!(
+                origin_b
+                    .join()
+                    .unwrap()
+                    .starts_with("GET /b/next HTTP/1.1\r\n")
+            );
         }
         run(crate::repeater_ops::FollowMode::InScope);
         run(crate::repeater_ops::FollowMode::OnSite);

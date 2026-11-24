@@ -247,8 +247,8 @@ fn chunked_snapshots_do_not_discard_rows_that_only_exceed_the_combined_cap() {
 #[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
 fn preview_cancellation_stops_a_looping_jvm_before_its_deadline() {
     use std::sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     };
     let (java, api) = runtime();
     let cancel = Arc::new(AtomicBool::new(false));
@@ -333,9 +333,10 @@ fn parent_loss_watchdog_stops_an_orphaned_looping_jvm() {
     let start = std::time::Instant::now();
     let pid = loop {
         if let Ok(text) = std::fs::read_to_string(&marker)
-            && let Ok(pid) = text.trim().parse::<u32>() {
-                break pid;
-            }
+            && let Ok(pid) = text.trim().parse::<u32>()
+        {
+            break pid;
+        }
         assert!(
             cleanup.child.try_wait().unwrap().is_none(),
             "surrogate parent exited before running Java"
@@ -358,7 +359,7 @@ fn parent_loss_watchdog_stops_an_orphaned_looping_jvm() {
                     .rsplit_once(") ")
                     .is_some_and(|(_, rest)| rest.starts_with('Z') || rest.starts_with('X')) =>
             {
-                break
+                break;
             }
             _ => {}
         }

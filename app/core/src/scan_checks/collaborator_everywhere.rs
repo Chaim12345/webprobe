@@ -87,14 +87,12 @@ pub(crate) fn everywhere_probes(
     // sent with the same Collaborator name as the TLS server name
     // (Ze2j.issueRequest: Zs31.ZG(payload), the payload being the bare
     // domain, Zs61.Zz default case).
-    if https {
-        if let Some(c) = collab("sni") {
-            out.push(EverywhereProbe {
-                request: format!("GET / HTTP/1.1\r\nHost: {c}\r\n{DEFAULTS}\r\n"),
-                sni: Some(c.clone()),
-                ids: vec![("sni", c, "SSL SNI value and the HTTP Host header")],
-            });
-        }
+    if https && let Some(c) = collab("sni") {
+        out.push(EverywhereProbe {
+            request: format!("GET / HTTP/1.1\r\nHost: {c}\r\n{DEFAULTS}\r\n"),
+            sni: Some(c.clone()),
+            ids: vec![("sni", c, "SSL SNI value and the HTTP Host header")],
+        });
     }
     // Zs61.ZH(NONE) -> Zcg4.ZZ: one request, six headers, an id each.
     type HeaderProbe = (
@@ -233,16 +231,17 @@ impl RequestCheck for CollaboratorEverywhere {
                     .oob
                     .register_delivered(token.clone(), None, issue, delivery);
                 if let Some(r) = resp.as_deref()
-                    && inband_hit(r, &token) {
-                        let mut i = oob_resource_load_issue(
-                            &cx.entry,
-                            &crate::oob::delivery_sentence("The payload", shown, label, ""),
-                            &probe.request,
-                            r,
-                        );
-                        i.path = "/".into();
-                        cx.report(vec![i]);
-                    }
+                    && inband_hit(r, &token)
+                {
+                    let mut i = oob_resource_load_issue(
+                        &cx.entry,
+                        &crate::oob::delivery_sentence("The payload", shown, label, ""),
+                        &probe.request,
+                        r,
+                    );
+                    i.path = "/".into();
+                    cx.report(vec![i]);
+                }
             }
         }
     }

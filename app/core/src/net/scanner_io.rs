@@ -68,7 +68,7 @@ impl Metered<'_> {
 }
 impl Read for Metered<'_> {
     fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
-        let result = (|| {
+        (|| {
             let left = self.check()?;
             self.stream.set_read_timeout(Some(left))?;
             let available = self
@@ -100,8 +100,7 @@ impl Read for Metered<'_> {
                 .map_err(|e| io_error(format!("ledger: {e:?}")))?;
             let n = self.stream.read(&mut out[..cap])?;
             Ok(n)
-        })();
-        result
+        })()
     }
 }
 impl ResponseRead for Metered<'_> {
@@ -658,34 +657,40 @@ mod tests {
         {
             let _marker = ExpectedScanner.install().unwrap();
             let _helper = tool_scope("Session");
-            assert!(send_raw(
-                &shared,
-                "127.0.0.1",
-                port,
-                b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
-            )
-            .resp
-            .is_none());
+            assert!(
+                send_raw(
+                    &shared,
+                    "127.0.0.1",
+                    port,
+                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
+                )
+                .resp
+                .is_none()
+            );
         }
         assert_eq!(
             finish(&shared, limits(), |p| {
-                assert!(send_tls_raw(
-                    &shared,
-                    "127.0.0.1",
-                    port,
-                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
-                )
-                .resp
-                .is_none());
+                assert!(
+                    send_tls_raw(
+                        &shared,
+                        "127.0.0.1",
+                        port,
+                        b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
+                    )
+                    .resp
+                    .is_none()
+                );
                 shared.upstream.lock().unwrap().kind = crate::upstream::UpstreamKind::Http;
-                assert!(send_raw(
-                    &shared,
-                    "127.0.0.1",
-                    port,
-                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
-                )
-                .resp
-                .is_none());
+                assert!(
+                    send_raw(
+                        &shared,
+                        "127.0.0.1",
+                        port,
+                        b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
+                    )
+                    .resp
+                    .is_none()
+                );
                 assert_eq!(p.ledger().used(Resource::ConnectionAttempt), 0);
                 assert_eq!(p.ledger().used(Resource::HttpAttempt), 0);
                 Finish::Incomplete
@@ -708,14 +713,16 @@ mod tests {
         shared.scan.paused.store(true, Ordering::SeqCst);
         assert_eq!(
             finish(&shared, config, |p| {
-                assert!(send_raw(
-                    &shared,
-                    "127.0.0.1",
-                    port,
-                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
-                )
-                .resp
-                .is_none());
+                assert!(
+                    send_raw(
+                        &shared,
+                        "127.0.0.1",
+                        port,
+                        b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
+                    )
+                    .resp
+                    .is_none()
+                );
                 assert_eq!(p.ledger().used(Resource::ConnectionAttempt), 0);
                 Finish::Incomplete
             }),
@@ -823,14 +830,16 @@ mod tests {
         config.outgoing = 1;
         assert_eq!(
             finish(&shared, config, |p| {
-                assert!(send_raw(
-                    &shared,
-                    "127.0.0.1",
-                    port,
-                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
-                )
-                .resp
-                .is_none());
+                assert!(
+                    send_raw(
+                        &shared,
+                        "127.0.0.1",
+                        port,
+                        b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"
+                    )
+                    .resp
+                    .is_none()
+                );
                 assert_eq!(p.ledger().used(Resource::HttpAttempt), 0);
                 assert_eq!(p.ledger().used(Resource::Outgoing), 0);
                 assert_eq!(p.ledger().used(Resource::ConnectionAttempt), 1);

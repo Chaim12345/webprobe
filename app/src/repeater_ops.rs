@@ -538,10 +538,11 @@ fn send_once(
         up.error = None;
     }
     if let Some(resp) = up.resp.as_mut()
-        && !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann) {
-            up.resp = None;
-            up.error = Some("response dropped by extension".into());
-        }
+        && !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann)
+    {
+        up.resp = None;
+        up.error = Some("response dropped by extension".into());
+    }
     up
 }
 
@@ -570,23 +571,24 @@ pub fn send_following(
                 followed,
             };
         };
-        if mode != FollowMode::Never && !cancelled()
+        if mode != FollowMode::Never
+            && !cancelled()
             && let Some((next, next_req)) =
                 next_redirect(&request, &current, &resp, process_cookies)
-            {
-                let path = next_req
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap_or("/")
-                    .to_string();
-                let in_scope = burp_in_scope(shared, &format!("{}{}", next.origin(), path));
-                if should_follow(mode, followed, service, &next, in_scope) {
-                    followed += 1;
-                    request = next_req;
-                    current = next;
-                    continue;
-                }
+        {
+            let path = next_req
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("/")
+                .to_string();
+            let in_scope = burp_in_scope(shared, &format!("{}{}", next.origin(), path));
+            if should_follow(mode, followed, service, &next, in_scope) {
+                followed += 1;
+                request = next_req;
+                current = next;
+                continue;
             }
+        }
         return FollowResult {
             request,
             service: current,
@@ -1754,20 +1756,21 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                 .position(|r| p.x >= r.left() && p.x <= r.right())
         });
         if let (Some(t), Some(p)) = (target, pointer)
-            && t != from {
-                let r = rects[t];
-                let x = if t > from {
-                    r.right() + 1.0
-                } else {
-                    r.left() - 1.0
-                };
-                let _ = p;
-                ui.painter().vline(
-                    x,
-                    r.y_range(),
-                    egui::Stroke::new(2.0_f32, c(theme::ORANGE_1)),
-                );
-            }
+            && t != from
+        {
+            let r = rects[t];
+            let x = if t > from {
+                r.right() + 1.0
+            } else {
+                r.left() - 1.0
+            };
+            let _ = p;
+            ui.painter().vline(
+                x,
+                r.y_range(),
+                egui::Stroke::new(2.0_f32, c(theme::ORANGE_1)),
+            );
+        }
         if ui.input(|i| i.pointer.any_released()) {
             app.rops.drag_from = None;
             if let Some(t) = target.filter(|t| *t != from) {
@@ -1903,7 +1906,7 @@ pub fn tab_entry(app: &crate::App) -> Option<net::HistEntry> {
 /// Run a request-menu action that needs no ui.rs helper. Returns false for
 /// the ones ui.rs handles itself (active scan, Intruder, Repeater, follow).
 pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction) -> bool {
-    use crate::feedback::{toast, Level};
+    use crate::feedback::{Level, toast};
     use crate::ui::Tab;
     let Some((req, svc, resp)) = current_tab(app).or_else(|| {
         // An empty tab still takes "Paste URL as request".
@@ -1964,7 +1967,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         RepAction::ChangeBodyEncoding => {
             // Burp-style boundary: WebKit prefix and 16 random characters.
             let boundary = {
-                use rand::{distributions::Alphanumeric, Rng};
+                use rand::{Rng, distributions::Alphanumeric};
                 let tail: String = rand::thread_rng()
                     .sample_iter(&Alphanumeric)
                     .take(16)
@@ -3210,7 +3213,9 @@ mod tests {
                 let resp = if first.contains(" /start ") {
                     "HTTP/1.1 302 Found\r\nLocation: step2\r\nSet-Cookie: sid=abc\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
                 } else if first.contains(" /step2 ") {
-                    format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    format!(
+                        "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
                 } else {
                     "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone"
                         .to_string()
@@ -3220,7 +3225,9 @@ mod tests {
         });
         let shared = net::Shared::new();
         let service = svc("127.0.0.1", port, false);
-        let req = format!("POST /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nbody");
+        let req = format!(
+            "POST /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nbody"
+        );
         let never = send_following(
             &shared,
             &req,
@@ -3369,7 +3376,10 @@ mod tests {
     #[test]
     fn change_method_get_to_post_moves_query_to_body() {
         let r = toggle_request_method("GET /s?q=a%20b&n=1 HTTP/1.1\r\nHost: h\r\n\r\n");
-        assert_eq!(r, "POST /s HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 11\r\n\r\nq=a%20b&n=1");
+        assert_eq!(
+            r,
+            "POST /s HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 11\r\n\r\nq=a%20b&n=1"
+        );
         let empty = toggle_request_method("GET / HTTP/1.1\r\nHost: h\r\n\r\n");
         assert!(
             empty.starts_with("POST / HTTP/1.1")
@@ -3380,7 +3390,9 @@ mod tests {
 
     #[test]
     fn change_method_post_to_get_moves_body_to_query() {
-        let r = toggle_request_method("POST /s?keep=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 9\r\n\r\na=1&b=x y");
+        let r = toggle_request_method(
+            "POST /s?keep=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 9\r\n\r\na=1&b=x y",
+        );
         assert_eq!(r, "GET /s?keep=1&a=1&b=x+y HTTP/1.1\r\nHost: h\r\n\r\n");
         // Round trip is stable.
         let back = toggle_request_method(&toggle_request_method(
@@ -3394,7 +3406,9 @@ mod tests {
             "GET /u?f=a%26b HTTP/1.1\r\nHost: h\r\n\r\n"
         );
         // A JSON body has no parameters: it is dropped with its headers.
-        let j = toggle_request_method("PUT /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}");
+        let j = toggle_request_method(
+            "PUT /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",
+        );
         assert_eq!(j, "GET /j HTTP/1.1\r\nHost: h\r\n\r\n");
     }
 

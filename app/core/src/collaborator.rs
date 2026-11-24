@@ -1046,11 +1046,12 @@ fn parse_http_request(buf: &[u8]) -> Result<ParsedHttpRequest, HttpParseError> {
                 HttpParseError::Malformed(format!("invalid Content-Length value: {value}"))
             })?;
             if let Some(previous) = content_length
-                && previous != length {
-                    return Err(HttpParseError::Malformed(
-                        "conflicting Content-Length headers".to_string(),
-                    ));
-                }
+                && previous != length
+            {
+                return Err(HttpParseError::Malformed(
+                    "conflicting Content-Length headers".to_string(),
+                ));
+            }
             content_length = Some(length);
         }
     }
@@ -1874,6 +1875,9 @@ mod tests {
                 raw_query: Vec::new(),
             }),
         };
-        assert_eq!(describe(&i), "The Collaborator server received a DNS lookup for the payload abc123. The request was received from IP address 10.0.0.5 at 1970-Jan-01 00:00:00.000 UTC.");
+        assert_eq!(
+            describe(&i),
+            "The Collaborator server received a DNS lookup for the payload abc123. The request was received from IP address 10.0.0.5 at 1970-Jan-01 00:00:00.000 UTC."
+        );
     }
 }

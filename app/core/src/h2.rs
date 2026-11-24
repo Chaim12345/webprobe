@@ -677,12 +677,13 @@ impl<S: Read + Write> Conn<S> {
             }
             let f = read_frame(&mut self.io)
                 .map_err(|e| StreamError::fatal(format!("h2 read: {e}")))?;
-            if f.ty == FRAME_HEADERS || f.ty == FRAME_DATA {
-                if let Some(s) = self.streams.get(&f.stream) {
-                    if !s.got_headers && !s.done && !arrival.contains(&f.stream) {
-                        arrival.push(f.stream);
-                    }
-                }
+            if (f.ty == FRAME_HEADERS || f.ty == FRAME_DATA)
+                && let Some(s) = self.streams.get(&f.stream)
+                && !s.got_headers
+                && !s.done
+                && !arrival.contains(&f.stream)
+            {
+                arrival.push(f.stream);
             }
             // Dispatch with the frame's own stream active so a RST_STREAM
             // on it comes back as that stream's Reset error; connection
@@ -910,11 +911,12 @@ impl<S: Read + Write> Conn<S> {
         sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
     ) -> Result<(), StreamError> {
         if let Some(cs) = self.cont_stream
-            && !(f.ty == FRAME_CONTINUATION && f.stream == cs) {
-                return Err(StreamError::fatal(
-                    "h2: header block interrupted before CONTINUATION",
-                ));
-            }
+            && !(f.ty == FRAME_CONTINUATION && f.stream == cs)
+        {
+            return Err(StreamError::fatal(
+                "h2: header block interrupted before CONTINUATION",
+            ));
+        }
         match f.ty {
             FRAME_SETTINGS
                 if f.flags & FLAG_ACK == 0 => {
@@ -1399,10 +1401,9 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
     let chunked = crate::util::get_header(&parts.headers, "Transfer-Encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    if chunked
-        && let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
-            body = decoded;
-        }
+    if chunked && let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
+        body = decoded;
+    }
     Some(H2Request {
         method: parts.method.clone(),
         scheme: scheme.to_string(),

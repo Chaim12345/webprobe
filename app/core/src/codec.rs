@@ -317,9 +317,10 @@ fn gunzip(data: &[u8]) -> Option<Vec<u8>> {
 fn inflate(data: &[u8]) -> Option<Vec<u8>> {
     // Some servers send raw deflate without the zlib wrapper; try both.
     if let Some(out) = read_inflated(flate2::read::ZlibDecoder::new(data))
-        && !out.is_empty() {
-            return Some(out);
-        }
+        && !out.is_empty()
+    {
+        return Some(out);
+    }
     read_inflated(flate2::read::DeflateDecoder::new(data))
 }
 
@@ -491,7 +492,7 @@ pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::Respo
             loop {
                 match scan_chunked(&buffer[body_start..], &mut cur, |_| {}) {
                     Chunked::Complete(consumed) => {
-                        return Ok((buffer.drain(..body_start + consumed).collect(), true))
+                        return Ok((buffer.drain(..body_start + consumed).collect(), true));
                     }
                     Chunked::Malformed => return Ok((std::mem::take(buffer), false)),
                     Chunked::Partial => {}
@@ -716,15 +717,16 @@ mod tests {
             response_incompleteness(b"HTTP/1.1 204 No Content\r\n\r\n", "GET"),
             None
         );
-        assert!(response_incompleteness(
-            b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc",
-            "GET"
-        )
-        .unwrap()
-        .contains("declared 10, received 3"));
-        assert!(response_incompleteness(b"", "GET")
-            .unwrap()
-            .starts_with("No final response"));
+        assert!(
+            response_incompleteness(b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc", "GET")
+                .unwrap()
+                .contains("declared 10, received 3")
+        );
+        assert!(
+            response_incompleteness(b"", "GET")
+                .unwrap()
+                .starts_with("No final response")
+        );
         assert!(
             response_incompleteness(b"HTTP/1.1 200 OK\r\nContent-Len", "GET")
                 .unwrap()

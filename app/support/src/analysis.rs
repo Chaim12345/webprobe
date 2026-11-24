@@ -320,9 +320,10 @@ fn numeric_stats(tokens: &[&str]) -> Option<NumericStats> {
     let mut values = Vec::new();
     for token in tokens {
         if let Ok(value) = token.trim().parse::<f64>()
-            && value.is_finite() {
-                values.push(value);
-            }
+            && value.is_finite()
+        {
+            values.push(value);
+        }
     }
     let count = values.len();
     if count == 0 {

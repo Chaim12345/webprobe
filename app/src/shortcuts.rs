@@ -962,9 +962,10 @@ pub fn palette_ui(
             palette.sel = palette.sel.saturating_sub(1);
         }
         if i.consume_key(Modifiers::NONE, Key::Enter)
-            && let Some(&a) = rows.get(palette.sel) {
-                chosen = Some(a);
-            }
+            && let Some(&a) = rows.get(palette.sel)
+        {
+            chosen = Some(a);
+        }
     });
 
     egui::Area::new(egui::Id::unique("command_palette"))
@@ -1255,9 +1256,10 @@ mod tests {
 
         // The other direction: one action cannot hold two chords.
         let other = index_of("switch_to_proxy").unwrap();
-        assert!(s
-            .set(intruder, Some(Chord::parse("Ctrl+P").unwrap()))
-            .is_ok());
+        assert!(
+            s.set(intruder, Some(Chord::parse("Ctrl+P").unwrap()))
+                .is_ok()
+        );
         assert_eq!(s.chord_for(intruder).unwrap().format(), "Ctrl+P");
         assert!(ACTIONS[other].default.is_some());
     }
@@ -1318,12 +1320,16 @@ mod tests {
         assert!(!all.contains(&index_of("switch_to_logger").unwrap()));
 
         let filtered = s.palette_rows("repeater");
-        assert!(filtered
-            .iter()
-            .any(|&i| ACTIONS[i].id == "send_to_repeater"));
-        assert!(filtered
-            .iter()
-            .any(|&i| ACTIONS[i].id == "switch_to_repeater"));
+        assert!(
+            filtered
+                .iter()
+                .any(|&i| ACTIONS[i].id == "send_to_repeater")
+        );
+        assert!(
+            filtered
+                .iter()
+                .any(|&i| ACTIONS[i].id == "switch_to_repeater")
+        );
 
         s.note_used(index_of("switch_to_proxy").unwrap());
         assert_eq!(s.palette_rows("")[0], index_of("switch_to_proxy").unwrap());

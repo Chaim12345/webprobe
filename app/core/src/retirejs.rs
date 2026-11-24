@@ -227,9 +227,11 @@ fn jquery_tail(rest: &str) -> bool {
         }
         if gap >= 50
             && let Some(t) = rest[at + c.len_utf8()..].strip_prefix(".fn=")
-                && t.starts_with(c) && t[c.len_utf8()..].starts_with(".prototype={jquery:") {
-                    return true;
-                }
+            && t.starts_with(c)
+            && t[c.len_utf8()..].starts_with(".prototype={jquery:")
+        {
+            return true;
+        }
     }
     false
 }
@@ -304,9 +306,10 @@ fn by_name(repo: &Repository, s: &str, which: fn(&Library) -> &Vec<Extractor>) -
     let mut out = Vec::new();
     for (i, lib) in repo.libs.iter().enumerate() {
         if let Some(version) = which(lib).iter().find_map(|r| version_of(r, s))
-            && !vulnerable(lib, &version).is_empty() {
-                out.push(Hit { lib: i, version });
-            }
+            && !vulnerable(lib, &version).is_empty()
+        {
+            out.push(Hit { lib: i, version });
+        }
     }
     out
 }
@@ -332,9 +335,10 @@ fn by_content(repo: &Repository, body: &str) -> Vec<Hit> {
     let mut out = Vec::new();
     for (i, lib) in repo.libs.iter().enumerate() {
         if let Some(version) = lib.filecontent.iter().find_map(|r| version_of(r, body))
-            && !vulnerable(lib, &version).is_empty() {
-                out.push(Hit { lib: i, version });
-            }
+            && !vulnerable(lib, &version).is_empty()
+        {
+            out.push(Hit { lib: i, version });
+        }
     }
     out
 }
@@ -427,9 +431,10 @@ fn script_srcs(text: &str, low: &str) -> Vec<String> {
         let s = i + o;
         let e = low[s..].find('>').map(|x| s + x + 1).unwrap_or(low.len());
         if let Some(src) = super::passive_checks::attr(&low[s..e], &text[s..e], "src")
-            && !out.contains(&src) {
-                out.push(src);
-            }
+            && !out.contains(&src)
+        {
+            out.push(src);
+        }
         i = e;
     }
     out
@@ -451,9 +456,10 @@ fn scan(repo: &Repository, cx: &PassiveCtx) -> Vec<Hit> {
     } else if cx.e.path.ends_with(".html") || cx.e.path.ends_with(".htm") || cx.html {
         for src in script_srcs(&cx.text, &cx.low) {
             if let Some(h) = by_url(repo, &src).into_iter().next()
-                && !hits.contains(&h) {
-                    hits.push(h);
-                }
+                && !hits.contains(&h)
+            {
+                hits.push(h);
+            }
         }
     }
     hits.dedup();
@@ -517,13 +523,51 @@ mod tests {
         let jq = Extractor::compile(JQUERY_BACKREF).unwrap();
         let pad = "x".repeat(60);
         let cases = [
-            (format!("/*! jQuery v1.8.3 */(function(e,t){{var n=\"1.8.3\",{pad}e.fn=e.prototype={{jquery:n}}"), Some("1.8.3")),
-            (format!("var n=\"1.8.3\",{pad}x.fn=y.prototype={{jquery:n}}"), None),
-            (format!("var n=\"1.8.3\",{}e.fn=e.prototype={{jquery:n}}", "x".repeat(10)), None),
-            (format!("var n=\"1.8.3\",{}e.fn=e.prototype={{jquery:n}}", "x".repeat(400)), None),
-            (format!("var n=\"1.8.3\",{}\n{}e.fn=e.prototype={{jquery:n}}", "x".repeat(30), "x".repeat(30)), None),
-            (format!("a=\"9.9\",b q=\"2.1.4\",{pad}x.fn=y.prototype={{jquery:1}};{pad}Q.fn=Q.prototype={{jquery:2}}"), Some("9.9")),
-            (format!("var n=\"3.6.0\",{}\re.fn=e.prototype={{jquery:n}}", "x".repeat(55)), None),
+            (
+                format!(
+                    "/*! jQuery v1.8.3 */(function(e,t){{var n=\"1.8.3\",{pad}e.fn=e.prototype={{jquery:n}}"
+                ),
+                Some("1.8.3"),
+            ),
+            (
+                format!("var n=\"1.8.3\",{pad}x.fn=y.prototype={{jquery:n}}"),
+                None,
+            ),
+            (
+                format!(
+                    "var n=\"1.8.3\",{}e.fn=e.prototype={{jquery:n}}",
+                    "x".repeat(10)
+                ),
+                None,
+            ),
+            (
+                format!(
+                    "var n=\"1.8.3\",{}e.fn=e.prototype={{jquery:n}}",
+                    "x".repeat(400)
+                ),
+                None,
+            ),
+            (
+                format!(
+                    "var n=\"1.8.3\",{}\n{}e.fn=e.prototype={{jquery:n}}",
+                    "x".repeat(30),
+                    "x".repeat(30)
+                ),
+                None,
+            ),
+            (
+                format!(
+                    "a=\"9.9\",b q=\"2.1.4\",{pad}x.fn=y.prototype={{jquery:1}};{pad}Q.fn=Q.prototype={{jquery:2}}"
+                ),
+                Some("9.9"),
+            ),
+            (
+                format!(
+                    "var n=\"3.6.0\",{}\re.fn=e.prototype={{jquery:n}}",
+                    "x".repeat(55)
+                ),
+                None,
+            ),
         ];
         for (s, want) in &cases {
             assert_eq!(jq.version(s).as_deref(), *want, "{s}");

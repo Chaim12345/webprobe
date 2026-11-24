@@ -305,8 +305,9 @@ mod tests {
             (1..=N).collect::<Vec<_>>(),
             "every stream has its arrival number"
         );
-        assert!(got
-            .iter()
-            .all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == N)));
+        assert!(
+            got.iter()
+                .all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == N))
+        );
     }
 }

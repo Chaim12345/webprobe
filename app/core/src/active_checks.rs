@@ -292,9 +292,10 @@ pub(crate) fn angular_scopes(body: &str) -> ScopeSpans {
         if closing {
             for (stack, out) in [(&mut app, &mut scopes), (&mut nb, &mut nonbind)] {
                 if let Some(start) = stack.pop()
-                    && stack.is_empty() {
-                        out.push((start, lt));
-                    }
+                    && stack.is_empty()
+                {
+                    out.push((start, lt));
+                }
             }
             continue;
         }
@@ -494,7 +495,9 @@ pub(crate) fn xml_oob_xsd_payload(tag: &str, host: &str) -> String {
 
 /// burp.Zbiw.ZK wrapped by Zsdg.Zu: an XInclude of the Collaborator host.
 pub(crate) fn xml_oob_xinclude_payload(tag: &str, host: &str) -> String {
-    format!("<{tag} xmlns:xi=\"http://www.w3.org/2001/XInclude\"><xi:include href=\"http://{host}/foo\"/></{tag}>")
+    format!(
+        "<{tag} xmlns:xi=\"http://www.w3.org/2001/XInclude\"><xi:include href=\"http://{host}/foo\"/></{tag}>"
+    )
 }
 
 /// burp.Zp7s.Zw, Collaborator half: send the schemaLocation payload, then
@@ -581,7 +584,11 @@ mod tests {
                 ("cmd0", "nslookup -q=cname cmd0.oob.invalid.&", false),
                 ("cmd1", "|nslookup -q=cname cmd1.oob.invalid.&", true),
                 ("cmd2", "'\"`0&nslookup -q=cname cmd2.oob.invalid.&`'", true),
-                ("cmd3", "&nslookup -q=cname cmd3.oob.invalid.&'\\\"`0&nslookup -q=cname cmd3.oob.invalid.&`'", true),
+                (
+                    "cmd3",
+                    "&nslookup -q=cname cmd3.oob.invalid.&'\\\"`0&nslookup -q=cname cmd3.oob.invalid.&`'",
+                    true
+                ),
             ]
         );
         let fast = os_cmd_payloads(ScanSpeed::Fast, d);
@@ -794,7 +801,9 @@ mod tests {
     #[test]
     fn csti_check_follows_zrmh() {
         let page = |v: &str| {
-            ok(&format!("<html ng-app><body><p>Hello {v}</p><script src=\"/js/angular.min.js\"></script></body></html>"))
+            ok(&format!(
+                "<html ng-app><body><p>Hello {v}</p><script src=\"/js/angular.min.js\"></script></body></html>"
+            ))
         };
         let hit =
             run_csti_check("bob", page, |_| None).expect("unencoded expression inside ng-app");

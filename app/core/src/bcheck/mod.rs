@@ -591,10 +591,13 @@ fn parse_hole(
                 let s = c.to_string();
                 if let Some(last) = depth_toks.last_mut()
                     && let Tok::Ident(prev) = &mut last.tok
-                        && !prev.ends_with('.') && prev != "\\" && is_identish(prev) {
-                            prev.push_str(&s);
-                            continue;
-                        }
+                    && !prev.ends_with('.')
+                    && prev != "\\"
+                    && is_identish(prev)
+                {
+                    prev.push_str(&s);
+                    continue;
+                }
                 depth_toks.push(Lexed {
                     tok: Tok::Ident(s),
                     line,
@@ -605,7 +608,7 @@ fn parse_hole(
                 return Err(BcheckError {
                     line,
                     message: format!("unexpected character `{other}` in hole"),
-                })
+                });
             }
         }
     }
@@ -689,7 +692,7 @@ impl<'a> HoleParser<'a> {
                                         _ => {
                                             return Err(
                                                 self.err("expected `,` or `)` in function args")
-                                            )
+                                            );
                                         }
                                     }
                                 }
@@ -944,9 +947,10 @@ impl Parser {
                         break;
                     }
                     if let Some(Tok::Ident(s)) = self.peek()
-                        && is_block_keyword(s) {
-                            break;
-                        }
+                        && is_block_keyword(s)
+                    {
+                        break;
+                    }
                     if !matches!(
                         self.peek(),
                         Some(Tok::Str { .. }) | Some(Tok::LBrace) | Some(Tok::Ident(_))
@@ -1018,7 +1022,7 @@ impl Parser {
                     return Err(BcheckError {
                         line: start_line,
                         message: "unterminated `{`".into(),
-                    })
+                    });
                 }
             }
         }
@@ -1128,7 +1132,7 @@ impl Parser {
                 other => {
                     return self.err(format!(
                         "expected a request name after `called`, got {other:?}"
-                    ))
+                    ));
                 }
             });
         }
@@ -1428,7 +1432,7 @@ impl Parser {
                         other => {
                             return self.err(format!(
                                 "expected `if` or `then` after `else`, got {other:?}"
-                            ))
+                            ));
                         }
                     }
                 }
@@ -1537,7 +1541,7 @@ impl Parser {
                     other => {
                         return self.err(format!(
                             "expected regex string after `matches`, got {other:?}"
-                        ))
+                        ));
                     }
                 };
                 Ok(Condition::Matches(lhs, re))
@@ -1707,19 +1711,21 @@ pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
                 Stmt::ReportIssue { fields, .. } => {
                     // bare and single-literal quoted spellings both checked
                     if let Some(sev) = literal_text(&fields.severity)
-                        && !SEVERITIES.contains(&sev.as_str()) {
-                            errs.push(BcheckError {
-                                line: fields.line,
-                                message: format!("bad severity `{sev}`"),
-                            });
-                        }
+                        && !SEVERITIES.contains(&sev.as_str())
+                    {
+                        errs.push(BcheckError {
+                            line: fields.line,
+                            message: format!("bad severity `{sev}`"),
+                        });
+                    }
                     if let Some(cf) = literal_text(&fields.confidence)
-                        && !CONFIDENCES.contains(&cf.as_str()) {
-                            errs.push(BcheckError {
-                                line: fields.line,
-                                message: format!("bad confidence `{cf}`"),
-                            });
-                        }
+                        && !CONFIDENCES.contains(&cf.as_str())
+                    {
+                        errs.push(BcheckError {
+                            line: fields.line,
+                            message: format!("bad confidence `{cf}`"),
+                        });
+                    }
                 }
                 Stmt::If { arms } => {
                     for (_, body) in arms {
@@ -1730,11 +1736,7 @@ pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
         }
     }
     check_stmts(&d.body, &d.given, &mut errs);
-    if errs.is_empty() {
-        Ok(())
-    } else {
-        Err(errs)
-    }
+    if errs.is_empty() { Ok(()) } else { Err(errs) }
 }
 
 // ---------------------------------------------------------------------------
@@ -1848,10 +1850,11 @@ mod tests {
         let Expr::Str(tpl) = &args[2] else {
             panic!("expected string arg")
         };
-        assert!(tpl
-            .parts
-            .iter()
-            .any(|p| matches!(p, Part::Hole(Expr::Var(v)) if v == "extension")));
+        assert!(
+            tpl.parts
+                .iter()
+                .any(|p| matches!(p, Part::Hole(Expr::Var(v)) if v == "extension"))
+        );
         // `report issue and continue` at the innermost level
         let Stmt::If { arms: a2 } = &arms[0].1[1] else {
             panic!("expected inner if")
@@ -2125,10 +2128,12 @@ mod tests {
         // Exercise every recursive entry, using far more nesting than a
         // normal fixture without risking an unbounded parser stack.
         let hole = format!("{}null{}", "f(".repeat(10_000), ")".repeat(10_000));
-        assert!(parse_interpol(&format!("{{{hole}}}"), true, 1)
-            .unwrap_err()
-            .message
-            .contains("nesting"));
+        assert!(
+            parse_interpol(&format!("{{{hole}}}"), true, 1)
+                .unwrap_err()
+                .message
+                .contains("nesting")
+        );
         let parser = |body: String| {
             let source =
                 format!("metadata:\n language: v2-beta\n name: \"limit\"\ngiven host then\n{body}");
@@ -2139,27 +2144,33 @@ mod tests {
             "(".repeat(10_000),
             ")".repeat(10_000)
         );
-        assert!(parser(parens)
-            .unwrap_err()
-            .iter()
-            .any(|e| e.message.contains("nesting")));
+        assert!(
+            parser(parens)
+                .unwrap_err()
+                .iter()
+                .any(|e| e.message.contains("nesting"))
+        );
         let blocks = format!(
             "{}{}",
             "if any interactions then\n".repeat(10_000),
             "end if\n".repeat(10_000)
         );
-        assert!(parser(blocks)
-            .unwrap_err()
-            .iter()
-            .any(|e| e.message.contains("nesting")));
+        assert!(
+            parser(blocks)
+                .unwrap_err()
+                .iter()
+                .any(|e| e.message.contains("nesting"))
+        );
         let flat = format!(
             "if {}any interactions then\nend if",
             "any interactions or ".repeat(10_000)
         );
-        assert!(parser(flat)
-            .unwrap_err()
-            .iter()
-            .any(|e| e.message.contains("complexity")));
+        assert!(
+            parser(flat)
+                .unwrap_err()
+                .iter()
+                .any(|e| e.message.contains("complexity"))
+        );
         assert!(parser("if any interactions then\nend if".into()).is_ok());
         assert!(parse_interpol("{random_str(10)}", true, 1).is_ok());
     }
@@ -2178,7 +2189,9 @@ mod tests {
 
     #[test]
     fn source_over_the_byte_cap_is_refused() {
-        let mut src = String::from("metadata:\n language: v2-beta\n name: \"t\"\ngiven response then\n report issue:\n  severity: info\n  confidence: certain\n");
+        let mut src = String::from(
+            "metadata:\n language: v2-beta\n name: \"t\"\ngiven response then\n report issue:\n  severity: info\n  confidence: certain\n",
+        );
         assert!(parse(&src).is_ok(), "a normal definition parses");
         // Pad past the cap with comment text: refused before lexing.
         while src.len() <= MAX_SOURCE_BYTES {
