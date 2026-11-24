@@ -1,5 +1,5 @@
 {
-  "covered": 155,
+  "covered": 158,
   "not_covered": {
     "ASP.NET ViewState without MAC enabled": {
       "note": "",
@@ -41,23 +41,11 @@
       "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
       "status": "todo"
     },
-    "External service interaction (HTTP)": {
-      "note": "",
-      "status": "todo"
-    },
-    "External service interaction (SMTP)": {
-      "note": "",
-      "status": "todo"
-    },
     "HTTP request smuggling": {
       "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
       "status": "excluded"
     },
     "Hidden HTTP 2": {
-      "note": "",
-      "status": "todo"
-    },
-    "Json Web Key Set disclosed": {
       "note": "",
       "status": "todo"
     },

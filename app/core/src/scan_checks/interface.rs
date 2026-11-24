@@ -135,6 +135,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &HttpPutEnabled,
     &AspNetTracing,
     &AspNetDebugging,
+    &JwkSetDisclosed,
     &GraphqlIntrospection,
     &GraphqlSuggestions,
     &GraphqlContentType,

@@ -25,6 +25,18 @@ mc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mc)
 
 REGISTRIES = {os.path.join("scan_library.rs")}
+# Types whose name is assembled at run time. Each is covered while every
+# listed fragment is still in the named file (non-test code).
+DYNAMIC = {
+    "External service interaction (HTTP)": [
+        ("oob.rs", 'format!("External service interaction ({kind})")'),
+        ("collaborator.rs", 'Self::Http => "HTTP"'),
+    ],
+    "External service interaction (SMTP)": [
+        ("oob.rs", 'format!("External service interaction ({kind})")'),
+        ("collaborator.rs", 'Self::Smtp => "SMTP"'),
+    ],
+}
 STATUSES = ("todo", "decision", "excluded")
 
 
@@ -32,15 +44,23 @@ def measure(app):
     core = os.path.join(app, "core", "src")
     with open(os.path.join(core, "kb_issue_names.txt"), encoding="utf-8") as fh:
         names = [line.strip() for line in fh if line.strip()]
-    texts = []
+    texts = {}
     for dirpath, _, files in os.walk(core):
         for f in sorted(files):
             path = os.path.join(dirpath, f)
-            if f.endswith(".rs") and not mc.is_test_file(f) and os.path.relpath(path, core) not in REGISTRIES:
+            rel = os.path.relpath(path, core)
+            if f.endswith(".rs") and not mc.is_test_file(f) and rel not in REGISTRIES:
                 with open(path, encoding="utf-8") as fh:
-                    texts.append(mc.strip_tests(fh.read()))
-    blob = "\n".join(texts)
-    missing = [n for n in names if '"' + n.replace('"', '\\"') + '"' not in blob]
+                    texts[rel] = mc.strip_tests(fh.read())
+    blob = "\n".join(texts.values())
+
+    def covered(name):
+        if '"' + name.replace('"', '\\"') + '"' in blob:
+            return True
+        parts = DYNAMIC.get(name)
+        return bool(parts) and all(fragment in texts.get(rel, "") for rel, fragment in parts)
+
+    missing = [n for n in names if not covered(n)]
     return names, missing
 
 
