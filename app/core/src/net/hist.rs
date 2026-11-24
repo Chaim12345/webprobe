@@ -72,7 +72,10 @@ pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
     (params, extension, title, cookies)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 pub fn record(
     shared: &Shared,
     req: &[u8],
@@ -105,7 +108,10 @@ pub fn record(
 /// Record one proxied exchange whose response is already in its history
 /// form. `scan`: run the passive checks (not for a streaming response whose
 /// body was not stored).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 pub fn record_entry(
     shared: &Shared,
     req: &[u8],
@@ -136,7 +142,10 @@ pub fn record_entry(
 /// Like [`record_entry`] but stores the request bytes exactly as captured
 /// (no chunked reassembly, no Content-Length rewrite). Used for requests
 /// rejected as ambiguous, whose original framing is the evidence.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 pub fn record_entry_verbatim(
     shared: &Shared,
     req: &[u8],

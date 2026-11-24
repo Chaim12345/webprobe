@@ -60,7 +60,10 @@ pub(crate) struct ScanCtx {
 
 impl ScanCtx {
     /// Fetch the baseline and assemble the context. Runs on the scan thread.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+    )]
     pub(crate) fn start(
         shared: Arc<Shared>,
         entry: HistEntry,

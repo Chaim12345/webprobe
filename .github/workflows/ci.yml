@@ -9,6 +9,8 @@ on:
 # These overrides make the repo build on a fresh runner. (An empty
 # RUSTFLAGS replaces the linker flags from that file.)
 env:
+  # CI builds each commit once: incremental state only adds to the cache.
+  CARGO_INCREMENTAL: "0"
   CARGO_BUILD_RUSTC: rustc
   CARGO_BUILD_RUSTC_WRAPPER: ""
   RUSTFLAGS: ""
@@ -22,8 +24,19 @@ jobs:
   core:
     runs-on: ubuntu-latest
     strategy:
+      # Each toolchain reports on its own: a failure on one does not cancel
+      # the other.
+      fail-fast: false
       matrix:
         toolchain: ["1.95.0", stable]
+        include:
+          # #[expect] is checked on stable only. An older compiler flags
+          # less dead code, so on the MSRV toolchain an expectation that
+          # stable fulfils is reported as unfulfilled.
+          - toolchain: "1.95.0"
+            clippy_extra: "-A unfulfilled_lint_expectations"
+          - toolchain: stable
+            clippy_extra: ""
     steps:
       - uses: actions/checkout@v4
       - run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal --component clippy && rustup default ${{ matrix.toolchain }}
@@ -37,11 +50,11 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-${{ matrix.toolchain }}-
       # webprobe-core has no UI dependency, so no system libraries are needed.
       - run: cargo check --workspace --all-targets --all-features --locked
-      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings ${{ matrix.clippy_extra }}
       - run: cargo check -p webprobe-core --locked
       - run: cargo test -p webprobe-core --locked --no-run
       # Zero-warning policy (issue #33): clippy is blocking.
-      - run: cargo clippy -p webprobe-core --locked --all-targets -- -D warnings
+      - run: cargo clippy -p webprobe-core --locked --all-targets -- -D warnings ${{ matrix.clippy_extra }}
       # These tests must run in a real JVM, not pass by skipping prerequisites.
       - uses: actions/setup-java@v4
         with:

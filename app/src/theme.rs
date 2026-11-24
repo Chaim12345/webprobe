@@ -197,7 +197,7 @@ pub fn method_color(m: &str) -> Color32 {
     }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "no caller at present")]
 pub fn status_color(s: &str) -> Color32 {
     // Burp's history table prints status codes in body ink in the light theme
     // (live 52685 window); the dark palette keeps its tinted codes.

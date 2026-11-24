@@ -17,7 +17,6 @@
 
 // The cache submodule sees the scan module the way it did as an inline
 // child of scan_checks.rs: through this glob.
-#[allow(unused_imports)]
 pub(crate) use super::*;
 
 #[path = "cache_checks.rs"]

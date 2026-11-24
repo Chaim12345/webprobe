@@ -190,7 +190,10 @@ pub fn data_table<R, F>(
 /// their filter UI use this.
 // The argument list is the egui surface being drawn on; bundling it would
 // only move the noise to the call sites.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 pub fn table_body<R, F>(
     ui: &mut Ui,
     id: &str,
@@ -239,7 +242,10 @@ pub fn table_body<R, F>(
     });
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 fn table_body_inner<R, F>(
     ui: &mut Ui,
     id: &str,

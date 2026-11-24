@@ -11,7 +11,10 @@ use crate::{
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Internal/InvalidRequest are constructed by the cfg(test) experimental engine
+#[expect(
+    dead_code,
+    reason = "Internal/InvalidRequest are constructed by the cfg(test) experimental engine"
+)]
 pub(crate) enum AdmissionError {
     Busy,
     Internal,
@@ -409,7 +412,10 @@ impl Drop for Batch {
     }
 }
 impl Audit {
-    #[allow(dead_code)] // used by the cfg(test) experimental engine adapter
+    #[expect(
+        dead_code,
+        reason = "used by the cfg(test) experimental engine adapter"
+    )]
     pub fn mark_incomplete(&self) {
         if let Some(run) = self.coordinator.state.lock().unwrap().as_mut()
             && Arc::ptr_eq(&run.owner, &self.owner)

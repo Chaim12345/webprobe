@@ -179,7 +179,10 @@ fn steps(input: egui_mcp_client::PendingInput) -> Vec<Vec<egui::Event>> {
     }
 }
 
-#[cfg_attr(not(feature = "mcp"), allow(dead_code))]
+#[cfg_attr(
+    all(not(feature = "mcp"), not(test)),
+    expect(dead_code, reason = "only the mcp feature and the tests call it")
+)]
 /// Named keys: egui's names plus the X11 / xdotool spellings agents use.
 fn named_key(name: &str) -> Option<egui::Key> {
     let lower = name.to_ascii_lowercase();
@@ -221,7 +224,10 @@ fn named_key(name: &str) -> Option<egui::Key> {
 ///   that key (space also types a space);
 /// * anything else is typed as text, so `a`, `&` or `hello world` type
 ///   themselves; prefix `text:` to type a word that is also a key name.
-#[cfg_attr(not(feature = "mcp"), allow(dead_code))]
+#[cfg_attr(
+    all(not(feature = "mcp"), not(test)),
+    expect(dead_code, reason = "only the mcp feature and the tests call it")
+)]
 pub fn key_events(key: &str) -> Vec<egui::Event> {
     let pressed_and_released = |k: egui::Key, modifiers: egui::Modifiers| {
         [true, false]

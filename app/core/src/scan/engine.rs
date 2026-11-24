@@ -190,13 +190,19 @@ pub fn start_active_scan(
 /// No production caller or default policy selects it. Returns the exact
 /// finalization obligation to the caller rather than hiding A4 in Drop.
 #[cfg(test)]
-#[allow(dead_code)] // isolated lifecycle fixtures; no production caller yet
+#[expect(
+    dead_code,
+    reason = "isolated lifecycle fixtures; no production caller yet"
+)]
 pub(crate) struct ExperimentalEngine {
     shared: Arc<Shared>,
     coordinator: Arc<crate::scan_lifecycle::Coordinator>,
 }
 #[cfg(test)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "experimental lifecycle engine: its fixtures do not use every member yet"
+)]
 pub(crate) struct AcceptedAudit {
     /// Audit phase only, never finalization or overall scan success.
     pub audit_phase_completion: crate::scan_lifecycle::Finish,
@@ -204,14 +210,20 @@ pub(crate) struct AcceptedAudit {
     pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
 }
 #[cfg(test)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "experimental lifecycle engine: its fixtures do not use every member yet"
+)]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum BatchOutcome {
     PendingFinalization,
     Incomplete,
 }
 #[cfg(test)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "experimental lifecycle engine: its fixtures do not use every member yet"
+)]
 pub(crate) struct AcceptedBatch {
     pub completed_items: usize,
     /// Explicit conservative policy: failure cancels every adopted lease of
@@ -223,7 +235,10 @@ pub(crate) struct AcceptedBatch {
     pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
 }
 #[cfg(test)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "experimental lifecycle engine: its fixtures do not use every member yet"
+)]
 impl ExperimentalEngine {
     pub fn new(
         shared: Arc<Shared>,

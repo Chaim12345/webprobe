@@ -1,0 +1,31 @@
+{
+  "cycles": [
+    [
+      "bcheck",
+      "crawl",
+      "ext_host",
+      "host_probe_state",
+      "net",
+      "scan",
+      "scan_config",
+      "scan_lifecycle",
+      "scan_resolver",
+      "tasks"
+    ],
+    [
+      "h2_group",
+      "send_group"
+    ]
+  ],
+  "metrics": {
+    "allow_attributes": 0,
+    "app_fields": 168,
+    "console_prints_core": 3,
+    "path_mounts_core": 8,
+    "result_string_core": 90,
+    "shared_fields": 92,
+    "thread_locals": 12,
+    "thread_sleeps": 33,
+    "thread_spawns": 16
+  }
+}

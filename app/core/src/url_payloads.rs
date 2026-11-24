@@ -101,7 +101,6 @@ const SCHEME_SEPS: [(&str, Option<usize>); 4] = [
 /// Zpgu.ZL: (scheme, separator, rest) at the first separator of the list
 /// found anywhere (list order, not position); `Ok(None)`: no separator;
 /// `Err(())`: the value is not a URL (Burp returns null).
-#[allow(clippy::result_unit_err)]
 fn split_scheme(v: &str) -> Result<Option<(String, String, String)>, ()> {
     for (sep, max) in SCHEME_SEPS {
         let Some(idx) = v.find(sep) else { continue };

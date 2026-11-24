@@ -6,12 +6,10 @@ use super::*;
 pub(crate) trait PointCheck: Sync {
     /// Stable identifier (exports, tests, future per-check settings).
     /// Check metadata: no runtime reader yet, only the registry tests.
-    #[cfg_attr(not(test), allow(dead_code))]
     fn id(&self) -> &'static str;
     /// The issue it reports: Burp's KnowledgeBase name where the check is a
     /// Burp port, otherwise WebProbe's own wording (some WebProbe issues add
     /// the parameter name to it).
-    #[cfg_attr(not(test), allow(dead_code))]
     fn issue(&self) -> &'static str;
     /// The insertion-point kinds it applies to: the point-type rules of the
     /// Burp check's applicability test (`Zuit.Zh`). Every implementation
@@ -27,7 +25,10 @@ pub(crate) trait PointCheck: Sync {
 
 /// How often a request-level check runs. Check metadata: the once-per-host
 /// bookkeeping itself stays inside those checks (`ScanDedup::openapi_hosts`).
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "check metadata: read only by the registry tests")
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Scope {
     /// Once per audited request.
@@ -40,12 +41,13 @@ pub(crate) enum Scope {
 /// insertion-point checks.
 pub(crate) trait RequestCheck: Sync {
     /// As [`PointCheck::id`].
-    #[cfg_attr(not(test), allow(dead_code))]
     fn id(&self) -> &'static str;
     /// As [`PointCheck::issue`].
-    #[cfg_attr(not(test), allow(dead_code))]
     fn issue(&self) -> &'static str;
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "check metadata: read only by the registry tests")
+    )]
     fn scope(&self) -> Scope;
     /// Checks in the same group share one stop gate: the group runs when the
     /// scan was not stopped as its first member was reached, and every member

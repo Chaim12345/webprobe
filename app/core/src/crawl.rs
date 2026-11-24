@@ -2550,7 +2550,10 @@ pub struct DomProbeResult {
     pub diagnostic: String,
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 pub fn dom_analysis_probe(
     shared: &Arc<Shared>,
     url: &str,
@@ -2593,7 +2596,10 @@ fn submit_dom_stored_variant(
     submit()
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 fn dom_probe_with_binary(
     shared: &Arc<Shared>,
     url: &str,

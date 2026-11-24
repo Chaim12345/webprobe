@@ -7,6 +7,8 @@ permissions:
   contents: read
 
 env:
+  # CI builds each commit once: incremental state only adds to the cache.
+  CARGO_INCREMENTAL: "0"
   CARGO_BUILD_RUSTC: rustc
   CARGO_BUILD_RUSTC_WRAPPER: ""
   RUSTFLAGS: ""

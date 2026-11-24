@@ -291,7 +291,6 @@ pub fn find_email_excluding(text: &str, request: &str) -> Option<String> {
         .find(|e| !req.contains(&e.to_ascii_lowercase()))
 }
 
-#[allow(dead_code)]
 pub fn find_email(text: &str) -> Option<String> {
     find_emails(text).into_iter().next()
 }

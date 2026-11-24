@@ -345,7 +345,10 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
 /// Experimental real A4 registry path. Explicit limits/permit only, no legacy
 /// fallback. Network accounting/deadline integration remains a separate gate.
 #[cfg(test)]
-#[allow(dead_code)] // experimental A4 registry path, not wired to a production caller yet
+#[expect(
+    dead_code,
+    reason = "experimental A4 registry path, not wired to a production caller yet"
+)]
 pub(crate) fn run_stored_stage_budgeted(
     shared: &Arc<Shared>,
     permit: &crate::scan_lifecycle::BudgetedExecution,
