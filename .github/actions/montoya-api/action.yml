@@ -1,0 +1,35 @@
+name: Pinned Montoya API
+description: Restore or fetch the test API, verifying its SHA256 on every use.
+inputs:
+  url:
+    description: Existing pinned upstream URL used by the calling job.
+    required: false
+    default: https://repo.maven.apache.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar
+runs:
+  using: composite
+  steps:
+    - name: Test cache integrity failure paths (offline)
+      shell: bash
+      run: python3 "$GITHUB_WORKSPACE/scripts/test-ci-montoya-cache.py"
+    - name: Restore pinned Montoya API cache
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/montoya-api.jar
+        # No broad restore keys. Version and checksum identify immutable bytes.
+        key: montoya-api-v1-${{ runner.os }}-2026.7-cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94
+    - name: Verify cached API or fetch and verify on miss
+      shell: bash
+      env:
+        MONTOYA_URL: ${{ inputs.url }}
+        MONTOYA_FETCH_SCRIPT: ${{ github.action_path }}/fetch.sh
+      run: |
+        bash "$MONTOYA_FETCH_SCRIPT" "$MONTOYA_URL" \
+          cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94 \
+          "$RUNNER_TEMP/montoya-api.jar"
+    - name: Save verified pinned Montoya API
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/montoya-api.jar
+        key: montoya-api-v1-${{ runner.os }}-2026.7-cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94

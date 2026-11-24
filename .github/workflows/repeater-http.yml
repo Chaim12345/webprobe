@@ -68,9 +68,8 @@ jobs:
             repeater-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust-cache-toolchain.outputs.fingerprint }}-
             workspace-${{ runner.os }}-${{ hashFiles('app/Cargo.lock') }}
             cargo-${{ runner.os }}-stable-${{ hashFiles('app/Cargo.lock') }}
-      - run: |
-          curl --fail --location --retry 3 https://repo.maven.apache.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar -o "$RUNNER_TEMP/montoya-api.jar"
-          echo "cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94  $RUNNER_TEMP/montoya-api.jar" | sha256sum --check
+      - name: Restore and verify pinned Montoya test API
+        uses: ./.github/actions/montoya-api
       - run: cargo fmt --all -- --check
       - run: cargo test --locked --no-run
       - run: cargo clippy --locked --all-targets -- -D warnings
