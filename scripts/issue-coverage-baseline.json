@@ -1,5 +1,5 @@
 {
-  "covered": 162,
+  "covered": 163,
   "not_covered": {
     "ASP.NET ViewState without MAC enabled": {
       "note": "in progress: branch feat/viewstate-mac-20261124",
@@ -28,10 +28,6 @@
     "Client-side desync": {
       "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
       "status": "excluded"
-    },
-    "Content type incorrectly stated": {
-      "note": "in progress: branch feat/content-type-20261124",
-      "status": "todo"
     },
     "HTTP request smuggling": {
       "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
