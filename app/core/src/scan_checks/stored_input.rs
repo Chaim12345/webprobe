@@ -72,6 +72,81 @@ pub(crate) trait StoredCheck: Sync {
     fn run(&self, cx: &PairCtx);
 }
 
+/// Open redirection (stored), burp.Zuag in the stored stage: burp.Zcug
+/// registers the same check class for OPEN_REDIRECTION_STORED, and its
+/// factory burp.Zezc makes the stored variant Medium, Certain. Each payload
+/// of the reflected check goes to the pair's injection request; the
+/// redirect test reads the direct response to the retrieval request
+/// replayed after it (not the page a same-origin redirect leads to). As
+/// for the other stored checks, only a GET or HEAD retrieval is replayed.
+pub(crate) struct OpenRedirectionStored;
+
+impl StoredCheck for OpenRedirectionStored {
+    fn id(&self) -> &'static str {
+        "active.open-redirection-stored"
+    }
+    fn issue(&self) -> &'static str {
+        "Open redirection (stored)"
+    }
+    /// As the reflected check (burp.Zuag has no applicability test).
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        OpenRedirect.applies_to(ip)
+    }
+    fn server_side(&self) -> bool {
+        false
+    }
+    fn run(&self, cx: &PairCtx) {
+        if cx.stopped() || !cx.retrieval_is_safe() {
+            return;
+        }
+        let pair = &cx.pair;
+        let ip = &pair.point;
+        let log: std::cell::RefCell<Vec<ScanEvidence>> = std::cell::RefCell::new(Vec::new());
+        let record = |exchange: Option<(String, Option<Vec<u8>>)>| -> Option<Vec<u8>> {
+            let (req, resp) = exchange?;
+            log.borrow_mut()
+                .push(cx.record_exchange(req.as_bytes(), resp.as_deref())?);
+            resp
+        };
+        let send = |payload: &str| -> Option<Vec<u8>> {
+            if cx.stopped() {
+                return None;
+            }
+            let injected = inject_payload(&pair.item.req, ip, payload);
+            record(cx.send_following(&pair.item, &injected).into_iter().last())?;
+            if cx.stopped() {
+                return None;
+            }
+            let chain = cx.send_following(&pair.retrieval, &pair.retrieval.req);
+            record(chain.into_iter().next())
+        };
+        let speed = ScanSpeed::from_u8(cx.shared.scan_speed.load(Ordering::SeqCst));
+        if let Some(hit) = run_open_redirect_check(&ip.value, speed, send) {
+            let log = log.borrow();
+            let ev: Vec<ScanEvidence> = log.iter().rev().take(2).rev().cloned().collect();
+            cx.report(vec![
+                mk_point(
+                    self.issue(),
+                    "medium",
+                    "Certain",
+                    &pair.item.entry,
+                    ip,
+                    format!(
+                        "Payload {:?}, submitted in the {} in a previous request, was stored and made the response to the later request {:?} ({}) redirect to {:?}.",
+                        hit.payload,
+                        ip.describe_short(false),
+                        pair.retrieval.req.lines().next().unwrap_or(""),
+                        pair.retrieval.url(),
+                        hit.target
+                    ),
+                )
+                .with_evidence(ev),
+            ]);
+        }
+        cx.progress();
+    }
+}
+
 /// Stage A4 checks, in run order.
 pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[
     &StoredXss,
@@ -79,6 +154,7 @@ pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[
     &CssInjectionStored,
     &HppStored,
     &FormActionHijackingStored,
+    &OpenRedirectionStored,
 ];
 
 /// One pair being audited in stage A4.
@@ -106,6 +182,12 @@ impl PairCtx {
     }
 
     pub(crate) fn g11_allowed(&self) -> bool {
+        !self.g11_hit.get() && self.retrieval_is_safe()
+    }
+
+    /// Whether the retrieval request may be replayed after each payload:
+    /// only a GET or a HEAD is.
+    pub(crate) fn retrieval_is_safe(&self) -> bool {
         let method = self
             .pair
             .retrieval
@@ -113,8 +195,7 @@ impl PairCtx {
             .split_whitespace()
             .next()
             .unwrap_or("");
-        !self.g11_hit.get()
-            && (method.eq_ignore_ascii_case("GET") || method.eq_ignore_ascii_case("HEAD"))
+        method.eq_ignore_ascii_case("GET") || method.eq_ignore_ascii_case("HEAD")
     }
 
     pub(crate) fn note_g11_hit(&self) {

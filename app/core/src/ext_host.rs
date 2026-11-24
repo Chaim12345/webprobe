@@ -730,7 +730,10 @@ pub fn issue_of(v: &serde_json::Value, extension: &str) -> webprobe_support::iss
         false_positive: sev == "FALSE_POSITIVE",
         confidence: confidence.into(),
         ts: crate::util::now_secs(),
-        type_id: webprobe_support::issues::issue_type_id(v["name"].as_str().unwrap_or_default()),
+        // Burp files every issue an extension reports under its
+        // extension-generated type (burp.Zcot.EXTENSION_GENERATED), whatever
+        // the extension calls it.
+        type_id: webprobe_support::issues::issue_type_id("Extension generated issue"),
         evidence,
         ..Default::default()
     }

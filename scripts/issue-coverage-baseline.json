@@ -1,16 +1,12 @@
 {
-  "covered": 158,
+  "covered": 161,
   "not_covered": {
     "ASP.NET ViewState without MAC enabled": {
-      "note": "",
-      "status": "todo"
-    },
-    "BCheck generated issue": {
-      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
+      "note": "in progress: branch feat/viewstate-mac-20261124",
       "status": "todo"
     },
     "Bambda generated issue": {
-      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
+      "note": "type 0x09008000, for issues raised by a Bambda scan check; WebProbe runs Bambdas as filters and columns only",
       "status": "todo"
     },
     "Browser cross-site scripting filter disabled": {
@@ -18,15 +14,15 @@
       "status": "excluded"
     },
     "Client-side SQL injection (DOM-based)": {
-      "note": "",
+      "note": "Sink webdatabase.executeSql (burp.Zbjx:157-164). WebSQL is gone from current Chromium, so the dynamic probe cannot reach it; Burp also finds it by static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-coverage-matrix.md)",
       "status": "todo"
     },
     "Client-side SQL injection (reflected DOM-based)": {
-      "note": "",
+      "note": "Sink webdatabase.executeSql (burp.Zbjx:157-164). WebSQL is gone from current Chromium, so the dynamic probe cannot reach it; Burp also finds it by static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-coverage-matrix.md)",
       "status": "todo"
     },
     "Client-side SQL injection (stored DOM-based)": {
-      "note": "",
+      "note": "Sink webdatabase.executeSql (burp.Zbjx:157-164). WebSQL is gone from current Chromium, so the dynamic probe cannot reach it; Burp also finds it by static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-coverage-matrix.md)",
       "status": "todo"
     },
     "Client-side desync": {
@@ -34,11 +30,7 @@
       "status": "excluded"
     },
     "Content type incorrectly stated": {
-      "note": "",
-      "status": "todo"
-    },
-    "Extension generated issue": {
-      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
+      "note": "in progress: branch feat/content-type-20261124",
       "status": "todo"
     },
     "HTTP request smuggling": {
@@ -46,27 +38,23 @@
       "status": "excluded"
     },
     "Hidden HTTP 2": {
-      "note": "",
+      "note": "burp.Zpfw: over HTTPS, when the host does not advertise HTTP/2, the base request is sent with HTTP/2 forced (Zwk0.FORCE_HTTP2_NON_POOLED) and any response is reported (burp.Zhhg: Certain, information). Needs a forced-HTTP/2 send in the transport",
       "status": "todo"
     },
     "Local file path manipulation (DOM-based)": {
-      "note": "",
+      "note": "No sink-to-issue mapping for this family was found in burp.Zcwh (docs/specs/R-13-dom-analysis.research.md:145); the sink list has to be established before a port",
       "status": "todo"
     },
     "Local file path manipulation (reflected DOM-based)": {
-      "note": "",
+      "note": "No sink-to-issue mapping for this family was found in burp.Zcwh (docs/specs/R-13-dom-analysis.research.md:145); the sink list has to be established before a port",
       "status": "todo"
     },
     "Local file path manipulation (stored DOM-based)": {
-      "note": "",
+      "note": "No sink-to-issue mapping for this family was found in burp.Zcwh (docs/specs/R-13-dom-analysis.research.md:145); the sink list has to be established before a port",
       "status": "todo"
     },
     "Manually generated issue": {
-      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
-      "status": "todo"
-    },
-    "Open redirection (stored)": {
-      "note": "",
+      "note": "type 0x08008000, for an issue the user adds by hand; WebProbe has no such action yet",
       "status": "todo"
     },
     "Perl code injection": {
@@ -82,7 +70,7 @@
       "status": "decision"
     },
     "SQL injection (second order)": {
-      "note": "",
+      "note": "stored-input variants (burp.Zse, Zr12; texts Zwup and Zwvi) of checks WebProbe has in their reflected form",
       "status": "todo"
     },
     "Server-side JavaScript code injection": {
@@ -90,11 +78,11 @@
       "status": "decision"
     },
     "Suspicious input transformation (reflected)": {
-      "note": "",
+      "note": "burp.Zppb / Zc6w on the reflection framework (burp.Zi97), text burp.Zwvh with one variant per transformation (overlong and invalid UTF-8 and more)",
       "status": "todo"
     },
     "Suspicious input transformation (stored)": {
-      "note": "",
+      "note": "burp.Zppb / Zc6w on the reflection framework (burp.Zi97), text burp.Zwvh with one variant per transformation (overlong and invalid UTF-8 and more)",
       "status": "todo"
     },
     "Unidentified code injection": {
