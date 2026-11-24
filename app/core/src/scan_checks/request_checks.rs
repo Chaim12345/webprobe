@@ -725,3 +725,224 @@ impl RequestCheck for React2Shell {
         )])]);
     }
 }
+
+/// TLS certificate (per host), burp.Zut6's TLS half (G.13, KB 01000100):
+/// the chain captured on the host's TLS handshake is analyzed for
+/// hostname mismatch, validity dates and trust. Registered alongside
+/// Robots (Zcug.java:96-116); Burp reports through the shared
+/// Robots/TLS exchange, WebProbe captures with a recording verifier.
+pub(crate) struct TlsCertificate;
+
+/// What one TLS capture attempt produced.
+enum TlsAttempt {
+    /// The chain was captured; analyze it.
+    Done(crate::tls_cert::TlsCapture),
+    /// The transport came up but no TLS handshake happened (transient or a
+    /// plain-HTTP service): the dedupe key is released so a later pass of
+    /// the same run retries instead of silencing the host's TLS check.
+    Retry,
+    /// The configured route itself failed. The key stays claimed: a route
+    /// failure is configuration-level, and re-dialling a broken route every
+    /// pass would stall the run on the route's own connect timeouts. The
+    /// diagnostic is logged once, the check fails closed for this run.
+    RouteFailed(String),
+}
+
+/// Claim the per-run dedupe key for a host's TLS check, then capture.
+/// `None` only when the key was already claimed. A `Retry` outcome
+/// releases the key again; `Done` and `RouteFailed` keep it.
+fn claim_and_capture(
+    seen: &crate::sync::Mutex<std::collections::HashSet<String>>,
+    key: String,
+    capture: impl FnOnce() -> TlsAttempt,
+) -> Option<TlsAttempt> {
+    if !seen.lock().unwrap().insert(key.clone()) {
+        return None;
+    }
+    let cap = capture();
+    if matches!(cap, TlsAttempt::Retry) {
+        seen.lock().unwrap().remove(&key);
+    }
+    Some(cap)
+}
+
+impl RequestCheck for TlsCertificate {
+    fn id(&self) -> &'static str {
+        "active.tls-certificate"
+    }
+    fn issue(&self) -> &'static str {
+        "TLS certificate"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        if scheme != "https" {
+            return;
+        }
+        let key = format!("https://{}:{}|tls-cert", cx.host, cx.port);
+        if cx.stopped() {
+            return;
+        }
+        // The configured upstream route is a network/privacy boundary: the
+        // capture follows it, and a failed route fails closed (logged, not
+        // retried this run) rather than falling back to a direct connection.
+        let route = cx.shared.upstream_for(&cx.host);
+        let roots = cx.shared.tls_roots.lock().unwrap().clone();
+        let Some(attempt) =
+            claim_and_capture(
+                &cx.state().openapi_hosts,
+                key,
+                || match crate::tls_cert::capture(
+                    &cx.host,
+                    cx.port,
+                    &route,
+                    &roots,
+                    std::time::Duration::from_secs(10),
+                ) {
+                    Ok(Some(cap)) => TlsAttempt::Done(cap),
+                    Ok(None) => TlsAttempt::Retry,
+                    Err(reason) => TlsAttempt::RouteFailed(reason),
+                },
+            )
+        else {
+            return;
+        };
+        let cap = match attempt {
+            TlsAttempt::Done(cap) => cap,
+            TlsAttempt::Retry => return,
+            TlsAttempt::RouteFailed(reason) => {
+                cx.shared.log(&format!(
+                    "TLS certificate check: no result for {}:{} - {reason} (route {:?}); not retried this run",
+                    cx.host,
+                    cx.port,
+                    route.kind,
+                ));
+                return;
+            }
+        };
+        let flags = crate::tls_cert::analyze(&cap, &cx.host, std::time::SystemTime::now());
+        if flags.is_empty() {
+            if cap.error_kind == Some(crate::tls_cert::VerifyKind::Inconclusive) {
+                cx.shared.log(&format!(
+                    "TLS certificate check: verification inconclusive for {}:{}: {}",
+                    cx.host,
+                    cx.port,
+                    cap.verify_error.as_deref().unwrap_or("unknown error"),
+                ));
+            }
+            return;
+        }
+        use crate::tls_cert::CertFlag as F;
+        let mut problems = Vec::new();
+        if flags.contains(&F::HostnameMismatch) {
+            problems.push("is not valid for this hostname");
+        }
+        if flags.contains(&F::Untrusted) {
+            problems.push("is not issued by a trusted authority");
+        }
+        if flags.contains(&F::NotYetValid) {
+            problems.push("is not yet valid");
+        }
+        if flags.contains(&F::Expired) {
+            problems.push("has expired");
+        }
+        if flags.contains(&F::ValidityUnknown) {
+            problems.push("is outside its validity period (the leaf could not be parsed to tell expired from not yet valid)");
+        }
+        let summary = crate::tls_cert::leaf_summary(&cap);
+        let error = cap
+            .verify_error
+            .as_deref()
+            .map(|e| format!(" Verification failed: {e}."))
+            .unwrap_or_default();
+        let desc = format!("{} The certificate {}.{error} Clients cannot rely on the server's identity or on the protection of data in transit.", summary, problems.join(" and "));
+        let e = cx.entry.clone();
+        let mut i = mk(crate::tls_cert::severity(&flags), self.issue(), &e, desc);
+        i.confidence = "Certain".into();
+        cx.report(vec![i]);
+    }
+}
+
+#[cfg(test)]
+mod tls_dedupe_tests {
+    use super::*;
+    use crate::sync::Mutex;
+    use crate::tls_cert::TlsCapture;
+    use std::collections::HashSet;
+
+    fn cap() -> TlsCapture {
+        TlsCapture {
+            chain: Vec::new(),
+            verify_error: None,
+            error_kind: None,
+        }
+    }
+
+    #[test]
+    fn failed_capture_releases_the_key_so_the_host_is_retried() {
+        let seen = Mutex::new(HashSet::new());
+        let key = "https://h:443|tls-cert".to_string();
+        let mut attempts = 0;
+        assert!(matches!(
+            claim_and_capture(&seen, key.clone(), || {
+                attempts += 1;
+                TlsAttempt::Retry
+            }),
+            Some(TlsAttempt::Retry)
+        ));
+        assert!(seen.lock().unwrap().is_empty(), "key released on failure");
+        assert!(matches!(
+            claim_and_capture(&seen, key.clone(), || {
+                attempts += 1;
+                TlsAttempt::Done(cap())
+            }),
+            Some(TlsAttempt::Done(_))
+        ));
+        assert_eq!(attempts, 2, "the second pass retried the capture");
+    }
+
+    #[test]
+    fn successful_capture_keeps_the_key_and_a_repeat_does_not_capture() {
+        let seen = Mutex::new(HashSet::new());
+        let key = "https://h:443|tls-cert".to_string();
+        assert!(matches!(
+            claim_and_capture(&seen, key.clone(), || TlsAttempt::Done(cap())),
+            Some(TlsAttempt::Done(_))
+        ));
+        let mut called = false;
+        assert!(claim_and_capture(&seen, key, || {
+            called = true;
+            TlsAttempt::Done(cap())
+        })
+        .is_none());
+        assert!(!called, "an already-claimed host is not captured again");
+    }
+
+    #[test]
+    fn a_route_failure_keeps_the_key_and_is_not_retried() {
+        let seen = Mutex::new(HashSet::new());
+        let key = "https://h:443|tls-cert".to_string();
+        assert!(matches!(
+            claim_and_capture(&seen, key.clone(), || {
+                TlsAttempt::RouteFailed("HTTP CONNECT rejected with status 403".into())
+            }),
+            Some(TlsAttempt::RouteFailed(_))
+        ));
+        assert!(
+            seen.lock().unwrap().contains(&key),
+            "route failure is terminal for the run: key stays claimed"
+        );
+        let mut called = false;
+        assert!(claim_and_capture(&seen, key, || {
+            called = true;
+            TlsAttempt::Retry
+        })
+        .is_none());
+        assert!(!called, "a failed route is not re-dialed on every pass");
+    }
+}
