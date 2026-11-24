@@ -3,14 +3,14 @@
   "generated": "2026-11-18",
   "source": "TASKS.md",
   "summary": {
-    "total": 137,
-    "p0": 68,
-    "p1": 43,
-    "p2": 26,
+    "total": 142,
+    "p0": 69,
+    "p1": 44,
+    "p2": 29,
     "by_status": {
-      "done": 120,
+      "done": 121,
       "rejected": 2,
-      "todo": 15
+      "todo": 19
     }
   },
   "tasks": [
@@ -1402,7 +1402,7 @@
       "acceptance": "History/Logger/WebSocket filters and custom columns by script, as Burp's Bambda mode (scripting language decided in the task).",
       "effort": "M",
       "status": "todo",
-      "evidence": "src/tools.rs:1220 (stated unsupported). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait."
+      "evidence": "Checked 2026-11-24: the Java Bambda backend (core/src/bambda.rs: compile and run filter and column batches), the library (core/src/bambda_library.rs) and a preview pane (src/bambda_ui.rs) exist and CI runs the real-Java Bambda tests, but nothing in the History, Logger or WebSocket filters or in the table columns calls them yet. The wiring is the open part. Earlier note: deferred 2026-11-18 by the user's instruction."
     },
     {
       "id": "R-17",
@@ -1452,7 +1452,7 @@
       "acceptance": "F12: warn-level lints and clippy in scripts/ci.sh, guard-returning lock API everywhere (no std poisonable locks), dead code removed (net::start_attack). F3: scope / match-and-replace / intercept / WebSocket / grep rules compiled once when edited, history filtering outside the history lock. F9 (first half): a held HTTP intercept is released when its client disconnects. F13: tests never read or write the real ~/.config/webprobe/ca.json (WEBPROBE_CA_DIR in tests).",
       "effort": "S",
       "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
+      "evidence": "Partly done 2026-11-24 (PR #211): one workspace lint policy, every suppression is #[expect(.., reason)] (23 converted, 9 stale removed), and scripts/arch-gate.py ratchets cycles and structural counts in CI. Still open: the guard-returning lock API, compiled rule sets (F3), intercept liveness (F9) and test CA isolation (F13). Source: qa/ARCH-REVIEW-2026-11-18.md."
     },
     {
       "id": "AR-02",
@@ -1522,7 +1522,7 @@
       "acceptance": "F2: exchange_with no longer holds io_lock for a whole round trip; one extension's active check cannot serialise proxied messages. Before R-20.",
       "effort": "M",
       "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
+      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section. In progress 2026-11-24: branch arch/ar08-sidecar-demux-20261124."
     },
     {
       "id": "AR-09",
@@ -1543,6 +1543,60 @@
       "effort": "S",
       "status": "todo",
       "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
+    },
+    {
+      "id": "S-01",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
+      "priority": "P0",
+      "title": "Issue-type coverage gate and the types it showed missing",
+      "acceptance": "A script recomputes which of Burp's 183 issue types a WebProbe check can raise and fails CI when a covered type loses its check (roadmap F-08); every type not covered is listed with a status and the reason.",
+      "effort": "L",
+      "status": "done",
+      "evidence": "scripts/issue-coverage.py with scripts/issue-coverage-baseline.json, run in workspace.yml (PR #211). 149 of 183 on 2026-11-24 morning, 167 on parity 37d18b6. Ported the same day, each from the Burp class named in its doc comment: Cross-domain POST, File upload functionality, Cross-domain Referer leakage, Long redirection response, Base64-encoded data in parameter, SQL statement in request parameter (#212); Json Web Key Set disclosed (#213); Open redirection (stored), extension issue type 0x08000000, React2Shell and Bambda type ids (#214); SQL injection (second order), error-based (#215); Content type incorrectly stated (#217); ASP.NET ViewState without MAC enabled (#218); Suspicious input transformation reflected and stored (#220); Hidden HTTP 2 (#222). Excluded with evidence (#219): seven timing-only types and Browser cross-site scripting filter disabled. Craft fnd_90, fnd_91, fnd_92. Not verified against a live Burp scan: the tests are unit fixtures and local labs.",
+      "completed": "2026-11-24"
+    },
+    {
+      "id": "S-02",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
+      "priority": "P1",
+      "title": "Manually raised issues (Create issue, Add to issue)",
+      "acceptance": "The user can create an issue by hand from a message and add further messages to it, as Burp's \"Create an issue\" and \"Add to an issue\" (burp.Zgwg, Zgwd, Zr7e, factory Zcxr); the issue carries type 0x08008000 and shows in the issue list; verified on the QA display.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "In progress 2026-11-24: branch feat/manual-issue-20261124."
+    },
+    {
+      "id": "S-03",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
+      "priority": "P2",
+      "title": "Bambda scan checks (custom scan checks written in Java)",
+      "acceptance": "A Bambda can be a scan check, active or passive, with the library, editor and test run Burp offers for custom scan checks; its issues carry type 0x09008000 (\"Bambda generated issue\").",
+      "effort": "L",
+      "status": "todo",
+      "evidence": "Not started. The Java Bambda backend (core/src/bambda.rs) compiles filters and columns only. Burp: Zcot.BAMBDA_GENERATED, registered in burp.Zcug:277-281; UI strings \"Custom scan checks\", \"Selected bambda scan checks\" (burp.Zgfu)."
+    },
+    {
+      "id": "S-04",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
+      "priority": "P2",
+      "title": "Static JavaScript analysis for the DOM-based types",
+      "acceptance": "DOM-based issue types are also found without running the page, as Burp's static analysis does (task burp.Zwqm, JsAnalysisCheck); client-side SQL injection and local file path manipulation (three variants each) become reportable.",
+      "effort": "XL",
+      "status": "todo",
+      "evidence": "Not started. Research in progress 2026-11-24 (docs/specs/R-13-static-js-analysis.research.md, branch docs/static-js-analysis-research-20261124). No dynamic sink leads to local file path manipulation in Burp, and webdatabase.executeSql is gone from current Chromium, so the dynamic probe cannot reach these six types."
+    },
+    {
+      "id": "S-05",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
+      "priority": "P2",
+      "title": "An HTTP/2 enable setting that gates Hidden HTTP/2",
+      "acceptance": "WebProbe has Burp's project setting for upstream HTTP/2 (project_options.http.http2.enable_http2); with it off the Hidden HTTP/2 check does not run.",
+      "effort": "S",
+      "status": "todo",
+      "depends_on": [
+        "AR-03"
+      ],
+      "evidence": "PR #222 ported the check without the gate: there is no such setting, and adding one needs a field on net::Shared, which waits for the settings snapshot (ADR 0002 phase 3)."
     }
   ],
   "order_note": "2026-11-18 (user): core features before deferrable extension work. Order after R-05/R-06: R-07, R-09, R-10, R-11, R-12, R-17, R-15, R-13, R-18, R-19, D-12, R-01 remainder; then the deferred extension items R-20, R-14, R-16."
