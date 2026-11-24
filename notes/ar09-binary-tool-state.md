@@ -63,3 +63,25 @@ Limitations: the app crate has no library target, so the app-layer conversion ca
 from a core integration test; the characterisation test applies the exact production expression
 (`String::from_utf8_lossy(...).into_owned().into_bytes()`) over the real socket path instead.
 Intruder's send path was audited, not executed.
+
+## App-layer regression on the real send paths (added after review)
+
+`app/src/ar09_binary_tool_state_tests.rs` (wired with one `#[cfg(test)] mod` line in
+`app/src/main.rs`; no production behaviour changed):
+
+- `repeater_send_once_sends_the_lossy_body_with_a_stale_content_length` calls
+  `ui::request_for_tools` -> `repeater_ops::send_following` -> `send_once` -> socket, with an edit
+  to the request line first. Observed wire body:
+  `00 ef bf bd ef bf bd 00 ef bf bd 28`, `Content-Length: 6`, body 12 bytes.
+- `intruder_attack_sends_the_lossy_template_body` calls `ui::request_for_tools` -> template ->
+  `intruder_run::start` (real dispatcher and `execute_probe`) -> socket. Observed wire body is the
+  same 12 lossy bytes, with Content-Length restamped to 12.
+
+```
+cargo test -p webprobe --bin webprobe ar09 -- --nocapture --test-threads=1
+  test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out
+```
+
+So the defect is reproduced through the actual tool code, not only through the conversion
+expression: Repeater desyncs (6 declared, 12 sent), Intruder sends the converted bytes with a
+consistent length.
