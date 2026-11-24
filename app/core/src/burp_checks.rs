@@ -667,29 +667,62 @@ fn is_xml_policy(resp: &[u8], root: &str) -> bool {
 /// (burp.Zudv.java:45-66), `domain uri="..."` for Silverlight
 /// (burp.Zebv.java:45-67). Attribute order and quoting follow what servers
 /// actually ship; single and double quotes both parse.
+// Narrow attribute scanner, not a general XML parser. Consume each entire
+// quoted value before considering the next name; text inside a value is data.
 fn xml_attribute_value(tag: &str, name: &str) -> Option<String> {
-    let mut rest = tag;
-    while let Some(i) = rest.find(name) {
-        let (before, matched) = rest.split_at(i);
-        let after_name = &matched[name.len()..];
-        let boundary = before
-            .as_bytes()
-            .last()
-            .is_none_or(|b| b.is_ascii_whitespace() || *b == b'<');
-        let after_name = after_name.trim_start();
-        if boundary {
-            if let Some(value) = after_name.strip_prefix('=') {
-                let value = value.trim_start();
-                if let Some(quote) = value.chars().next().filter(|q| *q == '"' || *q == '\'') {
-                    if let Some(end) = value[1..].find(quote) {
-                        return Some(value[1..1 + end].to_string());
-                    }
-                }
-            }
+    let bytes = tag.as_bytes();
+    let mut at = 0;
+    // Skip the opening '<' and element name.
+    while at < bytes.len() && !bytes[at].is_ascii_whitespace() {
+        at += 1;
+    }
+    while at < bytes.len() {
+        while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+            at += 1;
         }
-        rest = after_name;
-        if rest.is_empty() {
-            break;
+        if at == bytes.len() || bytes[at] == b'/' {
+            return None;
+        }
+        let start = at;
+        while at < bytes.len()
+            && !bytes[at].is_ascii_whitespace()
+            && !matches!(bytes[at], b'=' | b'/' | b'>' | b'\'' | b'"')
+        {
+            at += 1;
+        }
+        if at == start {
+            return None;
+        }
+        let attribute = &tag[start..at];
+        while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        if bytes.get(at) != Some(&b'=') {
+            return None;
+        }
+        at += 1;
+        while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        let quote = *bytes.get(at)?;
+        if !matches!(quote, b'\'' | b'"') {
+            return None;
+        }
+        at += 1;
+        let value_start = at;
+        while at < bytes.len() && bytes[at] != quote {
+            at += 1;
+        }
+        if at == bytes.len() {
+            return None;
+        }
+        let value = &tag[value_start..at];
+        at += 1;
+        if at < bytes.len() && !bytes[at].is_ascii_whitespace() && bytes[at] != b'/' {
+            return None;
+        }
+        if attribute == name {
+            return Some(value.to_string());
         }
     }
     None
@@ -703,7 +736,22 @@ fn policy_domains(body: &str, kind: CrossDomainKind) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = body;
     while let Some(i) = rest.find(elem) {
-        let tag_end = rest[i..].find('>').map(|e| i + e).unwrap_or(rest.len());
+        // A '>' inside either quoted value is not the end of this tag.
+        // Element substring/comment recognition remains unchanged here.
+        let mut quote = None;
+        let tag_end = rest.as_bytes()[i..].iter().position(|&byte| {
+            match quote {
+                Some(q) if byte == q => quote = None,
+                Some(_) => {}
+                None if byte == b'\'' || byte == b'"' => quote = Some(byte),
+                None if byte == b'>' => return true,
+                None => {}
+            }
+            false
+        });
+        let Some(tag_end) = tag_end.map(|end| i + end) else {
+            break;
+        };
         let tag = &rest[i..tag_end];
         if let Some(value) = xml_attribute_value(tag, attr) {
             out.push(value);
@@ -1072,6 +1120,86 @@ Content-Type: application/xml
 <access-policy><cross-domain-access><policy><allow-from http-request-headers="*"><domain uri="http://example.com"/><domain uri="*"/></allow-from></policy></cross-domain-access></access-policy>"#;
         let found = crossdomain_findings(policy, "www.example.com", CrossDomainKind::Silverlight);
         assert_eq!(found, ["example.com", "*"]);
+    }
+
+    // Invented complete HTTP/XML policies; no transport, files, runtime or
+    // external XML parser. Exercise the actual public finding helper.
+    fn quoted_policy_response(kind: CrossDomainKind, attributes: &str) -> Vec<u8> {
+        let body = match kind {
+            CrossDomainKind::Flash => format!(
+                "<cross-domain-policy><allow-access-from {attributes}/></cross-domain-policy>"
+            ),
+            CrossDomainKind::Silverlight => format!(
+                "<access-policy><cross-domain-access><policy><allow-from><domain {attributes}/></allow-from></policy></cross-domain-access></access-policy>"
+            ),
+        };
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        ).into_bytes()
+    }
+
+    #[test]
+    fn crossdomain_quoted_attribute_decoys_do_not_report() {
+        for (kind, name) in [
+            (CrossDomainKind::Flash, "domain"),
+            (CrossDomainKind::Silverlight, "uri"),
+        ] {
+            for (outer, inner) in [('"', '\''), ('\'', '"')] {
+                let attrs = format!("note={outer}prefix {name}={inner}*{inner}{outer}");
+                let response = quoted_policy_response(kind, &attrs);
+                assert!(crossdomain_findings(&response, "www.example.com", kind).is_empty(), "{kind:?}: {attrs}");
+            }
+        }
+    }
+
+    #[test]
+    fn crossdomain_real_attribute_after_quoted_decoy_is_detected() {
+        for (kind, name) in [
+            (CrossDomainKind::Flash, "domain"),
+            (CrossDomainKind::Silverlight, "uri"),
+        ] {
+            for (outer, inner) in [('"', '\''), ('\'', '"')] {
+                // The fake wildcard must not mask the later real value.
+                let attrs = format!("note={outer}prefix {name}={inner}*{inner}{outer} {name} \t=\n {inner}example.com{inner}");
+                let response = quoted_policy_response(kind, &attrs);
+                assert_eq!(crossdomain_findings(&response, "www.example.com", kind), ["example.com"], "{kind:?}: {attrs}");
+            }
+        }
+    }
+
+    #[test]
+    fn crossdomain_quoted_greater_than_does_not_end_the_tag() {
+        for (kind, name) in [
+            (CrossDomainKind::Flash, "domain"),
+            (CrossDomainKind::Silverlight, "uri"),
+        ] {
+            for (outer, inner) in [('"', '\''), ('\'', '"')] {
+                let attrs = format!("note={outer}before > {name}={inner}*{inner} after{outer} {name}={inner}example.com{inner}");
+                let response = quoted_policy_response(kind, &attrs);
+                assert_eq!(crossdomain_findings(&response, "www.example.com", kind), ["example.com"], "{kind:?}: {attrs}");
+                let decoy_only = format!("note={outer}before > {name}={inner}*{inner} after{outer}");
+                let response = quoted_policy_response(kind, &decoy_only);
+                assert!(crossdomain_findings(&response, "www.example.com", kind).is_empty(), "{kind:?}: {decoy_only}");
+            }
+        }
+    }
+
+    #[test]
+    fn crossdomain_attribute_names_remain_exact_after_quoted_values() {
+        for (kind, name) in [
+            (CrossDomainKind::Flash, "domain"),
+            (CrossDomainKind::Silverlight, "uri"),
+        ] {
+            for quote in ['"', '\''] {
+                let attrs = format!("note={quote}ordinary{quote} not{name}={quote}*{quote} {name}extra={quote}*{quote}");
+                let response = quoted_policy_response(kind, &attrs);
+                assert!(crossdomain_findings(&response, "www.example.com", kind).is_empty(), "{kind:?}: {attrs}");
+                let with_real = format!("{attrs} {name} = {quote}example.com{quote}");
+                let response = quoted_policy_response(kind, &with_real);
+                assert_eq!(crossdomain_findings(&response, "www.example.com", kind), ["example.com"], "{kind:?}: {with_real}");
+            }
+        }
     }
 
     /// Second review, finding 18: Zrbl.Zh sets 64 for non-sensitive types.
