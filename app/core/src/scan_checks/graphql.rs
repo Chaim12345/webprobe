@@ -1297,12 +1297,9 @@ impl PointCheck for FilePathManipulation {
             let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
-        if let Some(hit) = run_file_path_manip_check(
-            &ip.value,
-            &cx.baseline.raw,
-            cx.settings.accuracy,
-            &mut send,
-        ) {
+        if let Some(hit) =
+            run_file_path_manip_check(&ip.value, &cx.baseline.raw, cx.settings.accuracy, &mut send)
+        {
             // burp.Zsl1.java:111-128,179-203: demonstrate impact by pulling
             // one of Burp's known files from the selected directory.
             let known = known_file_follow_up(&ip.value, &cx.baseline.raw, &mut send);
@@ -1321,10 +1318,15 @@ impl PointCheck for FilePathManipulation {
                 ev.push(rec.last(&k.payload));
                 ev.push(rec.last(&k.control));
             }
-            cx.report(
-                vec![mk_point("File path manipulation", "high", "Firm", &cx.entry, ip, detail)
-                    .with_evidence(evidence(ev))],
-            );
+            cx.report(vec![mk_point(
+                "File path manipulation",
+                "high",
+                "Firm",
+                &cx.entry,
+                ip,
+                detail,
+            )
+            .with_evidence(evidence(ev))]);
         }
         cx.progress();
     }
