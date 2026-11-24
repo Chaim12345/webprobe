@@ -283,7 +283,14 @@ impl RequestCheck for CrossDomainPolicy {
         // policy (found or clean) stays claimed; a failed fetch releases
         // the claim so a later item of the same host can retry.
         let key = format!("{scheme}://{}:{}|xdp|{}", cx.host, cx.port, self.path());
-        if !cx.state().crossdomain_hosts.lock().unwrap().insert(key.clone()) || cx.stopped() {
+        if !cx
+            .state()
+            .crossdomain_hosts
+            .lock()
+            .unwrap()
+            .insert(key.clone())
+            || cx.stopped()
+        {
             return;
         }
         let probe = format!(
@@ -313,7 +320,10 @@ impl RequestCheck for CrossDomainPolicy {
             ),
         );
         i.confidence = "Certain".into();
-        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
+        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
+            probe.as_bytes(),
+            Some(&resp[..]),
+        )])]);
     }
 }
 
@@ -573,8 +583,11 @@ impl RequestCheck for XmlEntityExpansion {
         let (name, seed) = {
             use rand::Rng;
             let mut rng = rand::thread_rng();
-            let mut t =
-                |n: usize| (0..n).map(|_| rng.gen_range(b'a'..=b'z') as char).collect::<String>();
+            let mut t = |n: usize| {
+                (0..n)
+                    .map(|_| rng.gen_range(b'a'..=b'z') as char)
+                    .collect::<String>()
+            };
             (format!("xee{}", t(5)), t(8))
         };
         let rec = Recorder::default();
