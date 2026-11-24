@@ -1,0 +1,31 @@
+version = 1
+
+# These paths mark tests; they are not excluded from analysis.
+test_patterns = [
+  "app/**/tests/**",
+  "app/sidecar/stage-tests/**",
+  "scripts/test-*.py"
+]
+
+[[analyzers]]
+name = "rust"
+enabled = true
+
+  [analyzers.meta]
+  # Matches app/Cargo.toml. DeepSource toolchain compatibility needs a live run.
+  msrv = "1.95"
+
+[[analyzers]]
+name = "python"
+enabled = true
+
+  [analyzers.meta]
+  runtime_version = "3.x.x"
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+[[analyzers]]
+name = "shell"
+enabled = true
