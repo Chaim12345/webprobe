@@ -86,10 +86,18 @@ impl Service {
 
     /// The Host header value: the port only when it is not the default.
     pub fn authority(&self) -> String {
-        if self.default_port() {
-            self.host.clone()
+        // net::split_h_p and absolute-URL parsing may store IPv6 literals
+        // without brackets; authority syntax requires them on the wire.
+        let host = self.host.trim_start_matches('[').trim_end_matches(']');
+        let host = if host.contains(':') {
+            format!("[{host}]")
         } else {
-            format!("{}:{}", self.host, self.port)
+            host.to_string()
+        };
+        if self.default_port() {
+            host
+        } else {
+            format!("{host}:{}", self.port)
         }
     }
 
@@ -163,40 +171,52 @@ pub fn resolve_location(
     location: &str,
 ) -> Option<(Service, String)> {
     let mut loc = location.trim().to_string();
-    if loc.starts_with("//") {
-        loc = format!("{}:{loc}", if origin.https { "https" } else { "http" });
-    }
-    let lower = loc
-        .get(..8.min(loc.len()))
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let absolute = lower.starts_with("http://") || lower.starts_with("https://");
-    let (service, mut path) = if absolute {
-        let https = lower.starts_with("https://");
-        let rest = &loc[if https { 8 } else { 7 }..];
-        let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-        let authority = &rest[..end];
-        let authority = authority.rsplit_once('@').map(|x| x.1).unwrap_or(authority);
-        if authority.is_empty() {
-            return None;
-        }
-        let (host, port) = net::split_h_p(authority, if https { 443 } else { 80 });
-        let host = host
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .to_string();
-        (Service::new(&host, port, https), rest[end..].to_string())
-    } else if loc.starts_with('/') {
-        (origin.clone(), loc)
-    } else {
-        // Relative to the directory of the request path (query dropped).
-        let base = request_path(req_target);
-        let base = base.split(['?', '#']).next().unwrap_or("/");
-        let dir = match base.rfind('/') {
-            Some(i) => &base[..=i],
-            None => "/",
+    let (service, mut path) = if loc.is_empty() || loc.starts_with('?') || loc.starts_with('#') {
+        // Query-only references replace the query on the current path;
+        // fragment-only/empty references keep the current path and query.
+        let current = request_path(req_target).split('#').next().unwrap_or("/");
+        let resolved = if loc.starts_with('?') {
+            format!("{}{}", current.split('?').next().unwrap_or("/"), loc)
+        } else {
+            current.to_string()
         };
-        (origin.clone(), format!("{dir}{loc}"))
+        (origin.clone(), resolved)
+    } else {
+        if loc.starts_with("//") {
+            loc = format!("{}:{loc}", if origin.https { "https" } else { "http" });
+        }
+        let lower = loc
+            .get(..8.min(loc.len()))
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let absolute = lower.starts_with("http://") || lower.starts_with("https://");
+        if absolute {
+            let https = lower.starts_with("https://");
+            let rest = &loc[if https { 8 } else { 7 }..];
+            let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+            let authority = &rest[..end];
+            let authority = authority.rsplit_once('@').map(|x| x.1).unwrap_or(authority);
+            if authority.is_empty() {
+                return None;
+            }
+            let (host, port) = net::split_h_p(authority, if https { 443 } else { 80 });
+            let host = host
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_string();
+            (Service::new(&host, port, https), rest[end..].to_string())
+        } else if loc.starts_with('/') {
+            (origin.clone(), loc)
+        } else {
+            // Relative to the directory of the request path (query dropped).
+            let base = request_path(req_target);
+            let base = base.split(['?', '#']).next().unwrap_or("/");
+            let dir = match base.rfind('/') {
+                Some(i) => &base[..=i],
+                None => "/",
+            };
+            (origin.clone(), format!("{dir}{loc}"))
+        }
     };
     // URL.getFile(): the fragment never reaches the wire.
     if let Some(i) = path.find('#') {
@@ -2844,6 +2864,23 @@ mod tests {
             Some((svc("b.test", 443, true), "/?x=1".into()))
         );
         assert_eq!(resolve_location(&o, "/", "http:///nohost"), None);
+        // Query-only and fragment-only references retain the current path.
+        assert_eq!(
+            resolve_location(&o, "/x/y?old=1", "?next=2"),
+            Some((o.clone(), "/x/y?next=2".into()))
+        );
+        assert_eq!(
+            resolve_location(&o, "/x/y?old=1", "#section"),
+            Some((o.clone(), "/x/y?old=1".into()))
+        );
+        // IPv6 literals are unbracketed internally but bracketed in authority syntax.
+        let v6 = svc("2001:db8::2", 8443, true);
+        assert_eq!(v6.authority(), "[2001:db8::2]:8443");
+        assert_eq!(v6.origin(), "https://[2001:db8::2]:8443");
+        assert_eq!(
+            resolve_location(&o, "/", "https://[2001:db8::2]:8443/p"),
+            Some((v6, "/p".into()))
+        );
     }
 
     #[test]
