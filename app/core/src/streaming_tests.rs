@@ -12,20 +12,16 @@ use std::time::Duration;
 
 use crate::net::Shared;
 
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
-
 fn proxy() -> Arc<Shared> {
     let shared = Shared::new();
-    shared.proxy_port.store(free_port(), Ordering::SeqCst);
+    // Port 0: the listener takes a free port itself and publishes it.
+    // Picking one here and releasing it for the listener to bind later
+    // let another process take it in between ("proxy did not start").
+    shared.proxy_port.store(0, Ordering::SeqCst);
     crate::net::start_proxy(shared.clone());
     for _ in 0..500 {
         if shared.listener_running.load(Ordering::SeqCst) {
+            assert_ne!(shared.proxy_port.load(Ordering::SeqCst), 0);
             return shared;
         }
         std::thread::sleep(Duration::from_millis(10));
