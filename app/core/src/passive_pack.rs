@@ -1898,6 +1898,547 @@ pub(crate) fn content_type_misstated(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     v.push(issue(c, cx, c.sev, c.confidence, String::new(), t));
 }
 
+// ------------------------------------------------------------ ASP.NET ViewState (burp.Zg3y)
+
+/// burp.Zbvv.ZC: Zrh bytes 3 / 2.
+pub(crate) const CH_VIEWSTATE_MAC: CheckDef = CheckDef {
+    id: "passive.viewstate-without-mac",
+    name: "ASP.NET ViewState without MAC enabled",
+    sev: "low",
+    confidence: "Certain",
+};
+
+/// ASP.NET ViewState without MAC enabled (burp.Zg3y.ZT / Z_, factory
+/// burp.Zbvv.ZC; burp.Zwu9 gives it no detail text). Two candidates: the
+/// request's first `__VIEWSTATE` parameter, URL-decoded only when the
+/// request body is URL-encoded (burp.Ze5g.Ze / Zt), and, on a page with
+/// exactly one form, the `value` of that form's first field named
+/// `__VIEWSTATE` (burp.Ze5g.ZG). A candidate counts when it parses
+/// without errors and carries no MAC (burp.Zcnd.ZD). One issue a response.
+pub(crate) fn viewstate_without_mac(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    let c = CH_VIEWSTATE_MAC;
+    let url_encoded = util::get_header(&cx.req.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .contains("application/x-www-form-urlencoded");
+    let request = request_params(cx)
+        .into_iter()
+        .find(|p| p.name == "__VIEWSTATE")
+        .is_some_and(|p| {
+            let value = if url_encoded {
+                pct_decode(&p.raw)
+            } else {
+                p.raw.into_bytes()
+            };
+            viewstate::without_mac(&value)
+        });
+    let response = cx.html && {
+        let page_forms = forms(&cx.text, &cx.low);
+        match page_forms.as_slice() {
+            [f] => f
+                .fields
+                .iter()
+                .position(|n| n == "__VIEWSTATE")
+                .and_then(|i| f.values[i].as_deref())
+                .is_some_and(|value| viewstate::without_mac(value.as_bytes())),
+            _ => false,
+        }
+    };
+    if request || response {
+        v.push(issue(
+            c,
+            cx,
+            c.sev,
+            c.confidence,
+            String::new(),
+            String::new(),
+        ));
+    }
+}
+
+/// burp.Zcnd.ZD: Burp's ASP.NET ViewState reader. The value must be Base64
+/// (net.portswigger.Zq0.Zt); its decoded bytes are read as the 2.x
+/// ObjectStateFormatter format (burp.Zpqd, first bytes FF 01) or the 1.x
+/// LosFormatter text (burp.Zbdj, second byte `<`); anything else has
+/// errors. After the root value, the bytes left decide (Zpqd.Zi, Zbdj.Zi):
+/// none means no MAC, 20 or 32 a MAC, any other count errors.
+pub(crate) mod viewstate {
+    use super::is_base64;
+    use std::collections::HashSet;
+
+    /// Deepest nesting read. Burp recurses without a limit: it reads 1,000
+    /// nested values and throws StackOverflowError somewhere past that
+    /// (thread stack and JIT decide where), which its `catch (Exception)`
+    /// does not catch, so the check reports nothing. Deeper values count
+    /// as errors here, so a value nested between 257 levels and Burp's
+    /// limit is not reported.
+    const MAX_DEPTH: usize = 256;
+
+    /// What burp.Zef0 tells the check: errors (Zh), else MAC enabled (ZI)
+    /// or not.
+    #[derive(Clone, Copy, PartialEq, Debug)]
+    pub(crate) enum State {
+        Errors,
+        Mac,
+        NoMac,
+    }
+
+    /// burp.Zg3y.Z_: a value that parses without errors and has no MAC.
+    pub(crate) fn without_mac(value: &[u8]) -> bool {
+        state(value) == State::NoMac
+    }
+
+    /// burp.Zcnd.ZD.
+    pub(crate) fn state(value: &[u8]) -> State {
+        if !is_base64(value) {
+            return State::Errors;
+        }
+        let Some(b) = java_base64(value) else {
+            return State::Errors;
+        };
+        if b.len() > 1 && b[0] == 0xff && b[1] == 0x01 {
+            let mut r = Los {
+                b: &b,
+                pos: 2,
+                types: 4,
+            };
+            return match r.token(0) {
+                Some(()) => trailer(b.len() - r.pos),
+                None => State::Errors,
+            };
+        }
+        if b.len() > 1 && b[1] == b'<' {
+            let mut r = Text {
+                b: &b,
+                pos: 0,
+                types: 0,
+                keys: HashSet::new(),
+            };
+            return match r.token(0) {
+                Some(()) => b.len().checked_sub(r.pos).map_or(State::Errors, trailer),
+                None => State::Errors,
+            };
+        }
+        State::Errors
+    }
+
+    /// Zpqd.Zi / Zbdj.Zi: the bytes left after the root value.
+    fn trailer(left: usize) -> State {
+        match left {
+            0 => State::NoMac,
+            20 | 32 => State::Mac,
+            _ => State::Errors,
+        }
+    }
+
+    /// net.portswigger.Zq0.Zw: java.util.Base64's basic decoder after
+    /// tabs, line breaks and spaces are dropped. `=` ends the data and must
+    /// complete its unit, a unit of one character is an error, and nothing
+    /// may follow the padding.
+    fn java_base64(src: &[u8]) -> Option<Vec<u8>> {
+        let s: Vec<u8> = src
+            .iter()
+            .copied()
+            .filter(|c| !matches!(c, b'\t' | b'\n' | b'\r' | b' '))
+            .collect();
+        if s.len() == 1 {
+            return None;
+        }
+        let (mut out, mut bits, mut unit, mut i) = (Vec::new(), 0u32, 0, 0);
+        while i < s.len() {
+            let c = s[i];
+            i += 1;
+            let v = match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                b'=' => {
+                    if unit == 0 || (unit == 2 && s.get(i) != Some(&b'=')) {
+                        return None;
+                    }
+                    if unit == 2 {
+                        i += 1;
+                    }
+                    break;
+                }
+                _ => return None,
+            };
+            bits = bits << 6 | u32::from(v);
+            unit += 1;
+            if unit == 4 {
+                out.extend([(bits >> 16) as u8, (bits >> 8) as u8, bits as u8]);
+                (bits, unit) = (0, 0);
+            }
+        }
+        match unit {
+            1 => return None,
+            2 => out.push((bits >> 4) as u8),
+            3 => out.extend([(bits >> 10) as u8, (bits >> 2) as u8]),
+            _ => {}
+        }
+        (i == s.len()).then_some(out)
+    }
+
+    /// burp.Zpqd: the 2.x reader. `None` is Zpqd's error flag (ZC), which
+    /// once set decides the result, so reading stops there.
+    struct Los<'a> {
+        b: &'a [u8],
+        pos: usize,
+        /// Entries of the type table (Zpqd.ZQ), four to start (Zpqd.Zt).
+        types: usize,
+    }
+
+    impl Los<'_> {
+        /// Zpqd.ZX: one byte; the end of the data is an error.
+        fn byte(&mut self) -> Option<u8> {
+            let c = *self.b.get(self.pos)?;
+            self.pos += 1;
+            Some(c)
+        }
+
+        /// Zpqd.ZG: `n` bytes, each through ZX.
+        fn skip(&mut self, n: usize) -> Option<()> {
+            if self.b.len() - self.pos < n {
+                return None;
+            }
+            self.pos += n;
+            Some(())
+        }
+
+        /// Zpqd.Zb: a 7-bit encoded int of at most five bytes; the fifth
+        /// shifts by 28 and can make it negative.
+        fn int(&mut self) -> Option<i32> {
+            let (mut n, mut shift) = (0u32, 0);
+            loop {
+                if shift == 35 {
+                    return None;
+                }
+                let c = self.byte()?;
+                n |= u32::from(c & 0x7f) << shift;
+                shift += 7;
+                if c & 0x80 == 0 {
+                    return Some(n as i32);
+                }
+            }
+        }
+
+        /// The size Zpqd.Zw (tokens 20 to 24 and 50) gives `new Zbky[n]`,
+        /// `new ArrayList(n)` or `new byte[n]`: negative is an error (Java's
+        /// NegativeArraySizeException, IllegalArgumentException).
+        fn count(&mut self) -> Option<usize> {
+            usize::try_from(self.int()?).ok()
+        }
+
+        /// Up to `n` bytes, as Zpqd.ZL and token 50 of Zpqd.Zw read them:
+        /// InputStream.read copies what is left, so a length past the end
+        /// is no error.
+        fn read_up_to(&mut self, n: usize) {
+            self.pos += n.min(self.b.len() - self.pos);
+        }
+
+        /// Zpqd.ZL: a string, its length first.
+        fn string(&mut self) -> Option<()> {
+            let n = self.count()?;
+            self.read_up_to(n);
+            Some(())
+        }
+
+        /// Zpqd.ZV: a type, by index into the table (43) or by name, which
+        /// adds it to the table.
+        fn type_ref(&mut self) -> Option<()> {
+            if self.byte()? == 43 {
+                let i = self.count()?;
+                return (i < self.types).then_some(());
+            }
+            self.string()?;
+            self.types += 1;
+            Some(())
+        }
+
+        /// Zpqd.Zw: one token and what it holds.
+        fn token(&mut self, depth: usize) -> Option<()> {
+            if depth > MAX_DEPTH {
+                return None;
+            }
+            let d = depth + 1;
+            match self.byte()? {
+                1 => self.skip(2),
+                2 | 10 => self.int().map(drop),
+                3 | 4 => self.byte().map(drop),
+                // 30 and 31 are Zpqd.Ze: a new string for the string
+                // table, or an index into its 255 entries.
+                5 | 30 => self.string(),
+                31 => (self.byte()? < 255).then_some(()),
+                6 | 7 => self.skip(8),
+                8 | 9 => self.skip(4),
+                11 => {
+                    self.type_ref()?;
+                    self.int().map(drop)
+                }
+                12 | 28 | 100..=104 => Some(()),
+                15 => {
+                    self.token(d)?;
+                    self.token(d)
+                }
+                16 => {
+                    self.token(d)?;
+                    self.token(d)?;
+                    self.token(d)
+                }
+                20 => {
+                    self.type_ref()?;
+                    for _ in 0..self.count()? {
+                        self.token(d)?;
+                    }
+                    Some(())
+                }
+                21 => {
+                    for _ in 0..self.count()? {
+                        self.string()?;
+                    }
+                    Some(())
+                }
+                22 => {
+                    for _ in 0..self.count()? {
+                        self.token(d)?;
+                    }
+                    Some(())
+                }
+                23 | 24 => {
+                    for _ in 0..self.count()? {
+                        self.token(d)?;
+                        self.token(d)?;
+                    }
+                    Some(())
+                }
+                25 => self.type_ref(),
+                27 => {
+                    self.skip(8)?;
+                    self.skip(4)
+                }
+                40 => {
+                    self.type_ref()?;
+                    self.string()
+                }
+                50 => {
+                    let n = self.count()?;
+                    self.read_up_to(n);
+                    Some(())
+                }
+                60 => {
+                    // A sparse array: its length, then how many (index,
+                    // value) pairs follow.
+                    self.type_ref()?;
+                    let len = self.int()?;
+                    let count = self.int()?;
+                    if count > len || len < 0 {
+                        return None;
+                    }
+                    for _ in 0..count {
+                        let i = self.int()?;
+                        if i < 0 || i >= len {
+                            return None;
+                        }
+                        self.token(d)?;
+                    }
+                    Some(())
+                }
+                _ => None,
+            }
+        }
+    }
+
+    /// burp.Zbdj: the 1.x reader. `None` is Zbdj's error flag (ZN), set
+    /// by any exception, reading past the end of the data among them.
+    struct Text<'a> {
+        b: &'a [u8],
+        pos: usize,
+        /// Length of the type list (Zbdj.Zm).
+        types: usize,
+        /// Keys of the type-converter map (Zbdj.ZK).
+        keys: HashSet<Vec<u8>>,
+    }
+
+    /// Zbdj.ZJ(String): a decimal number in Java int arithmetic, -1 when
+    /// anything but digits is in it.
+    fn number(s: &[u8]) -> i32 {
+        let mut n: i32 = 0;
+        for &c in s {
+            if !c.is_ascii_digit() {
+                return -1;
+            }
+            n = n.wrapping_mul(10).wrapping_add(i32::from(c - b'0'));
+        }
+        n
+    }
+
+    impl Text<'_> {
+        /// Zbdj's `ZP[ZL]`: the byte at the read position.
+        fn at(&self) -> Option<u8> {
+            self.b.get(self.pos).copied()
+        }
+
+        /// Zbdj.ZJ(): the text up to `;`, `<` or `>`. A backslash takes
+        /// the next byte as it is; `\e` is the empty string.
+        fn word(&mut self) -> Option<Vec<u8>> {
+            let mut s = Vec::new();
+            while let Some(c) = self.at() {
+                match c {
+                    b';' | b'<' | b'>' => break,
+                    b'\\' => {
+                        self.pos += 1;
+                        let next = self.at()?;
+                        if next == b'e' {
+                            self.pos += 1;
+                            return Some(Vec::new());
+                        }
+                        s.push(next);
+                    }
+                    _ => s.push(c),
+                }
+                self.pos += 1;
+            }
+            Some(s)
+        }
+
+        /// Zbdj.ZI: whether a type index names a type: -1 none, 0 to 4 the
+        /// built-in ones (Zbdj.ZE), 50 and up the list read so far; any
+        /// other index is an error.
+        fn known(&self, n: i32) -> Option<bool> {
+            if n == -1 {
+                return Some(false);
+            }
+            if n <= 49 {
+                return (0..5).contains(&n).then_some(true);
+            }
+            (usize::try_from(n - 50).ok()? < self.types).then_some(true)
+        }
+
+        /// Zbdj.Zx(String): a type by index, or by name, which joins the
+        /// list.
+        fn type_name(&mut self, s: &[u8]) -> Option<()> {
+            if !self.known(number(s))? {
+                self.types += 1;
+            }
+            Some(())
+        }
+
+        /// Zbdj.ZC: a type-converted value. A type index is looked up the
+        /// first time its spelling is seen; a type name joins the list
+        /// twice and its index the map. Then the value's text.
+        fn converted(&mut self, s: &[u8]) -> Option<()> {
+            let n = number(s);
+            if n != -1 {
+                if !self.keys.contains(s) {
+                    self.known(n)?;
+                    self.keys.insert(s.to_vec());
+                }
+            } else {
+                self.types += 1;
+                self.keys.insert((self.types + 50).to_string().into_bytes());
+                self.types += 1;
+            }
+            self.word().map(drop)
+        }
+
+        /// A member of a pair or triplet (Zbdj.Zx, cases `p` and `t`):
+        /// `stop` there is a null one. The byte after it is skipped.
+        fn member(&mut self, stop: u8, depth: usize) -> Option<()> {
+            if self.at()? != stop {
+                self.token(depth)?;
+            }
+            self.pos += 1;
+            Some(())
+        }
+
+        /// Zbdj.Zb and the `l` list: values up to `>`, each followed by
+        /// one byte; `;` alone is a null value.
+        fn items(&mut self, depth: usize) -> Option<()> {
+            while self.at()? != b'>' {
+                if self.at()? != b';' {
+                    self.token(depth)?;
+                }
+                self.pos += 1;
+            }
+            Some(())
+        }
+
+        /// Zbdj.Zx(): one value. A word not followed by `<` is a string;
+        /// otherwise the word names what follows.
+        fn token(&mut self, depth: usize) -> Option<()> {
+            if depth > MAX_DEPTH {
+                return None;
+            }
+            let d = depth + 1;
+            let s = self.word()?;
+            if self.at() != Some(b'<') {
+                return Some(());
+            }
+            self.pos += 1;
+            match s.as_slice() {
+                b"p" => {
+                    self.member(b';', d)?;
+                    self.member(b'>', d)?;
+                }
+                b"t" => {
+                    self.member(b';', d)?;
+                    self.member(b';', d)?;
+                    self.member(b'>', d)?;
+                }
+                // Integer.parseInt, its NumberFormatException ignored.
+                b"i" => {
+                    self.word()?;
+                    self.pos += 1;
+                }
+                b"o" => {
+                    self.at()?;
+                    self.pos += 2;
+                }
+                b"l" => {
+                    self.items(d)?;
+                    self.pos += 1;
+                }
+                b"@" => {
+                    while self.at()? != b'>' {
+                        if self.at()? != b';' {
+                            self.word()?;
+                        }
+                        self.pos += 1;
+                    }
+                    self.pos += 1;
+                }
+                b"h" => {
+                    while self.at()? != b'>' {
+                        self.token(d)?;
+                        self.pos += 1;
+                        self.member(b';', d)?;
+                    }
+                    self.pos += 1;
+                }
+                b"b" => {
+                    let w = self.word()?;
+                    java_base64(&w)?;
+                    self.pos += 1;
+                }
+                // String.charAt(0) of an empty word.
+                [] => return None,
+                [b'@', name @ ..] if !name.is_empty() => {
+                    self.type_name(name)?;
+                    self.items(d)?;
+                    self.pos += 1;
+                }
+                other => {
+                    self.converted(other)?;
+                    self.pos += 1;
+                }
+            }
+            Some(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod php_depth_tests {
     use super::php;

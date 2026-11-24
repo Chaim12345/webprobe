@@ -212,6 +212,7 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(pack::CH_REFERER_LEAK, pack::cross_domain_referer),
     unit!(pack::CH_BASE64_PARAM, pack::base64_parameter),
     unit!(pack::CH_SQL_STATEMENT, pack::sql_statement),
+    unit!(pack::CH_VIEWSTATE_MAC, pack::viewstate_without_mac),
     unit!(pack::CH_COOKIE_PARENT_DOMAIN, pack::cookie_parent_domain),
     unit!(pack::CH_PASSWORD_URL_QUERY, |cx, v| pack::passwords(
         cx,
@@ -268,13 +269,15 @@ pub(crate) const CH_PASSWORD_GET: CheckDef = CheckDef {
 };
 
 /// One form of an HTML page: method, action, its named fields in document
-/// order (burp.Zem.ZA4: input, select, textarea and button elements) and,
+/// order (burp.Zem.ZA4: input, select, textarea and button elements) with
+/// the `value` attribute of each (burp.Zshi.ZFl; `None` when absent) and,
 /// among them, the password fields and whether one is a file input.
 pub(crate) struct Form {
     pub method_get: bool,
     pub method_post: bool,
     pub action: String,
     pub fields: Vec<String>,
+    pub values: Vec<Option<String>>,
     pub passwords: Vec<String>,
     pub file_upload: bool,
 }
@@ -352,7 +355,8 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
             .as_deref()
             .is_some_and(|m| m.trim().eq_ignore_ascii_case("post"));
         let action = attr(low_tag, tag, "action").unwrap_or_default();
-        let (mut fields, mut passwords, mut file_upload) = (Vec::new(), Vec::new(), false);
+        let (mut fields, mut values, mut passwords, mut file_upload) =
+            (Vec::new(), Vec::new(), Vec::new(), false);
         let (body_low, body) = (&low[tag_end..end], &text[tag_end..end]);
         let mut j = 0;
         while let Some(o) = body_low[j..].find('<') {
@@ -376,6 +380,7 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
                     _ => {}
                 }
                 fields.push(n);
+                values.push(attr(lt, t, "value"));
             }
             j = e;
         }
@@ -384,6 +389,7 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
             method_post,
             action,
             fields,
+            values,
             passwords,
             file_upload,
         });
@@ -2316,6 +2322,182 @@ mod tests {
             );
             assert!(v.is_empty(), "{q}");
         }
+    }
+
+    #[test]
+    fn asp_net_viewstate_parser() {
+        // burp.Zcnd.ZD (burp.Zpqd 2.x, burp.Zbdj 1.x). Every outcome below
+        // is the one Burp's own parser gives for the same value.
+        use pack::viewstate::{State, state};
+        let st = |b: &[u8]| state(util::b64_encode(b).as_bytes());
+        let cat = |parts: &[&[u8]]| parts.concat();
+        let trail = |b: &[u8], n: usize| cat(&[b, &vec![0x5a; n]]);
+        // ObjectStateFormatter: Pair(Pair("-123456789", null), null).
+        let v2 = cat(&[
+            &[0xff, 0x01, 0x0f, 0x0f, 0x05, 0x0a],
+            b"-123456789",
+            &[0x64, 0x64],
+        ]);
+        assert_eq!(util::b64_encode(&v2), "/wEPDwUKLTEyMzQ1Njc4OWRk");
+        assert_eq!(st(&v2), State::NoMac);
+        assert_eq!(st(&trail(&v2, 20)), State::Mac, "HMAC-SHA1");
+        assert_eq!(st(&trail(&v2, 32)), State::Mac, "HMAC-SHA256");
+        for n in [1, 19, 21, 31, 33] {
+            assert_eq!(st(&trail(&v2, n)), State::Errors, "{n} bytes left");
+        }
+        // Truncated where a token is due: errors. Truncated inside a
+        // string, Java's InputStream.read copies what is left: no error.
+        assert_eq!(st(&v2[..v2.len() - 1]), State::Errors);
+        assert_eq!(
+            st(&v2[..12]),
+            State::Errors,
+            "the inner pair lacks its second value"
+        );
+        assert_eq!(
+            st(&cat(&[&[0xff, 0x01, 0x05, 0x0a], b"-1234"])),
+            State::NoMac
+        );
+        for (bytes, want) in [
+            (&[0xff, 0x01, 0x0d][..], State::Errors), // no such token
+            (&[0xff, 0x01, 0x19, 0x2b, 0x03], State::NoMac), // type index 3 of 4
+            (&[0xff, 0x01, 0x19, 0x2b, 0x04], State::Errors), // type index 4 of 4
+            (
+                &[0xff, 0x01, 0x16, 0xff, 0xff, 0xff, 0xff, 0x0f],
+                State::Errors,
+            ), // list of -1
+            (
+                &[0xff, 0x01, 0x02, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01],
+                State::Errors,
+            ), // 6-byte int
+            (&[0xff, 0x01, 0x1f, 0xfe], State::NoMac), // string table entry 254
+            (&[0xff, 0x01, 0x1f, 0xff], State::Errors), // entry 255 of 255
+            (
+                &[0xff, 0x01, 0x3c, 0x2b, 0x00, 0x03, 0x01, 0x02, 0x64],
+                State::NoMac,
+            ), // sparse array
+            (
+                &[0xff, 0x01, 0x3c, 0x2b, 0x00, 0x03, 0x01, 0x03, 0x64],
+                State::Errors,
+            ), // index 3 of 3
+            (&[0xff, 0x01, 0x3c, 0x2b, 0x00, 0x03, 0x04], State::Errors), // 4 items in 3
+            (&[0xff, 0x01, 0x32, 0x7f, 0x01], State::NoMac), // short byte array
+        ] {
+            assert_eq!(st(bytes), want, "{bytes:02x?}");
+        }
+        // LosFormatter: Triplet("1234567890", null, null), and other shapes.
+        let v1 = b"t<1234567890;;>";
+        assert_eq!(st(v1), State::NoMac);
+        assert_eq!(st(&trail(v1, 20)), State::Mac);
+        assert_eq!(st(&trail(v1, 32)), State::Mac);
+        assert_eq!(st(&trail(v1, 7)), State::Errors);
+        for (text, want) in [
+            (&b"t<1234567890;"[..], State::Errors), // truncated
+            (b"t<p<l<a;i<x>;\\;;>;o<t>>;b<QUJD>;>", State::NoMac),
+            (b"t<b<QQ=>;;>", State::Errors), // not Java Base64
+            (b"t<b<QQ==>;;>", State::NoMac),
+            (b"t<@1<a;;>;;>", State::NoMac),      // built-in type 1
+            (b"t<@5<a;;>;;>", State::Errors),     // no type 5
+            (b"t<Foo<x>;50<y>;>", State::NoMac),  // type 50 is Foo
+            (b"t<Foo<x>;52<y>;>", State::Errors), // no type 52
+            (b"t<<x>;;>", State::Errors),         // empty type name
+            (b"h<a;b;c;;>", State::NoMac),
+        ] {
+            assert_eq!(st(text), want, "{}", String::from_utf8_lossy(text));
+        }
+        // Not Base64, Base64 of neither format, nothing.
+        for raw in ["abc$", "aGVsbG8gd29ybGQ=", "", " /wEPDwUKLTEyMzQ1Njc4OWRk"] {
+            assert_eq!(state(raw.as_bytes()), State::Errors, "{raw:?}");
+        }
+        // Deep nesting is read up to a limit and never exhausts the stack.
+        let nested = |n: usize| cat(&[&[0xff, 0x01], &vec![0x0f; n], &vec![0x64; n + 1]]);
+        assert_eq!(st(&nested(200)), State::NoMac);
+        assert_eq!(st(&nested(100_000)), State::Errors);
+        assert_eq!(st(&b"p<".repeat(100_000)), State::Errors);
+    }
+
+    #[test]
+    fn asp_net_viewstate_without_mac() {
+        // burp.Zg3y: the request's __VIEWSTATE parameter, or the field of a
+        // page's only form; one issue for both.
+        let c = pack::CH_VIEWSTATE_MAC;
+        let no_mac = "/wEPDwUKLTEyMzQ1Njc4OWRk";
+        let escaped = "%2FwEPDwUKLTEyMzQ1Njc4OWRk";
+        let mac = util::b64_encode(
+            &[
+                &[0xff, 0x01, 0x0f, 0x0f, 0x05, 0x0a][..],
+                b"-123456789",
+                &[0x64, 0x64],
+                &[0x5a; 20],
+            ]
+            .concat(),
+        );
+        let check = |v: &[ScanIssue]| {
+            assert_eq!(
+                names(v),
+                [(
+                    "ASP.NET ViewState without MAC enabled".to_string(),
+                    String::new()
+                )]
+            );
+            assert_eq!(v[0].detail, "");
+            assert_eq!(
+                (v[0].sev.as_str(), v[0].confidence.as_str()),
+                ("low", "Certain")
+            );
+        };
+        let get = |q: &str| only(&ex(&format!("/a.aspx?{q}"), true, HTML, "x"), c);
+        let post = |body: &str| {
+            let req = format!(
+                "POST /a.aspx HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            only(&ex_req("/a.aspx", &req, HTML, "x"), c)
+        };
+        check(&get(&format!("__VIEWSTATE={no_mac}")));
+        // Only a URL-encoded body has its parameters URL-decoded.
+        assert!(get(&format!("__VIEWSTATE={escaped}")).is_empty());
+        check(&post(&format!("__EVENTTARGET=&__VIEWSTATE={escaped}")));
+        assert!(post(&format!("__VIEWSTATE={mac}")).is_empty());
+        assert!(
+            get("__viewstate=/wEPDwUKLTEyMzQ1Njc4OWRk").is_empty(),
+            "the name is exact"
+        );
+        // The first __VIEWSTATE parameter is the one read.
+        assert!(get(&format!("__VIEWSTATE={mac}&__VIEWSTATE={no_mac}")).is_empty());
+        // The response: a page with one form.
+        let field = |v: &str| {
+            format!(
+                "<input type=\"hidden\" name=\"__VIEWSTATE\" id=\"__VIEWSTATE\" value=\"{v}\" />"
+            )
+        };
+        let page = |body: &str| only(&ex("/a.aspx", true, HTML, body), c);
+        check(&page(&format!(
+            "<form method=\"post\" action=\"./a.aspx\">{}</form>",
+            field(no_mac)
+        )));
+        assert!(page(&format!("<form method=post>{}</form>", field(&mac))).is_empty());
+        assert!(
+            page(&format!(
+                "<form>{}</form><form><input name=q></form>",
+                field(no_mac)
+            ))
+            .is_empty(),
+            "two forms"
+        );
+        assert!(
+            page("<form><input name=\"__VIEWSTATE\"></form>").is_empty(),
+            "no value"
+        );
+        // Request and response both qualify: still one issue.
+        check(&only(
+            &ex(
+                &format!("/a.aspx?__VIEWSTATE={no_mac}"),
+                true,
+                HTML,
+                &format!("<form>{}</form>", field(no_mac)),
+            ),
+            c,
+        ));
     }
 
     #[test]
