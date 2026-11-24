@@ -1,0 +1,151 @@
+{
+ "label": "chromium",
+ "json_list_page_target": true,
+ "mode": "page",
+ "Page.enable": true,
+ "Network.enable": true,
+ "Network.setBypassServiceWorker": true,
+ "Page.addScriptToEvaluateOnNewDocument": true,
+ "Page.navigate": true,
+ "events_seen": {
+  "Page.frameStartedNavigating": 1,
+  "Page.frameStartedLoading": 1,
+  "Network.requestWillBeSent": 7,
+  "Network.requestWillBeSentExtraInfo": 7,
+  "Network.responseReceivedExtraInfo": 7,
+  "Network.responseReceived": 7,
+  "Page.frameNavigated": 1,
+  "Network.policyUpdated": 1,
+  "Network.dataReceived": 10,
+  "Network.loadingFinished": 7,
+  "Page.domContentEventFired": 1,
+  "Network.resourceChangedPriority": 1,
+  "Page.loadEventFired": 1,
+  "Page.frameStoppedLoading": 1
+ },
+ "lab_hits_plain_nav": [
+  [
+   "GET",
+   "/?q=1"
+  ],
+  [
+   "GET",
+   "/s.css"
+  ],
+  [
+   "GET",
+   "/app.js"
+  ],
+  [
+   "GET",
+   "/api?x=1"
+  ],
+  [
+   "POST",
+   "/xhr"
+  ],
+  [
+   "GET",
+   "/x"
+  ],
+  [
+   "GET",
+   "/favicon.ico"
+  ]
+ ],
+ "requestWillBeSent_urls": [
+  [
+   "GET",
+   "/?q=1",
+   false
+  ],
+  [
+   "GET",
+   "/s.css",
+   false
+  ],
+  [
+   "GET",
+   "/app.js",
+   false
+  ],
+  [
+   "GET",
+   "/api?x=1",
+   false
+  ],
+  [
+   "POST",
+   "/xhr",
+   true
+  ],
+  [
+   "GET",
+   "/x",
+   false
+  ],
+  [
+   "GET",
+   "/favicon.ico",
+   false
+  ]
+ ],
+ "Network.getResponseBody(document)": true,
+ "Runtime.evaluate(page state)": {
+  "hook": 1,
+  "sinks": [
+   "<img src=x onerror=1>&__proto__[tokh]=tokh"
+  ],
+  "polluted": "tokh",
+  "app": 1,
+  "api": "{\"ok\":true}",
+  "links": [
+   "http://127.0.0.1:35517/next?a=1"
+  ],
+  "forms": [
+   "http://127.0.0.1:35517/login post"
+  ]
+ },
+ "Fetch.enable": true,
+ "Network.setBlockedURLs": true,
+ "Fetch.requestPaused": [
+  [
+   "Document",
+   "GET",
+   "/?probe=2"
+  ],
+  [
+   "Stylesheet",
+   "GET",
+   "/s.css"
+  ],
+  [
+   "Script",
+   "GET",
+   "/app.js"
+  ],
+  [
+   "XHR",
+   "GET",
+   "/api?x=1"
+  ],
+  [
+   "XHR",
+   "POST",
+   "/xhr"
+  ],
+  [
+   "Other",
+   "GET",
+   "/favicon.ico"
+  ]
+ ],
+ "lab_hits_during_interception (must be empty for fail-closed)": [],
+ "Runtime.evaluate(after interception)": {
+  "a": "FULFILLED",
+  "app": "fulfilled",
+  "polluted": "tok2",
+  "hook": 1,
+  "sinks": 1
+ }
+}
