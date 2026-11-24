@@ -11,7 +11,8 @@
 //! `/{key}/v0.1/scan`. The key is never written to any log or response.
 
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
@@ -47,7 +48,78 @@ struct ApiState {
     tasks: Vec<ApiTask>,
 }
 
-/// Start the REST API from the user options. Returns the bound port.
+const MAX_API_CLIENTS: usize = 32;
+const MAX_API_TASKS: usize = 256;
+const MAX_SCAN_URLS: usize = 1024;
+const MAX_SCAN_URL_LENGTH: usize = 8192;
+
+#[derive(Debug, PartialEq, Eq)]
+enum TaskAdmissionError {
+    ScanAlreadyRunning,
+    HistoryFull,
+}
+
+fn reserve_task(state: &mut ApiState, first_issue: usize) -> Result<usize, TaskAdmissionError> {
+    if state.tasks.iter().any(|task| task.status == "running") {
+        return Err(TaskAdmissionError::ScanAlreadyRunning);
+    }
+    if state.tasks.len() >= MAX_API_TASKS {
+        return Err(TaskAdmissionError::HistoryFull);
+    }
+    let id = state.tasks.len();
+    state.tasks.push(ApiTask {
+        status: "running".to_string(),
+        first_issue,
+    });
+    Ok(id)
+}
+
+fn listen_address(api: &ApiConfig) -> Result<SocketAddr, String> {
+    let (mode, default_host) = match api.listen_mode.as_str() {
+        "loopback_only" => ("loopback_only", "127.0.0.1"),
+        "all_interfaces" => ("all_interfaces", "0.0.0.0"),
+        other => {
+            return Err(format!(
+                "user_options.misc.api listen_mode `{other}` is not supported"
+            ));
+        }
+    };
+    let host = api.address.as_deref().unwrap_or(default_host);
+    let addresses = (host, api.port)
+        .to_socket_addrs()
+        .map_err(|e| format!("REST API cannot resolve {host}: {e}"))?;
+    let address = if mode == "loopback_only" {
+        addresses.into_iter().find(|addr| addr.ip().is_loopback())
+    } else {
+        addresses.into_iter().next()
+    };
+    address.ok_or_else(|| {
+        if mode == "loopback_only" {
+            format!("REST API loopback_only address {host} does not resolve to a loopback IP")
+        } else {
+            format!("REST API address {host} did not resolve")
+        }
+    })
+}
+
+fn acquire_client_slot(active: &AtomicUsize) -> bool {
+    active
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+            (count < MAX_API_CLIENTS).then_some(count + 1)
+        })
+        .is_ok()
+}
+
+struct ClientSlot(Arc<AtomicUsize>);
+
+impl Drop for ClientSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// Start the REST API from the user options. Returns the actual bound socket
+/// address so callers do not guess the interface from listen_mode.
 /// Refuses to start when a key is required but none is configured: Burp
 /// shows the generated key in its UI; a headless process has nowhere safe
 /// to show it, and the key is never logged.
@@ -55,49 +127,50 @@ pub fn start(
     shared: &Arc<net::Shared>,
     api: &ApiConfig,
     issue_definitions: Vec<IssueDefinition>,
-) -> Result<u16, String> {
+) -> Result<SocketAddr, String> {
     if !api.insecure_mode && api.keys.is_empty() {
         return Err(
             "user_options.misc.api is enabled with no keys and insecure_mode false; refusing to start without an API key"
                 .to_string(),
         );
     }
-    if api.listen_mode == "all_interfaces" && api.insecure_mode {
-        // headless has no settings UI to notice this in: say it on stderr
+    let address = listen_address(api)?;
+    let listener = TcpListener::bind(address)
+        .map_err(|e| format!("REST API cannot listen on {address}: {e}"))?;
+    let bound = listener.local_addr().map_err(|e| e.to_string())?;
+    if api.insecure_mode && !bound.ip().is_loopback() {
+        // Warn based on the actual socket, including an address override.
         eprintln!(
-            "webprobe: REST API listens on all interfaces with insecure_mode (no API key); any host that can reach the port can drive it"
+            "webprobe: REST API is bound to {bound} with insecure_mode (no API key); any host that can reach the port can drive it"
         );
     }
-    let host = match api.listen_mode.as_str() {
-        "loopback_only" => api.address.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
-        "all_interfaces" => api.address.clone().unwrap_or_else(|| "0.0.0.0".to_string()),
-        other => {
-            return Err(format!(
-                "user_options.misc.api listen_mode `{other}` is not supported"
-            ));
-        }
-    };
-    let listener = TcpListener::bind((host.as_str(), api.port))
-        .map_err(|e| format!("REST API cannot listen on {host}:{}: {e}", api.port))?;
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let state = Arc::new(Mutex::new(ApiState { tasks: Vec::new() }));
     let shared = shared.clone();
     let api = api.clone();
     let defs = Arc::new(issue_definitions);
+    let active_clients = Arc::new(AtomicUsize::new(0));
     std::thread::spawn(move || {
-        // one thread per client: an idle or slow client must not stall the
-        // others behind its read timeout
+        // Keep idle/slow clients from blocking the accept loop, but bound the
+        // number of client threads so unauthenticated sockets cannot exhaust it.
         for stream in listener.incoming().flatten() {
+            if !acquire_client_slot(&active_clients) {
+                drop(stream);
+                continue;
+            }
             let (shared, state, api, defs) = (
                 shared.clone(),
                 Arc::clone(&state),
                 api.clone(),
                 Arc::clone(&defs),
             );
-            std::thread::spawn(move || handle(stream, &shared, &state, &api, &defs));
+            let slot = Arc::clone(&active_clients);
+            std::thread::spawn(move || {
+                let _slot = ClientSlot(slot);
+                handle(stream, &shared, &state, &api, &defs);
+            });
         }
     });
-    Ok(port)
+    Ok(bound)
 }
 
 fn handle(
@@ -108,6 +181,7 @@ fn handle(
     defs: &[IssueDefinition],
 ) {
     let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
+    let _ = stream.set_write_timeout(Some(std::time::Duration::from_secs(10)));
     let Some((method, path, body)) = read_request(&mut stream) else {
         return;
     };
@@ -180,14 +254,40 @@ fn start_scan(
             json!({"error": "a non-empty `urls` array is required"}),
         );
     }
+    if urls.len() > MAX_SCAN_URLS || urls.iter().any(|url| url.len() > MAX_SCAN_URL_LENGTH) {
+        return respond(
+            stream,
+            413,
+            "Payload Too Large",
+            json!({
+                "error": format!(
+                    "scan accepts at most {MAX_SCAN_URLS} URLs, each no longer than {MAX_SCAN_URL_LENGTH} bytes"
+                )
+            }),
+        );
+    }
     let first_issue = shared.issues.lock().unwrap().len();
     let id = {
         let mut st = state.lock().unwrap();
-        st.tasks.push(ApiTask {
-            status: "running".to_string(),
-            first_issue,
-        });
-        st.tasks.len() - 1
+        match reserve_task(&mut st, first_issue) {
+            Ok(id) => id,
+            Err(TaskAdmissionError::ScanAlreadyRunning) => {
+                return respond(
+                    stream,
+                    409,
+                    "Conflict",
+                    json!({"error": "a scan is already running"}),
+                );
+            }
+            Err(TaskAdmissionError::HistoryFull) => {
+                return respond(
+                    stream,
+                    429,
+                    "Too Many Requests",
+                    json!({"error": "scan task history is full; restart webprobe to clear it"}),
+                );
+            }
+        }
     };
     let shared2 = shared.clone();
     let state2 = state.clone();
@@ -371,8 +471,8 @@ mod tests {
 
     fn start_test_server(api: &ApiConfig) -> (Arc<net::Shared>, u16) {
         let shared = net::Shared::new();
-        let port = start(&shared, api, test_defs()).unwrap();
-        (shared, port)
+        let address = start(&shared, api, test_defs()).unwrap();
+        (shared, address.port())
     }
 
     /// One raw request; returns (status code, body as JSON).
@@ -391,6 +491,46 @@ mod tests {
         let json: Value =
             serde_json::from_str(text.split("\r\n\r\n").nth(1).unwrap_or("{}")).unwrap_or(Value::Null);
         (code, json)
+    }
+
+    #[test]
+    fn loopback_only_rejects_non_loopback_address_overrides() {
+        let mut api = keyed_api();
+        api.listen_mode = "loopback_only".to_string();
+        api.address = Some("0.0.0.0".to_string());
+        assert!(listen_address(&api).is_err());
+        api.address = Some("192.0.2.10".to_string());
+        assert!(listen_address(&api).is_err());
+        api.address = Some("127.0.0.1".to_string());
+        assert!(listen_address(&api).unwrap().ip().is_loopback());
+    }
+
+    #[test]
+    fn api_client_slots_and_scan_tasks_are_bounded() {
+        let active = AtomicUsize::new(0);
+        for _ in 0..MAX_API_CLIENTS {
+            assert!(acquire_client_slot(&active));
+        }
+        assert!(!acquire_client_slot(&active));
+        active.fetch_sub(1, Ordering::AcqRel);
+        assert!(acquire_client_slot(&active));
+
+        let mut state = ApiState { tasks: Vec::new() };
+        assert_eq!(reserve_task(&mut state, 0), Ok(0));
+        assert_eq!(
+            reserve_task(&mut state, 0),
+            Err(TaskAdmissionError::ScanAlreadyRunning)
+        );
+        state.tasks[0].status = "succeeded".to_string();
+        for _ in 1..MAX_API_TASKS {
+            assert!(reserve_task(&mut state, 0).is_ok());
+            let last = state.tasks.last_mut().unwrap();
+            last.status = "succeeded".to_string();
+        }
+        assert_eq!(
+            reserve_task(&mut state, 0),
+            Err(TaskAdmissionError::HistoryFull)
+        );
     }
 
     #[test]
@@ -425,7 +565,7 @@ mod tests {
             .unwrap();
         // claims 64 MB, sends none: the server must close, not buffer
         let req = format!(
-            "POST /burp/scans?{key} HTTP/1.1\r\nhost: x\r\ncontent-length: 67108864\r\nconnection: close\r\n\r\n"
+            "POST /{key}/v0.1/scan HTTP/1.1\r\nhost: 127.0.0.1\r\ncontent-length: 67108864\r\nconnection: close\r\n\r\n"
         );
         s.write_all(req.as_bytes()).unwrap();
         let mut resp = Vec::new();
