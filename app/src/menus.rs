@@ -6,11 +6,11 @@
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::feedback::{self, Level};
 use crate::net;
 use crate::theme;
 use crate::ui::Tab;
-use crate::App;
 
 fn off(ui: &mut Ui, label: &str) {
     ui.add_enabled(false, egui::Button::new(label));

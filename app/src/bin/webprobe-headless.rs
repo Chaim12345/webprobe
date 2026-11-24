@@ -23,8 +23,8 @@
 //! Only point it at hosts you are authorised to test.
 
 use std::io::BufRead;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use webprobe_core::{burp_config, net, project, rest_api, scan, scan_config, scan_library};
@@ -431,7 +431,8 @@ fn main() {
     if let Some(dir) = take_opt(&mut args, "--data-dir") {
         // No threads exist yet, so setting the environment is race-free
         // here. paths::Lookup reads WEBPROBE_DATA_DIR at call time.
-        std::env::set_var("WEBPROBE_DATA_DIR", &dir);
+        // SAFETY: no worker threads exist yet.
+        unsafe { std::env::set_var("WEBPROBE_DATA_DIR", &dir) };
     }
     if take_flag(&mut args, "--diagnostics") {
         println!("webprobe-headless {}", env!("CARGO_PKG_VERSION"));

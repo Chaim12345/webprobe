@@ -569,11 +569,29 @@ impl<S: Read + Write> Conn<S> {
         self.start()?;
         self.committed = false;
         let id = self.alloc()?;
+        let head = self.head_frames(id, req)?;
+        // Conservative commitment: this write puts the last header-block
+        // bytes on the wire; write_all can deliver them all and only fail at
+        // flush(). From here the peer may hold the whole request head, so
+        // the outcome of any later failure is unknown and the request must
+        // not be replayed.
+        self.committed = true;
+        self.io
+            .write_all(&head)
+            .and_then(|()| self.io.flush())
+            .map_err(|e| StreamError::fatal(format!("h2 headers: {e}")))?;
+        self.streams
+            .insert(id, StreamRx::new(self.peer_initial_window));
+        Ok(id)
+    }
+
+    /// The HEADERS (+ CONTINUATION) frames of `req` on stream `id`. A header
+    /// block larger than the peer's maximum frame size is split across
+    /// HEADERS + CONTINUATION frames (RFC 9113 §6.2, §6.10): one oversized
+    /// HEADERS frame is a FRAME_SIZE_ERROR. Before the peer's SETTINGS the
+    /// default 16 KiB (§6.5.2) is the only safe bound.
+    fn head_frames(&mut self, id: u32, req: &H2Request) -> Result<Vec<u8>, StreamError> {
         let block = self.encode_headers(req);
-        // A header block larger than the peer's maximum frame size must be
-        // split across HEADERS + CONTINUATION frames (RFC 9113 §6.2, §6.10):
-        // one oversized HEADERS frame is a FRAME_SIZE_ERROR. Before the
-        // peer's SETTINGS the default 16 KiB (§6.5.2) is the only safe bound.
         let max = if self.settings_seen {
             self.max_frame
         } else {
@@ -584,6 +602,7 @@ impl<S: Read + Write> Conn<S> {
         } else {
             0
         };
+        let mut out = Vec::new();
         let mut rest = block.as_slice();
         let mut first = true;
         loop {
@@ -596,14 +615,8 @@ impl<S: Read + Write> Conn<S> {
             };
             if last {
                 flags |= FLAG_END_HEADERS;
-                // Conservative commitment: this write puts the last
-                // header-block bytes on the wire; write_frame can deliver
-                // them all and only fail at flush(). From here the peer may
-                // hold the whole request head, so the outcome of any later
-                // failure is unknown and the request must not be replayed.
-                self.committed = true;
             }
-            write_frame(&mut self.io, ty, flags, id, &rest[..n])
+            write_frame(&mut out, ty, flags, id, &rest[..n])
                 .map_err(|e| StreamError::fatal(format!("h2 headers: {e}")))?;
             if last {
                 break;
@@ -611,9 +624,92 @@ impl<S: Read + Write> Conn<S> {
             rest = &rest[n..];
             first = false;
         }
-        self.streams
-            .insert(id, StreamRx::new(self.peer_initial_window));
-        Ok(id)
+        Ok(out)
+    }
+
+    /// R-12 "single-packet" burst (burp.Zglm): the preface is sent, then
+    /// every request's frames are serialized into ONE buffer for the caller
+    /// to write in a single packet. DATA is chunked to the safe frame size:
+    /// the burst is written before the peer's SETTINGS arrive, so one
+    /// oversized DATA frame earns a PROTOCOL_ERROR (RFC 9113 §6.5.2).
+    /// Bodies whose group total passes the peer's initial window must be
+    /// rejected up front with [`check_burst_window`].
+    pub fn burst_frames(&mut self, reqs: &[H2Request]) -> Result<Vec<u8>, StreamError> {
+        self.start()?;
+        let max = if self.settings_seen {
+            self.max_frame
+        } else {
+            DEFAULT_MAX_FRAME
+        };
+        let mut out = Vec::new();
+        for req in reqs {
+            let id = self.alloc()?;
+            let mut frames = self.head_frames(id, req)?;
+            let mut chunks = req.body.chunks(max).peekable();
+            while let Some(chunk) = chunks.next() {
+                let flags = if chunks.peek().is_none() {
+                    FLAG_END_STREAM
+                } else {
+                    0
+                };
+                write_frame(&mut frames, FRAME_DATA, flags, id, chunk)
+                    .map_err(|e| StreamError::fatal(format!("h2 data: {e}")))?;
+            }
+            self.streams
+                .insert(id, StreamRx::new(self.peer_initial_window));
+            out.extend_from_slice(&frames);
+        }
+        // The caller writes the buffer at once; from here the peer may hold
+        // every request head, so a later failure is an unknown outcome.
+        self.committed = true;
+        Ok(out)
+    }
+
+    /// Read frames until every open stream is done, feeding each frame to
+    /// its stream's assembly. Returns the streams' ids in the order their
+    /// first response frame arrived (burp.Zglm's "%d/%d" arrival
+    /// numbering). Any stream or connection error fails the whole burst.
+    pub fn pump_all(&mut self) -> Result<Vec<u32>, StreamError> {
+        let mut arrival = Vec::new();
+        loop {
+            if self.streams.is_empty() || self.streams.values().all(|s| s.done) {
+                return Ok(arrival);
+            }
+            let f = read_frame(&mut self.io)
+                .map_err(|e| StreamError::fatal(format!("h2 read: {e}")))?;
+            if (f.ty == FRAME_HEADERS || f.ty == FRAME_DATA)
+                && let Some(s) = self.streams.get(&f.stream)
+                && !s.got_headers
+                && !s.done
+                && !arrival.contains(&f.stream)
+            {
+                arrival.push(f.stream);
+            }
+            // Dispatch with the frame's own stream active so a RST_STREAM
+            // on it comes back as that stream's Reset error; connection
+            // frames go to any unfinished stream, which covers them.
+            let active = if f.stream != 0 && self.streams.contains_key(&f.stream) {
+                f.stream
+            } else {
+                self.streams
+                    .iter()
+                    .find(|(_, s)| !s.done)
+                    .map(|(id, _)| *id)
+                    .unwrap_or(0)
+            };
+            let mut none = None;
+            self.handle(f, active, &mut none)?;
+        }
+    }
+
+    /// Remove a finished stream (after [`Conn::pump_all`]) and return its
+    /// normalized HTTP/1.1-shaped response.
+    pub fn finish_stream(&mut self, id: u32) -> Result<Vec<u8>, StreamError> {
+        let srx = self
+            .streams
+            .remove(&id)
+            .ok_or_else(|| StreamError::fatal("h2: stream state lost"))?;
+        srx.finish()
     }
 
     /// Run a request to completion: headers, body under flow control, then
@@ -624,7 +720,21 @@ impl<S: Read + Write> Conn<S> {
         req: &H2Request,
         mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
     ) -> Result<Vec<u8>, StreamError> {
-        let id = self.start_request(req)?;
+        // Once retired, preserve the previous request's commitment state and
+        // never attempt another stream on this connection.
+        if self.retired {
+            return Err(StreamError::fatal("h2: connection retired"));
+        }
+        let id = match self.start_request(req) {
+            Ok(id) => id,
+            Err(error) => {
+                // start_request may fail after a partial/complete HEADERS write.
+                // Retire before returning so a caller using this Conn for a
+                // sequence cannot send a later item on desynchronized state.
+                self.retired = true;
+                return Err(error);
+            }
+        };
         let body = if req.body.is_empty() {
             None
         } else {
@@ -632,6 +742,7 @@ impl<S: Read + Write> Conn<S> {
         };
         let outcome = self.pump(id, body, &mut sink);
         let Some(srx) = self.streams.remove(&id) else {
+            self.retired = true;
             return Err(StreamError::fatal("h2: stream state lost"));
         };
         if let Err(e) = outcome {
@@ -646,7 +757,13 @@ impl<S: Read + Write> Conn<S> {
                 s.end(false);
             }
         }
-        srx.finish()
+        match srx.finish() {
+            Ok(response) => Ok(response),
+            Err(error) => {
+                self.retired = true;
+                Err(error)
+            }
+        }
     }
 
     /// Continue an h2c upgrade (RFC 7540 §3.2): stream 1 *is* the HTTP/1.1
@@ -793,16 +910,16 @@ impl<S: Read + Write> Conn<S> {
         active: u32,
         sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
     ) -> Result<(), StreamError> {
-        if let Some(cs) = self.cont_stream {
-            if !(f.ty == FRAME_CONTINUATION && f.stream == cs) {
-                return Err(StreamError::fatal(
-                    "h2: header block interrupted before CONTINUATION",
-                ));
-            }
+        if let Some(cs) = self.cont_stream
+            && !(f.ty == FRAME_CONTINUATION && f.stream == cs)
+        {
+            return Err(StreamError::fatal(
+                "h2: header block interrupted before CONTINUATION",
+            ));
         }
         match f.ty {
-            FRAME_SETTINGS => {
-                if f.flags & FLAG_ACK == 0 {
+            FRAME_SETTINGS
+                if f.flags & FLAG_ACK == 0 => {
                     for chunk in f.payload.as_chunks::<6>().0 {
                         let id = u16::from_be_bytes([chunk[0], chunk[1]]);
                         let val = u32::from_be_bytes([chunk[2], chunk[3], chunk[4], chunk[5]]);
@@ -827,7 +944,7 @@ impl<S: Read + Write> Conn<S> {
                             SETTINGS_MAX_CONCURRENT_STREAMS => {
                                 self.peer_max_streams = Some(val);
                             }
-                            SETTINGS_HEADER_TABLE_SIZE => {
+                            SETTINGS_HEADER_TABLE_SIZE
                                 // The hpack 0.3 encoder cannot resize its
                                 // dynamic table, so a peer reduction below
                                 // the 4096 default cannot be honored on this
@@ -835,10 +952,9 @@ impl<S: Read + Write> Conn<S> {
                                 // then retire it (never pooled, no new
                                 // streams). A fresh connection re-encodes
                                 // with an empty dynamic table.
-                                if (val as usize) < 4096 {
+                                if (val as usize) < 4096 => {
                                     self.retired = true;
                                 }
-                            }
                             _ => {}
                         }
                     }
@@ -846,7 +962,6 @@ impl<S: Read + Write> Conn<S> {
                     write_frame(&mut self.io, FRAME_SETTINGS, FLAG_ACK, 0, &[])
                         .map_err(|e| StreamError::fatal(format!("h2 settings ack: {e}")))?;
                 }
-            }
             FRAME_PING => {
                 if f.payload.len() != 8 {
                     return Err(StreamError::fatal("h2: PING with wrong length"));
@@ -880,10 +995,10 @@ impl<S: Read + Write> Conn<S> {
                     return Err(StreamError::GoAway { code, last });
                 }
             }
-            FRAME_PUSH_PROMISE => {
+            FRAME_PUSH_PROMISE
                 // We advertised ENABLE_PUSH=0; refuse any promised stream
                 // instead of choking on it (a short payload must not panic).
-                if f.payload.len() >= 4 {
+                if f.payload.len() >= 4 => {
                     let promised = u32::from_be_bytes([
                         f.payload[0],
                         f.payload[1],
@@ -901,7 +1016,6 @@ impl<S: Read + Write> Conn<S> {
                         .ok();
                     }
                 }
-            }
             FRAME_PRIORITY => {}
             FRAME_WINDOW_UPDATE => {
                 let inc = window_increment(&f)?;
@@ -1211,6 +1325,25 @@ pub fn exchange_upgraded<S: Read + Write>(stream: &mut S) -> Result<Vec<u8>, Str
         .map_err(|e| e.message())
 }
 
+/// The peer's initial flow-control window (RFC 9113 §6.9.2): the most DATA
+/// a connection accepts before the first WINDOW_UPDATE. The single-packet
+/// burst writes every stream before a WINDOW_UPDATE can arrive, so the
+/// group's total DATA must fit in it.
+pub const INITIAL_WINDOW_SIZE: usize = 65_535;
+
+/// Fail fast when a single-packet group's request bodies would overrun the
+/// initial connection window: the server would reset every stream with
+/// FLOW_CONTROL_ERROR otherwise.
+pub fn check_burst_window(body_lens: impl IntoIterator<Item = usize>) -> Result<(), String> {
+    let total: usize = body_lens.into_iter().sum();
+    if total > INITIAL_WINDOW_SIZE {
+        return Err(format!(
+            "the group's request bodies total {total} bytes, past the HTTP/2 initial flow-control window ({INITIAL_WINDOW_SIZE}): the server would reset every stream with FLOW_CONTROL_ERROR. Send the group in sequence or shrink the bodies"
+        ));
+    }
+    Ok(())
+}
+
 /// True when a failed exchange may be retried on a fresh connection because
 /// the server never processed the stream.
 pub fn retryable(error: &str) -> bool {
@@ -1268,10 +1401,8 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
     let chunked = crate::util::get_header(&parts.headers, "Transfer-Encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    if chunked {
-        if let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
-            body = decoded;
-        }
+    if chunked && let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
+        body = decoded;
     }
     Some(H2Request {
         method: parts.method.clone(),
@@ -1292,6 +1423,119 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    /// A group whose bodies pass the peer's initial connection window is
+    /// rejected up front: the burst is written before any WINDOW_UPDATE.
+    #[test]
+    fn burst_window_rejects_groups_past_the_initial_window() {
+        // Two 40 KB bodies fit their own stream windows but overrun the
+        // shared connection window.
+        assert!(check_burst_window([40 * 1024, 40 * 1024]).is_err());
+        // The same total in one body is rejected too.
+        assert!(check_burst_window([80 * 1024]).is_err());
+        // At and under the window is fine.
+        assert!(check_burst_window([65_535]).is_ok());
+        assert!(check_burst_window([1024, 2048]).is_ok());
+        assert!(check_burst_window([]).is_ok());
+    }
+
+    /// A body bigger than the peer's default SETTINGS_MAX_FRAME_SIZE
+    /// (16,384) goes out as several DATA frames, END_STREAM on the last, or
+    /// the burst earns a PROTOCOL_ERROR.
+    #[test]
+    fn burst_frames_chunks_large_bodies() {
+        let mk = |body: Vec<u8>| H2Request {
+            method: "POST".into(),
+            scheme: "https".into(),
+            authority: "example.com".into(),
+            path: "/".into(),
+            headers: Vec::new(),
+            body,
+            connection: None,
+        };
+        let mut conn = Conn::new(Cursor::new(Vec::new()));
+        let burst = conn.burst_frames(&[mk(vec![7u8; 40_000])]).unwrap();
+        let mut cursor = Cursor::new(burst.as_slice());
+        let mut data_lengths = Vec::new();
+        let mut end_stream = false;
+        while let Ok(f) = read_frame(&mut cursor) {
+            if f.ty == FRAME_DATA {
+                data_lengths.push(f.payload.len());
+                end_stream = f.flags & FLAG_END_STREAM != 0;
+            }
+        }
+        assert_eq!(data_lengths, vec![16_384, 16_384, 7_232]);
+        assert!(end_stream);
+        // An empty body keeps END_STREAM on HEADERS and adds no DATA.
+        let mut conn = Conn::new(Cursor::new(Vec::new()));
+        let burst = conn.burst_frames(&[mk(Vec::new())]).unwrap();
+        let mut cursor = Cursor::new(burst.as_slice());
+        // The burst buffer holds only request frames (the preface and our
+        // SETTINGS were written to the connection by start()).
+        let f = read_frame(&mut cursor).unwrap();
+        assert_eq!(f.ty, FRAME_HEADERS);
+        assert!(f.flags & FLAG_END_STREAM != 0);
+        assert!(read_frame(&mut cursor).is_err());
+    }
+
+    /// A header-write failure after commitment poisons the connection: a
+    /// later group item must not write another HEADERS block on the same socket.
+    #[test]
+    fn failed_request_head_retires_connection_before_next_exchange() {
+        struct FailOnWrite {
+            input: Cursor<Vec<u8>>,
+            out: Vec<u8>,
+            writes: usize,
+            fail_at: usize,
+        }
+        impl Read for FailOnWrite {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.input.read(buf)
+            }
+        }
+        impl Write for FailOnWrite {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.writes += 1;
+                if self.writes == self.fail_at {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "injected HEADERS write failure",
+                    ));
+                }
+                self.out.extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let io = FailOnWrite {
+            input: Cursor::new(Vec::new()),
+            out: Vec::new(),
+            writes: 0,
+            // Preface, SETTINGS frame header, SETTINGS payload, then HEADERS.
+            fail_at: 4,
+        };
+        let mut conn = Conn::new(io);
+        assert!(conn.exchange(&get_request(), None).is_err());
+        assert!(
+            conn.committed(),
+            "the failed HEADERS write is an unknown outcome"
+        );
+        let writes = conn.get_mut().writes;
+        let bytes = conn.get_mut().out.len();
+        assert!(conn.exchange(&get_request(), None).is_err());
+        assert_eq!(
+            conn.get_mut().writes,
+            writes,
+            "retired socket must not write"
+        );
+        assert_eq!(conn.get_mut().out.len(), bytes, "no second request bytes");
+        assert!(
+            conn.committed(),
+            "retirement preserves the prior commitment"
+        );
+    }
 
     #[test]
     fn base64url_matches_rfc7540_example() {
@@ -1964,7 +2208,7 @@ mod tests {
         assert!(conn.committed(), "all head bytes were written: committed");
         assert!(!err.retryable(), "unknown outcome is not a safe replay");
         // The pool replay predicate is retryable || !committed: neither holds.
-        assert!(!(!conn.committed() || err.retryable()));
+        assert!(conn.committed() && !err.retryable());
         let written = conn.get_mut().buf.len();
         assert!(
             written > 24 + 9 + 9,

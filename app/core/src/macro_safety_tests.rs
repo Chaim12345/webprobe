@@ -52,9 +52,11 @@ fn query_substitution_preserves_multipart_binary_payload_and_length() {
     let changed = substitute_param(request, "csrf", "fresh token");
     assert!(changed.starts_with(b"POST /upload?csrf=fresh%20token HTTP/1.1\r\n"));
     assert!(changed.ends_with(b"\r\n\r\n\xff\x00\xfeA"));
-    assert!(changed
-        .windows(19)
-        .any(|part| part == b"Content-Length: 4\r\n"));
+    assert!(
+        changed
+            .windows(19)
+            .any(|part| part == b"Content-Length: 4\r\n")
+    );
 }
 
 #[test]

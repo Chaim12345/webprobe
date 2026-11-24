@@ -11,10 +11,10 @@ pub fn content_length(head: &[u8]) -> Option<usize> {
     let s = String::from_utf8_lossy(head);
     for line in s.lines() {
         let lower = line.to_ascii_lowercase();
-        if lower.starts_with("content-length:") {
-            if let Some(v) = line.split(':').nth(1) {
-                return v.trim().parse::<usize>().ok();
-            }
+        if lower.starts_with("content-length:")
+            && let Some(v) = line.split(':').nth(1)
+        {
+            return v.trim().parse::<usize>().ok();
         }
     }
     None
@@ -109,13 +109,11 @@ pub fn read_request_outcome<R: Read>(
                 ReadOutcome::Eof
             } else {
                 ReadOutcome::Incomplete(buf)
-            })
+            });
         }
     };
-    if guard {
-        if let Some(why) = crate::strict_request::inbound_ambiguity(&buf[..head_len]) {
-            return Ok(ReadOutcome::Ambiguous(why, buf));
-        }
+    if guard && let Some(why) = crate::strict_request::inbound_ambiguity(&buf[..head_len]) {
+        return Ok(ReadOutcome::Ambiguous(why, buf));
     }
     let too_large =
         || std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large");

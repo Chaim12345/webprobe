@@ -1,7 +1,7 @@
 //! Real loopback regression fixtures for the Burp request-0 contract in PR #112.
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use webprobe_core::{intruder, intruder_run as run, net};
@@ -103,7 +103,9 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
         let (port, seen, server) = origin(payload_count + 1, 0);
         // Encoding-set characters must stay untouched in the baseline,
         // including header order; GET/HEAD are the only baselined methods.
-        let text = format!("GET /echo?q=§a&b§&r=§c/d§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Keep: exact\r\nConnection: close\r\n\r\n");
+        let text = format!(
+            "GET /echo?q=§a&b§&r=§c/d§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Keep: exact\r\nConnection: close\r\n\r\n"
+        );
         let text = if positions == 1 {
             text.replace("§c/d§", "c/d")
         } else {
@@ -160,7 +162,13 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
             run::sort_order(&rows, state.sets, &state.settings, 0, true),
             (0..rows.len()).collect::<Vec<_>>()
         );
-        println!("{}: origin requests={}, baseline exact=true, results=0..{}, status=200, progress={:?}, CSV/XML baseline included", kind.label(), seen.len(), payload_count, state.progress());
+        println!(
+            "{}: origin requests={}, baseline exact=true, results=0..{}, status=200, progress={:?}, CSV/XML baseline included",
+            kind.label(),
+            seen.len(),
+            payload_count,
+            state.progress()
+        );
     }
 }
 
@@ -203,7 +211,9 @@ fn effectful_methods_skip_the_baseline_and_send_only_attack_rows() {
                 .unwrap();
         }
     });
-    let text = format!("POST /submit HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 5\r\nConnection: close\r\n\r\nv=§1§");
+    let text = format!(
+        "POST /submit HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 5\r\nConnection: close\r\n\r\nv=§1§"
+    );
     let parsed = intruder::Template::parse(&text).unwrap();
     let specs = intruder::resolve_specs(
         &parsed,

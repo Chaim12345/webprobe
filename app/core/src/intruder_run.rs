@@ -20,8 +20,8 @@
 //! - Grep - Payloads: burp.Zruj (off, case-insensitive, headers included,
 //!   match pre-URL-encoded on).
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use crate::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -742,11 +742,7 @@ pub fn sort_order(
             _ => ka.cmp(kb),
         };
         let ord = ord.then(rows[a].number.cmp(&rows[b].number));
-        if asc {
-            ord
-        } else {
-            ord.reverse()
-        }
+        if asc { ord } else { ord.reverse() }
     });
     order
 }
@@ -985,13 +981,13 @@ pub fn start(
     {
         let (shared, state) = (shared.clone(), state.clone());
         crate::rt::engine().spawn(async move {
-            if let Err(e) = dispatcher.await {
-                if e.is_panic() {
-                    crate::notice::toast(
-                        crate::notice::Level::Warn,
-                        "engine task 'intruder_run' panicked; the attack ended, the session continues",
-                    );
-                }
+            if let Err(e) = dispatcher.await
+                && e.is_panic()
+            {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    "engine task 'intruder_run' panicked; the attack ended, the session continues",
+                );
             }
             state.running.store(false, Ordering::SeqCst);
             // Aborting async probe wrappers does not stop their blocking
@@ -1001,7 +997,9 @@ pub fn start(
             }
             shared.log(if state.stop.load(Ordering::SeqCst) {
                 "Intruder attack stopped after in-flight work finished"
-            } else { "Intruder attack finished" });
+            } else {
+                "Intruder attack finished"
+            });
         });
     }
     Ok(state)

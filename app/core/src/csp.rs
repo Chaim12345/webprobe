@@ -205,10 +205,9 @@ impl Csp {
                 };
                 if attr("http-equiv")
                     .is_some_and(|h| h.eq_ignore_ascii_case("content-security-policy"))
+                    && let Some(content) = attr("content")
                 {
-                    if let Some(content) = attr("content") {
-                        c.parse(content.trim());
-                    }
+                    c.parse(content.trim());
                 }
             }
         }
@@ -249,13 +248,13 @@ impl Csp {
                 self.err(format!("Invalid directive name: {name}"));
                 continue;
             }
-            if self.valid(&name, value.as_deref()) {
-                if let Some(v) = value {
-                    if !map.iter().any(|(k, _)| *k == name) {
-                        map.push((name, v));
-                    } else if let Some(slot) = map.iter_mut().find(|(k, _)| *k == name) {
-                        slot.1 = v;
-                    }
+            if self.valid(&name, value.as_deref())
+                && let Some(v) = value
+            {
+                if !map.iter().any(|(k, _)| *k == name) {
+                    map.push((name, v));
+                } else if let Some(slot) = map.iter_mut().find(|(k, _)| *k == name) {
+                    slot.1 = v;
                 }
             }
         }
@@ -582,7 +581,9 @@ pub(crate) fn run_untrusted_scripts(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         p.short_nonce("script-src"),
     );
     if inline || eval || wild || data || nonce {
-        let mut t = String::from("<p>The content security policy fails to prevent untrusted JavaScript from being executed. As a result, it may fail to mitigate cross-site scripting attacks.</p><p>The policy has the following issues:</p>");
+        let mut t = String::from(
+            "<p>The content security policy fails to prevent untrusted JavaScript from being executed. As a result, it may fail to mitigate cross-site scripting attacks.</p><p>The policy has the following issues:</p>",
+        );
         if inline {
             t.push_str("<p>The policy contains unsafe-inline which can allow arbitrary scripts to be executed.</p>");
         }
@@ -611,7 +612,9 @@ pub(crate) fn run_untrusted_styles(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         p.short_nonce("style-src"),
     );
     if inline || wild || data || nonce {
-        let mut t = String::from("<p>The content security policy fails to prevent untrusted style execution. As a result, it may fail to mitigate style based data exfiltration.</p>");
+        let mut t = String::from(
+            "<p>The content security policy fails to prevent untrusted style execution. As a result, it may fail to mitigate style based data exfiltration.</p>",
+        );
         if inline {
             t.push_str("<p>The policy contains unsafe-inline which can allow arbitrary styles to be executed.</p>");
         }
@@ -686,7 +689,9 @@ pub(crate) fn run_form_hijacking(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 pub(crate) fn run_malformed(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let Some(p) = enforced(cx) else { return };
     if !p.errors.is_empty() {
-        let mut t = String::from("<p>Malformed syntax in the policy means the following directives, which do not conform to the CSP specification, will not be enforced:</p>");
+        let mut t = String::from(
+            "<p>Malformed syntax in the policy means the following directives, which do not conform to the CSP specification, will not be enforced:</p>",
+        );
         for e in &p.errors {
             t.push_str(&format!("<p>{}</p>", util::html_encode(e)));
         }
@@ -813,9 +818,11 @@ mod tests {
         ));
         assert!(has_err(&parsed("report-uri /a b"), "invalid value"));
         assert!(parsed("report-uri /csp-report").errors.is_empty());
-        assert!(parsed("require-trusted-types-for 'script'")
-            .errors
-            .is_empty());
+        assert!(
+            parsed("require-trusted-types-for 'script'")
+                .errors
+                .is_empty()
+        );
         assert!(has_err(
             &parsed("require-trusted-types-for script"),
             "invalid value"

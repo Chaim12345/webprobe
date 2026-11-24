@@ -25,7 +25,7 @@ mod repeater_fix_tests {
     fn cancel_abandons_the_in_flight_send() {
         let sh = net::Shared::new();
         let tab = sh.repeaters.lock().unwrap()[0].id;
-        let gen = sh.rep.begin(tab);
+        let r#gen = sh.rep.begin(tab);
         cancel_repeater_send(&sh);
         assert_eq!(
             sh.repeaters.lock().unwrap()[0].result_line,
@@ -35,7 +35,7 @@ mod repeater_fix_tests {
         assert!(!sh.rep.is_busy());
         assert_eq!(sh.rep.result(), "Request cancelled");
         assert!(
-            !sh.rep.is_current(gen),
+            !sh.rep.is_current(r#gen),
             "the worker sees a stale generation"
         );
         // Cancel with nothing in flight changes nothing.
@@ -309,9 +309,11 @@ mod repeater_fix_tests {
                 if mode == crate::repeater_ops::FollowMode::OnSite {
                     assert!(!tabs[0].request.contains("X-Parity-Probe"));
                 }
-                assert!(tabs[0]
-                    .request
-                    .contains(&format!("Host: 127.0.0.1:{pb}\r\n")));
+                assert!(
+                    tabs[0]
+                        .request
+                        .contains(&format!("Host: 127.0.0.1:{pb}\r\n"))
+                );
             }
             let clicked_request = sh.repeaters.lock().unwrap()[0].request.clone();
             repeater_send(&mut app);
@@ -322,10 +324,12 @@ mod repeater_fix_tests {
             assert!(!sh.rep.is_busy());
             assert_eq!(sh.repeaters.lock().unwrap()[0].request, clicked_request);
             origin_a.join().unwrap();
-            assert!(origin_b
-                .join()
-                .unwrap()
-                .starts_with("GET /b/next HTTP/1.1\r\n"));
+            assert!(
+                origin_b
+                    .join()
+                    .unwrap()
+                    .starts_with("GET /b/next HTTP/1.1\r\n")
+            );
         }
         run(crate::repeater_ops::FollowMode::InScope);
         run(crate::repeater_ops::FollowMode::OnSite);

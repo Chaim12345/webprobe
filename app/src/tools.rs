@@ -6,12 +6,12 @@ use std::sync::atomic::Ordering;
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::analysis;
 use crate::net;
 use crate::project;
 use crate::theme::{self, c};
 use crate::upstream::UpstreamKind;
-use crate::App;
 
 const SEQUENCER_MAX_LENGTH_DEVIATION: usize = 5; // ProjectDefaults.json sequencer.live_capture
 
@@ -153,7 +153,10 @@ pub fn upstream_options(app: &mut App, ui: &mut Ui) {
         );
     });
     *app.shared.upstream.lock().unwrap() = config;
-    hint(ui, "HTTP routing uses absolute-form requests and CONNECT for TLS; SOCKS5 supports username/password authentication.");
+    hint(
+        ui,
+        "HTTP routing uses absolute-form requests and CONNECT for TLS; SOCKS5 supports username/password authentication.",
+    );
     // Burp's "Upstream proxy servers": per-destination rules, first enabled
     // match wins; hosts no rule matches use the setting above.
     ui.add_space(6.0);
@@ -279,13 +282,15 @@ fn extract_token(response: &[u8], mode: usize, selector: &str) -> Option<Vec<u8>
 }
 
 fn add_sequencer_sample(app: &mut App, sample: Vec<u8>) {
-    if app.sequencer.ignore_abnormal {
-        if let Some(first) = app.sequencer.samples.first() {
-            let deviation = sample.len().abs_diff(first.len());
-            if deviation > SEQUENCER_MAX_LENGTH_DEVIATION {
-                app.sequencer.status = format!("ignored token with length deviation {deviation} (> {SEQUENCER_MAX_LENGTH_DEVIATION})");
-                return;
-            }
+    if app.sequencer.ignore_abnormal
+        && let Some(first) = app.sequencer.samples.first()
+    {
+        let deviation = sample.len().abs_diff(first.len());
+        if deviation > SEQUENCER_MAX_LENGTH_DEVIATION {
+            app.sequencer.status = format!(
+                "ignored token with length deviation {deviation} (> {SEQUENCER_MAX_LENGTH_DEVIATION})"
+            );
+            return;
         }
     }
     app.sequencer.samples.push(sample);
@@ -376,7 +381,11 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
     };
     match app.sequencer.sub {
         0 => {
-            section(ui, "Select live capture request", "Send requests here from other tools to configure a live capture. Select the request to use, configure the other options below, then click \"Start live capture\".");
+            section(
+                ui,
+                "Select live capture request",
+                "Send requests here from other tools to configure a live capture. Select the request to use, configure the other options below, then click \"Start live capture\".",
+            );
             ui.horizontal_top(|ui| {
                 ui.add_space(28.0);
                 ui.vertical(|ui| {
@@ -387,12 +396,10 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                             egui::Button::new(RichText::new("Remove").strong()),
                         )
                         .clicked()
+                        && let Some(i) = app.sequencer.req_sel.take()
+                        && i < app.sequencer.requests.len()
                     {
-                        if let Some(i) = app.sequencer.req_sel.take() {
-                            if i < app.sequencer.requests.len() {
-                                app.sequencer.requests.remove(i);
-                            }
-                        }
+                        app.sequencer.requests.remove(i);
                     }
                     if ui
                         .add_sized(
@@ -476,10 +483,9 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                             .strong(),
                         ))
                         .clicked()
+                        && let Some(f) = &app.sequencer.live_stop
                     {
-                        if let Some(f) = &app.sequencer.live_stop {
-                            f.store(true, std::sync::atomic::Ordering::SeqCst);
-                        }
+                        f.store(true, std::sync::atomic::Ordering::SeqCst);
                     }
                 } else if ui
                     .add_enabled(
@@ -487,10 +493,9 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         egui::Button::new(RichText::new("Start live capture").strong()),
                     )
                     .clicked()
+                    && let Some(e) = chosen
                 {
-                    if let Some(e) = chosen {
-                        start_live_capture(app, e);
-                    }
+                    start_live_capture(app, e);
                 }
                 ui.add_space(10.0);
                 ui.label(
@@ -788,7 +793,10 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
             });
     }
     if app.sequencer.stats.is_some() {
-        hint(ui, "Pooled character statistics describe the alphabet, not token unpredictability. See the bit-level result below.");
+        hint(
+            ui,
+            "Pooled character statistics describe the alphabet, not token unpredictability. See the bit-level result below.",
+        );
     }
     if let Some(report) = &app.sequencer.report {
         ui.add_space(8.0);
@@ -910,7 +918,10 @@ fn cookie_jar_panel(app: &mut App, ui: &mut Ui) {
             .size(14.0)
             .strong(),
     );
-    hint(ui, "WebProbe keeps a cookie jar of the cookies set by the applications you visit. Session handling uses it to keep tool requests in session.");
+    hint(
+        ui,
+        "WebProbe keeps a cookie jar of the cookies set by the applications you visit. Session handling uses it to keep tool requests in session.",
+    );
     let mut jar = app.shared.cookie_jar.lock().unwrap().clone();
     let before = jar.clone();
     let tool_row = |ui: &mut Ui, label: &str, list: &mut Vec<String>| {
@@ -1097,7 +1108,10 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
             .size(15.0),
     );
     ui.add_space(4.0);
-    hint(ui, "Each rule applies to the ticked tools, on hosts matching its pattern, in order. A macro's cookies go to the cookie jar and from there onto the request. In a header or cookie value, {name} is replaced by that value from the last macro response, e.g. Authorization: Bearer {token}.");
+    hint(
+        ui,
+        "Each rule applies to the ticked tools, on hosts matching its pattern, in order. A macro's cookies go to the cookie jar and from there onto the request. In a header or cookie value, {name} is replaced by that value from the last macro response, e.g. Authorization: Bearer {token}.",
+    );
     let mut rules = app.shared.session_rules.lock().unwrap().clone();
     let macro_names: Vec<String> = app
         .shared
@@ -1329,19 +1343,18 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
             .add_enabled(selected.is_some(), egui::Button::new(label))
             .on_disabled_hover_text("Select a request in Proxy > HTTP history first")
             .clicked()
+            && let Some(e) = selected
         {
-            if let Some(e) = selected {
-                // An editor still holding a single plain request becomes step one.
-                if !app.macro_request.trim().is_empty() && !app.macro_request.contains("###") {
-                    app.macro_request =
-                        crate::macros::step_text(app.macro_request.as_bytes(), false, &[]);
-                }
-                app.macro_request.push_str(&crate::macros::step_text(
-                    &crate::util::origin_form(&e.req_raw),
-                    e.https,
-                    &[],
-                ));
+            // An editor still holding a single plain request becomes step one.
+            if !app.macro_request.trim().is_empty() && !app.macro_request.contains("###") {
+                app.macro_request =
+                    crate::macros::step_text(app.macro_request.as_bytes(), false, &[]);
             }
+            app.macro_request.push_str(&crate::macros::step_text(
+                &crate::util::origin_form(&e.req_raw),
+                e.https,
+                &[],
+            ));
         }
         if ui.button("Test macro").clicked() {
             let lines: Vec<String> = net::run_macro_text(&app.shared, &app.macro_request)
@@ -1388,7 +1401,10 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
             });
         }
     });
-    hint(ui, "Separate steps with a line starting with ###. Add 'https' to send a step over TLS and 'derive=name1,name2' to fill those parameters from the previous response.");
+    hint(
+        ui,
+        "Separate steps with a line starting with ###. Add 'https' to send a step over TLS and 'derive=name1,name2' to fill those parameters from the previous response.",
+    );
     let results: Vec<String> = ui.data_mut(|d| d.get_temp(test_id)).unwrap_or_default();
     for line in &results {
         ui.label(
@@ -1817,12 +1833,12 @@ pub fn launch_preconfigured_browser(
         cmd.args(&args).stdout(std::process::Stdio::null());
         if let Some(h) = &home {
             // The X server cookie is found through HOME by default; keep it.
-            if std::env::var_os("XAUTHORITY").is_none() {
-                if let Some(real) = std::env::var_os("HOME") {
-                    let xa = std::path::PathBuf::from(real).join(".Xauthority");
-                    if xa.exists() {
-                        cmd.env("XAUTHORITY", xa);
-                    }
+            if std::env::var_os("XAUTHORITY").is_none()
+                && let Some(real) = std::env::var_os("HOME")
+            {
+                let xa = std::path::PathBuf::from(real).join(".Xauthority");
+                if xa.exists() {
+                    cmd.env("XAUTHORITY", xa);
                 }
             }
             cmd.env("HOME", h);
@@ -2156,10 +2172,10 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
             if ui.small_button("Retry").clicked() {
                 let shared = app.shared.clone();
                 ext_store::start_in_background(&app.shared, item.clone(), move |res| {
-                    if res.is_ok() {
-                        if let Err(e) = ext_store::save(&ext_store::current(&shared)) {
-                            shared.log(&format!("Could not save the extension list: {e}"));
-                        }
+                    if res.is_ok()
+                        && let Err(e) = ext_store::save(&ext_store::current(&shared))
+                    {
+                        shared.log(&format!("Could not save the extension list: {e}"));
                     }
                 });
             }
@@ -2941,6 +2957,18 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
             result_line: r.result_line.clone(),
         })
         .collect();
+    // R-12: the Repeater groups, members as positions in the saved tab list.
+    let locked_rep_groups = {
+        let order: Vec<u64> = app
+            .shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        webprobe_core::send_group::to_project(&app.rep_groups, &order)
+    };
     let locked_issues = app
         .shared
         .issues
@@ -3029,6 +3057,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         session_rules: locked_session_rules,
         macros: locked_macros,
         repeaters: locked_repeaters,
+        repeater_groups: locked_rep_groups,
         issues: locked_issues,
         websockets: locked_websockets,
         upstream: locked_upstream,
@@ -3259,6 +3288,19 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
                 ws: None,
             })
             .collect();
+        // R-12: the project's groups over the tabs' fresh ids.
+        let fresh: Vec<u64> = app
+            .shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        app.rep_groups =
+            webprobe_core::send_group::from_project(&data.repeater_groups, &fresh, || {
+                app.shared.rep.new_tab_id()
+            });
         *app.shared.issues.lock().unwrap() = data
             .issues
             .iter()
@@ -3304,7 +3346,11 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         .as_ref()
         .filter(|fp| **fp != app.shared.mitm.ca_fingerprint())
     {
-        let msg = format!("This project was recorded with a different CA certificate ({}…); the current CA is {}…", &fp[..fp.len().min(23)], &app.shared.mitm.ca_fingerprint()[..23]);
+        let msg = format!(
+            "This project was recorded with a different CA certificate ({}…); the current CA is {}…",
+            &fp[..fp.len().min(23)],
+            &app.shared.mitm.ca_fingerprint()[..23]
+        );
         app.shared.log(&msg);
         crate::feedback::toast(crate::feedback::Level::Info, msg);
     }
@@ -3446,11 +3492,11 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             http2: l.http2,
         })
         .collect();
-    if specs != net::listener_specs(&app.shared) {
-        if let Err(e) = net::set_listeners(&app.shared, specs) {
-            app.shared
-                .log(&format!("Project listeners not restored: {e}"));
-        }
+    if specs != net::listener_specs(&app.shared)
+        && let Err(e) = net::set_listeners(&app.shared, specs)
+    {
+        app.shared
+            .log(&format!("Project listeners not restored: {e}"));
     }
     app.shared
         .crawl_capture
@@ -3481,15 +3527,15 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     project::ProjectScanTask::restore_all(&data.tasks.scans, &app.shared);
     let l = &data.layout;
     // QA launch hooks (main.rs) win over the saved layout.
-    if std::env::var_os("WEBPROBE_TAB").is_none() {
-        if let Some(t) = tab_of(&l.tab) {
-            app.tab = t;
-        }
+    if std::env::var_os("WEBPROBE_TAB").is_none()
+        && let Some(t) = tab_of(&l.tab)
+    {
+        app.tab = t;
     }
-    if std::env::var_os("WEBPROBE_PROXY_SUB").is_none() {
-        if let Some(v) = l.proxy_sub {
-            app.proxy_sub = v.min(4);
-        }
+    if std::env::var_os("WEBPROBE_PROXY_SUB").is_none()
+        && let Some(v) = l.proxy_sub
+    {
+        app.proxy_sub = v.min(4);
     }
     if let Some(v) = l.target_sub {
         app.target_sub = v.min(2);
@@ -3637,7 +3683,7 @@ pub fn project_controls(app: &mut App, ui: &mut Ui) {
 /// --user-config-file read. Scan-configuration keys load through R-11's
 /// configuration library model; the API key is never shown.
 fn burp_options_json(app: &mut App, ui: &mut Ui) {
-    use crate::feedback::{toast, Level};
+    use crate::feedback::{Level, toast};
     ui.add_space(6.0);
     ui.label("Imported listener/API connection settings require restarting WebProbe to replace an existing server.");
     let opts_id = egui::Id::unique("burp_options_path");

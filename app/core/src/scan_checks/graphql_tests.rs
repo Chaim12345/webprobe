@@ -166,9 +166,11 @@ fn backup_names_add_jsp_variants_only_for_jsp_in_any_case() {
     }
     assert_eq!(jsp.len(), 6 + 13 + 3 + 1);
     assert!(backup_names("login", ".JSP").contains(&"login.jspa".to_string()));
-    assert!(!backup_names("login", ".php")
-        .iter()
-        .any(|s| s.contains(".jsp")));
+    assert!(
+        !backup_names("login", ".php")
+            .iter()
+            .any(|s| s.contains(".jsp"))
+    );
 }
 
 #[test]

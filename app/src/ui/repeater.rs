@@ -10,6 +10,8 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     // a status line at the bottom (live 52685 reference). E-04: the tab
     // strip (rename, close, duplicate, reorder) lives in repeater_ops.
     crate::repeater_ops::tab_strip(app, ui);
+    crate::repeater_groups::dialog(app, ui.ctx());
+    crate::repeater_groups::tick(app);
     ui.add_space(4.0);
     // A WebSocket Repeater tab has its own view.
     let ws_session = {
@@ -67,14 +69,20 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
             })
             .0
             .on_hover_text("Repeater settings");
+        let group_busy = crate::repeater_groups::is_sending(app);
         if ui
             .add_enabled(
-                busy,
+                busy || group_busy,
                 egui::Button::new("Cancel").min_size(egui::vec2(64.0, 24.0)),
             )
             .clicked()
         {
-            cancel_repeater_send(&app.shared);
+            if busy {
+                cancel_repeater_send(&app.shared);
+            }
+            if group_busy {
+                crate::repeater_groups::cancel(app);
+            }
         }
         // E-02: Burp's "Follow redirection" button, shown for a 3xx response.
         if crate::repeater_ops::can_follow(app)
@@ -159,10 +167,10 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                     ui.end_row();
                     ui.label("Port:");
                     let mut p = r.port.to_string();
-                    if ui.text_edit_singleline(&mut p).changed() {
-                        if let Ok(v) = p.trim().parse() {
-                            r.port = v;
-                        }
+                    if ui.text_edit_singleline(&mut p).changed()
+                        && let Ok(v) = p.trim().parse()
+                    {
+                        r.port = v;
                     }
                     ui.end_row();
                     ui.label("");
@@ -444,11 +452,7 @@ pub(crate) fn repeater_send(app: &mut App) {
                 return;
             }
             let default_port = if r.port == 0 {
-                if r.https {
-                    443
-                } else {
-                    80
-                }
+                if r.https { 443 } else { 80 }
             } else {
                 r.port
             };
@@ -458,7 +462,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         }
         (r.id, r.request.clone(), r.host.clone(), r.port, r.https)
     };
-    let gen = app.shared.rep.begin(tab_id);
+    let r#gen = app.shared.rep.begin(tab_id);
     let sh = app.shared.clone();
     // E-02: Repeater settings > Follow redirections / Process cookies.
     let (follow, cookies) = (app.rops.follow, app.rops.process_cookies);
@@ -473,10 +477,10 @@ pub(crate) fn repeater_send(app: &mut App) {
         let _h2 = net::http2_scope(h2);
         let t0 = std::time::Instant::now();
         let service = crate::repeater_ops::Service::new(&h, p, https);
-        let stale = || !sh.rep.is_current(gen);
+        let stale = || !sh.rep.is_current(r#gen);
         // A streaming response shows in the tab as it arrives.
         let progress = |bytes: &[u8], restart: bool| {
-            sh.rep.finish_partial(gen, || {
+            sh.rep.finish_partial(r#gen, || {
                 if let Some(r) = sh
                     .repeaters
                     .lock()
@@ -519,7 +523,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         // check and the tab write happen under one lock (finish_with), so a
         // Cancel cannot slip in between.
         let mut line = String::new();
-        let finished = sh.rep.finish_with(gen, || {
+        let finished = sh.rep.finish_with(r#gen, || {
             let mut reps = sh.repeaters.lock().unwrap();
             let target = reps.iter_mut().find(|r| r.id == tab_id);
             if let Some(r) = target {

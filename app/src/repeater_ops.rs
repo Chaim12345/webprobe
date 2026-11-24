@@ -86,10 +86,18 @@ impl Service {
 
     /// The Host header value: the port only when it is not the default.
     pub fn authority(&self) -> String {
-        if self.default_port() {
-            self.host.clone()
+        // net::split_h_p and absolute-URL parsing may store IPv6 literals
+        // without brackets; authority syntax requires them on the wire.
+        let host = self.host.trim_start_matches('[').trim_end_matches(']');
+        let host = if host.contains(':') {
+            format!("[{host}]")
         } else {
-            format!("{}:{}", self.host, self.port)
+            host.to_string()
+        };
+        if self.default_port() {
+            host
+        } else {
+            format!("{host}:{}", self.port)
         }
     }
 
@@ -163,40 +171,52 @@ pub fn resolve_location(
     location: &str,
 ) -> Option<(Service, String)> {
     let mut loc = location.trim().to_string();
-    if loc.starts_with("//") {
-        loc = format!("{}:{loc}", if origin.https { "https" } else { "http" });
-    }
-    let lower = loc
-        .get(..8.min(loc.len()))
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let absolute = lower.starts_with("http://") || lower.starts_with("https://");
-    let (service, mut path) = if absolute {
-        let https = lower.starts_with("https://");
-        let rest = &loc[if https { 8 } else { 7 }..];
-        let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-        let authority = &rest[..end];
-        let authority = authority.rsplit_once('@').map(|x| x.1).unwrap_or(authority);
-        if authority.is_empty() {
-            return None;
-        }
-        let (host, port) = net::split_h_p(authority, if https { 443 } else { 80 });
-        let host = host
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .to_string();
-        (Service::new(&host, port, https), rest[end..].to_string())
-    } else if loc.starts_with('/') {
-        (origin.clone(), loc)
-    } else {
-        // Relative to the directory of the request path (query dropped).
-        let base = request_path(req_target);
-        let base = base.split(['?', '#']).next().unwrap_or("/");
-        let dir = match base.rfind('/') {
-            Some(i) => &base[..=i],
-            None => "/",
+    let (service, mut path) = if loc.is_empty() || loc.starts_with('?') || loc.starts_with('#') {
+        // Query-only references replace the query on the current path;
+        // fragment-only/empty references keep the current path and query.
+        let current = request_path(req_target).split('#').next().unwrap_or("/");
+        let resolved = if loc.starts_with('?') {
+            format!("{}{}", current.split('?').next().unwrap_or("/"), loc)
+        } else {
+            current.to_string()
         };
-        (origin.clone(), format!("{dir}{loc}"))
+        (origin.clone(), resolved)
+    } else {
+        if loc.starts_with("//") {
+            loc = format!("{}:{loc}", if origin.https { "https" } else { "http" });
+        }
+        let lower = loc
+            .get(..8.min(loc.len()))
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let absolute = lower.starts_with("http://") || lower.starts_with("https://");
+        if absolute {
+            let https = lower.starts_with("https://");
+            let rest = &loc[if https { 8 } else { 7 }..];
+            let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+            let authority = &rest[..end];
+            let authority = authority.rsplit_once('@').map(|x| x.1).unwrap_or(authority);
+            if authority.is_empty() {
+                return None;
+            }
+            let (host, port) = net::split_h_p(authority, if https { 443 } else { 80 });
+            let host = host
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_string();
+            (Service::new(&host, port, https), rest[end..].to_string())
+        } else if loc.starts_with('/') {
+            (origin.clone(), loc)
+        } else {
+            // Relative to the directory of the request path (query dropped).
+            let base = request_path(req_target);
+            let base = base.split(['?', '#']).next().unwrap_or("/");
+            let dir = match base.rfind('/') {
+                Some(i) => &base[..=i],
+                None => "/",
+            };
+            (origin.clone(), format!("{dir}{loc}"))
+        }
     };
     // URL.getFile(): the fragment never reaches the wire.
     if let Some(i) = path.find('#') {
@@ -381,7 +401,7 @@ pub fn redirect_request(
         );
     }
     // No Referer when an HTTPS page redirects to plain HTTP.
-    if !(origin.https && !target.https) {
+    if !origin.https || target.https {
         let referer = if cross_site {
             format!("{}/", origin.origin())
         } else {
@@ -517,11 +537,11 @@ fn send_once(
         up.resp = Some(whole);
         up.error = None;
     }
-    if let Some(resp) = up.resp.as_mut() {
-        if !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann) {
-            up.resp = None;
-            up.error = Some("response dropped by extension".into());
-        }
+    if let Some(resp) = up.resp.as_mut()
+        && !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann)
+    {
+        up.resp = None;
+        up.error = Some("response dropped by extension".into());
     }
     up
 }
@@ -551,22 +571,22 @@ pub fn send_following(
                 followed,
             };
         };
-        if mode != FollowMode::Never && !cancelled() {
-            if let Some((next, next_req)) =
+        if mode != FollowMode::Never
+            && !cancelled()
+            && let Some((next, next_req)) =
                 next_redirect(&request, &current, &resp, process_cookies)
-            {
-                let path = next_req
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap_or("/")
-                    .to_string();
-                let in_scope = burp_in_scope(shared, &format!("{}{}", next.origin(), path));
-                if should_follow(mode, followed, service, &next, in_scope) {
-                    followed += 1;
-                    request = next_req;
-                    current = next;
-                    continue;
-                }
+        {
+            let path = next_req
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("/")
+                .to_string();
+            let in_scope = burp_in_scope(shared, &format!("{}{}", next.origin(), path));
+            if should_follow(mode, followed, service, &next, in_scope) {
+                followed += 1;
+                request = next_req;
+                current = next;
+                continue;
             }
         }
         return FollowResult {
@@ -1655,6 +1675,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                             }
                         }
                     } else {
+                        crate::repeater_groups::chip(ui, &app.rep_groups, *id);
                         let label = name.strip_prefix("Rep ").unwrap_or(name).to_string();
                         let l = ui.add(
                             egui::Label::new(
@@ -1687,6 +1708,8 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                                 if let Some(c) = tab_menu(ui, i, n, can_reopen) {
                                     cmd = Some((i, c));
                                 }
+                                // R-12: group items (add/remove/edit/send group).
+                                crate::repeater_groups::menu_section(ui, app, i);
                             });
                     }
                     if ui
@@ -1732,21 +1755,21 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                 .iter()
                 .position(|r| p.x >= r.left() && p.x <= r.right())
         });
-        if let (Some(t), Some(p)) = (target, pointer) {
-            if t != from {
-                let r = rects[t];
-                let x = if t > from {
-                    r.right() + 1.0
-                } else {
-                    r.left() - 1.0
-                };
-                let _ = p;
-                ui.painter().vline(
-                    x,
-                    r.y_range(),
-                    egui::Stroke::new(2.0_f32, c(theme::ORANGE_1)),
-                );
-            }
+        if let (Some(t), Some(p)) = (target, pointer)
+            && t != from
+        {
+            let r = rects[t];
+            let x = if t > from {
+                r.right() + 1.0
+            } else {
+                r.left() - 1.0
+            };
+            let _ = p;
+            ui.painter().vline(
+                x,
+                r.y_range(),
+                egui::Stroke::new(2.0_f32, c(theme::ORANGE_1)),
+            );
         }
         if ui.input(|i| i.pointer.any_released()) {
             app.rops.drag_from = None;
@@ -1761,10 +1784,14 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
         }
     }
     if let Some((i, c)) = cmd {
+        let closed_any = matches!(c, TabCommand::Close(_));
         if c == TabCommand::Rename {
             app.rops.rename_focus = true;
         }
         app.repeater.sel = apply_tab_command(&app.shared, &mut app.rops, i, app.repeater.sel, c);
+        if closed_any {
+            crate::repeater_groups::prune(app);
+        }
     }
 }
 
@@ -1879,7 +1906,7 @@ pub fn tab_entry(app: &crate::App) -> Option<net::HistEntry> {
 /// Run a request-menu action that needs no ui.rs helper. Returns false for
 /// the ones ui.rs handles itself (active scan, Intruder, Repeater, follow).
 pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction) -> bool {
-    use crate::feedback::{toast, Level};
+    use crate::feedback::{Level, toast};
     use crate::ui::Tab;
     let Some((req, svc, resp)) = current_tab(app).or_else(|| {
         // An empty tab still takes "Paste URL as request".
@@ -1940,7 +1967,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         RepAction::ChangeBodyEncoding => {
             // Burp-style boundary: WebKit prefix and 16 random characters.
             let boundary = {
-                use rand::{distributions::Alphanumeric, Rng};
+                use rand::{Rng, distributions::Alphanumeric};
                 let tail: String = rand::thread_rng()
                     .sample_iter(&Alphanumeric)
                     .take(16)
@@ -2837,6 +2864,23 @@ mod tests {
             Some((svc("b.test", 443, true), "/?x=1".into()))
         );
         assert_eq!(resolve_location(&o, "/", "http:///nohost"), None);
+        // Query-only and fragment-only references retain the current path.
+        assert_eq!(
+            resolve_location(&o, "/x/y?old=1", "?next=2"),
+            Some((o.clone(), "/x/y?next=2".into()))
+        );
+        assert_eq!(
+            resolve_location(&o, "/x/y?old=1", "#section"),
+            Some((o.clone(), "/x/y?old=1".into()))
+        );
+        // IPv6 literals are unbracketed internally but bracketed in authority syntax.
+        let v6 = svc("2001:db8::2", 8443, true);
+        assert_eq!(v6.authority(), "[2001:db8::2]:8443");
+        assert_eq!(v6.origin(), "https://[2001:db8::2]:8443");
+        assert_eq!(
+            resolve_location(&o, "/", "https://[2001:db8::2]:8443/p"),
+            Some((v6, "/p".into()))
+        );
     }
 
     #[test]
@@ -3169,7 +3213,9 @@ mod tests {
                 let resp = if first.contains(" /start ") {
                     "HTTP/1.1 302 Found\r\nLocation: step2\r\nSet-Cookie: sid=abc\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
                 } else if first.contains(" /step2 ") {
-                    format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    format!(
+                        "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
                 } else {
                     "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone"
                         .to_string()
@@ -3179,7 +3225,9 @@ mod tests {
         });
         let shared = net::Shared::new();
         let service = svc("127.0.0.1", port, false);
-        let req = format!("POST /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nbody");
+        let req = format!(
+            "POST /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nbody"
+        );
         let never = send_following(
             &shared,
             &req,
@@ -3328,7 +3376,10 @@ mod tests {
     #[test]
     fn change_method_get_to_post_moves_query_to_body() {
         let r = toggle_request_method("GET /s?q=a%20b&n=1 HTTP/1.1\r\nHost: h\r\n\r\n");
-        assert_eq!(r, "POST /s HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 11\r\n\r\nq=a%20b&n=1");
+        assert_eq!(
+            r,
+            "POST /s HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 11\r\n\r\nq=a%20b&n=1"
+        );
         let empty = toggle_request_method("GET / HTTP/1.1\r\nHost: h\r\n\r\n");
         assert!(
             empty.starts_with("POST / HTTP/1.1")
@@ -3339,7 +3390,9 @@ mod tests {
 
     #[test]
     fn change_method_post_to_get_moves_body_to_query() {
-        let r = toggle_request_method("POST /s?keep=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 9\r\n\r\na=1&b=x y");
+        let r = toggle_request_method(
+            "POST /s?keep=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 9\r\n\r\na=1&b=x y",
+        );
         assert_eq!(r, "GET /s?keep=1&a=1&b=x+y HTTP/1.1\r\nHost: h\r\n\r\n");
         // Round trip is stable.
         let back = toggle_request_method(&toggle_request_method(
@@ -3353,7 +3406,9 @@ mod tests {
             "GET /u?f=a%26b HTTP/1.1\r\nHost: h\r\n\r\n"
         );
         // A JSON body has no parameters: it is dropped with its headers.
-        let j = toggle_request_method("PUT /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}");
+        let j = toggle_request_method(
+            "PUT /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",
+        );
         assert_eq!(j, "GET /j HTTP/1.1\r\nHost: h\r\n\r\n");
     }
 

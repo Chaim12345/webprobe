@@ -205,12 +205,12 @@ pub fn parse_config(name: &str, bytes: &[u8], built_in: bool) -> Result<LibraryC
         return Err(format!("{name}: a scan configuration is a JSON object"));
     }
     for (path, kind) in TYPED {
-        if let Some(v) = get_path(&tree, path) {
-            if !kind_ok(*kind, v) {
-                return Err(format!(
-                    "{name}: {path} has the wrong type (expected {kind:?})"
-                ));
-            }
+        if let Some(v) = get_path(&tree, path)
+            && !kind_ok(*kind, v)
+        {
+            return Err(format!(
+                "{name}: {path} has the wrong type (expected {kind:?})"
+            ));
         }
     }
     if let Some(Value::Array(items)) = get_path(&tree, "scanner.issues_reported.selected_issues") {
@@ -433,12 +433,11 @@ fn jar_files(jar: &Path, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String>
         };
         let name = String::from_utf8_lossy(cd.get(at + 46..at + 46 + nlen).unwrap_or_default())
             .into_owned();
-        if let Some(rest) = name.strip_prefix(prefix) {
-            if !rest.contains('/') {
-                if let Some(stem) = rest.strip_suffix(".json") {
-                    wanted.push((stem.to_string(), method, csize, usize_, loff));
-                }
-            }
+        if let Some(rest) = name.strip_prefix(prefix)
+            && !rest.contains('/')
+            && let Some(stem) = rest.strip_suffix(".json")
+        {
+            wanted.push((stem.to_string(), method, csize, usize_, loff));
         }
         at += 46 + nlen + xlen + clen;
     }
@@ -647,12 +646,12 @@ pub fn not_applied(configs: &[&LibraryConfig]) -> Vec<String> {
                 &crate::scan_config::ACCURACIES,
             ),
         ] {
-            if let Some(v) = get_path(&c.tree, p).and_then(Value::as_str) {
-                if !names.contains(&v) {
-                    add(format!(
-                        "{p} = {v:?} (unknown value, not applied by WebProbe)"
-                    ));
-                }
+            if let Some(v) = get_path(&c.tree, p).and_then(Value::as_str)
+                && !names.contains(&v)
+            {
+                add(format!(
+                    "{p} = {v:?} (unknown value, not applied by WebProbe)"
+                ));
             }
         }
         if let Some(Value::Array(items)) =
@@ -795,21 +794,17 @@ pub fn with_settings(entry: &Value, edited: &Value, start: &Value) -> Value {
             continue;
         }
         let mut value = new.clone();
-        if *p == "scanner.issues_reported.selected_issues" {
-            if let (Value::Array(items), Some(Value::Array(old))) = (&mut value, get_path(entry, p))
-            {
-                for it in items.iter_mut() {
-                    let id = parse_type_index(it.get("type_index"));
-                    if let Some(prev) = old
-                        .iter()
-                        .find(|o| parse_type_index(o.get("type_index")) == id)
-                    {
-                        if let (Some(m), Value::Object(obj)) =
-                            (prev.get("detection_methods"), &mut *it)
-                        {
-                            obj.insert("detection_methods".into(), m.clone());
-                        }
-                    }
+        if *p == "scanner.issues_reported.selected_issues"
+            && let (Value::Array(items), Some(Value::Array(old))) = (&mut value, get_path(entry, p))
+        {
+            for it in items.iter_mut() {
+                let id = parse_type_index(it.get("type_index"));
+                if let Some(prev) = old
+                    .iter()
+                    .find(|o| parse_type_index(o.get("type_index")) == id)
+                    && let (Some(m), Value::Object(obj)) = (prev.get("detection_methods"), &mut *it)
+                {
+                    obj.insert("detection_methods".into(), m.clone());
                 }
             }
         }
@@ -878,18 +873,22 @@ mod tests {
     fn malformed_configs_are_rejected_and_unknown_keys_kept() {
         assert!(parse_config("x", b"[1]", false).is_err());
         assert!(parse_config("x", b"{", false).is_err());
-        assert!(parse_config(
-            "x",
-            br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#,
-            false
-        )
-        .is_err());
-        assert!(parse_config(
-            "x",
-            br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#,
-            false
-        )
-        .is_err());
+        assert!(
+            parse_config(
+                "x",
+                br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#,
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            parse_config(
+                "x",
+                br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#,
+                false
+            )
+            .is_err()
+        );
         assert!(parse_config("x", &vec![b' '; MAX_CONFIG_BYTES + 1], false).is_err());
         let c = cfg(
             "x",
@@ -910,8 +909,10 @@ mod tests {
             sources.push(("WEBPROBE_BURP_BUILTINS", BurpResources::Dir(path.into())));
         }
         if sources.is_empty() {
-            assert!(std::env::var_os("WEBPROBE_REQUIRE_BURP_APP").is_none(),
-                "WEBPROBE_REQUIRE_BURP_APP requires WEBPROBE_BURP_APP_JAR or WEBPROBE_BURP_BUILTINS");
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_BURP_APP").is_none(),
+                "WEBPROBE_REQUIRE_BURP_APP requires WEBPROBE_BURP_APP_JAR or WEBPROBE_BURP_BUILTINS"
+            );
             eprintln!("BURP_APP_SMOKE_NOT_RUN: no application resource configured");
             return;
         }
@@ -1005,9 +1006,10 @@ mod tests {
                 .any(|l| l.starts_with("crawler.crawl_optimization.crawl_strategy")),
             "{na:?}"
         );
-        assert!(na
-            .iter()
-            .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks")));
+        assert!(
+            na.iter()
+                .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks"))
+        );
         assert!(!na.iter().any(|l| l.contains("maximum_crawl_time")));
         // Round trip: the current settings as a tree decode to themselves.
         let back = tree_to_config(

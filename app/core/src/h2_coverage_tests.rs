@@ -93,10 +93,12 @@ fn frame_parser_waits_for_every_header_and_payload_byte() {
 fn frame_parser_enforces_limit_before_waiting_for_payload() {
     let mut wire = Vec::new();
     write_frame(&mut wire, FRAME_DATA, 0, 1, &[42; 16]).unwrap();
-    assert!(parse_frame(&wire[..9], 15)
-        .err()
-        .unwrap()
-        .contains("SETTINGS_MAX_FRAME_SIZE"));
+    assert!(
+        parse_frame(&wire[..9], 15)
+            .err()
+            .unwrap()
+            .contains("SETTINGS_MAX_FRAME_SIZE")
+    );
     let (frame, used) = parse_frame(&wire, 16).unwrap().unwrap();
     assert_eq!(used, 25);
     assert_eq!(frame.payload, [42; 16]);

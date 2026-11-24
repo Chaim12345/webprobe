@@ -72,7 +72,7 @@ fn crlf_line(body: &[u8], from: usize, max: usize) -> Result<(usize, usize), Str
                         Err(StrictChunked::Malformed)
                     } else {
                         Ok((i, i + 2))
-                    }
+                    };
                 }
                 Some(_) => return Err(StrictChunked::Malformed),
             },

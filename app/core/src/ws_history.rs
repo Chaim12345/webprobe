@@ -5,8 +5,8 @@
 //! one message (`get`), and the view checks a cheap `stamp` instead of
 //! cloning the history each frame.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::body::Body;
 
@@ -53,11 +53,7 @@ pub struct WsHistory {
 }
 
 fn inline_len(b: &Body) -> u64 {
-    if b.is_stored() {
-        0
-    } else {
-        b.len() as u64
-    }
+    if b.is_stored() { 0 } else { b.len() as u64 }
 }
 
 /// Drop the oldest batch when the bound is exceeded, returning their inline

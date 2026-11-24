@@ -6,13 +6,13 @@ use crate::util;
 pub use crate::ws_history::WsEntry;
 
 // Marker parsing moved to intruder (L8, #38); keep the old net path working.
-pub use crate::intruder::{parse_markers, MarkerSeg};
+pub use crate::intruder::{MarkerSeg, parse_markers};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 thread_local! {
@@ -97,7 +97,11 @@ mod tls_client;
 pub use tls_client::*;
 
 mod attack;
+mod sni;
 pub use attack::*;
+#[cfg(test)]
+pub(crate) use sni::tls_sni_lab;
+pub use sni::{SniScope, sni_scope};
 
 #[cfg(test)]
 mod intercept_all_tests;
@@ -136,3 +140,39 @@ mod hist_tests;
 
 #[cfg(test)]
 mod tool_state_tests;
+
+/// Experimental inherited-context seam only. No production send policy changes.
+/// Wrappers check status without charging: transport accounting is a separate
+/// unified patch, and this seam is not evidence of byte/attempt limits.
+#[cfg(test)]
+pub(crate) fn scanner_send_admission(shared: &Shared) -> Result<(), String> {
+    use crate::scan_lifecycle::{ExecutionContext, captured};
+    let inherited = captured();
+    // TOOL is a display/session label, not experimental admission evidence.
+    // Unmigrated production callers retain legacy behavior in cfg(test) builds.
+    // Migrated callers must carry the explicit expected-scanner marker.
+    if inherited.is_none() && !scanner_io::expected() {
+        return Ok(());
+    }
+    let context = inherited.ok_or("scanner execution context missing")?;
+    loop {
+        context
+            .validate(shared)
+            .map_err(|_| "scanner execution context cancelled, stale or mismatched")?;
+        if let ExecutionContext::Budgeted(permit) = &context {
+            permit
+                .ledger()
+                .reserve(&[])
+                .map_err(|_| "scanner execution ledger denied")?;
+        }
+        if !shared.scan.paused.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+#[cfg(test)]
+mod inherited_context_tests;
+
+#[cfg(test)]
+pub(crate) mod scanner_io;

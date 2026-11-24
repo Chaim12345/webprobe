@@ -5,9 +5,9 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::net::Shared;
@@ -373,12 +373,14 @@ fn other_tools_cut_a_streaming_response_after_its_head() {
         "{}",
         String::from_utf8_lossy(&resp)
     );
-    assert!(shared
-        .events
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|l| l.contains("Scanner ignored the streaming response")));
+    assert!(
+        shared
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|l| l.contains("Scanner ignored the streaming response"))
+    );
 }
 
 #[test]

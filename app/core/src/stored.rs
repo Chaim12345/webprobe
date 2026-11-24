@@ -168,11 +168,11 @@ impl StoredInputs {
     /// stored-input issue).
     pub(crate) fn note_injection(&self, token: &str, request: &[u8], response: Option<&[u8]>) {
         let mut g = self.inner.lock().unwrap();
-        if let Some(&idx) = g.tokens.get(token) {
-            if g.points[idx].2.is_empty() {
-                g.points[idx].2 = request.to_vec();
-                g.points[idx].3 = response.map(<[u8]>::to_vec);
-            }
+        if let Some(&idx) = g.tokens.get(token)
+            && g.points[idx].2.is_empty()
+        {
+            g.points[idx].2 = request.to_vec();
+            g.points[idx].3 = response.map(<[u8]>::to_vec);
         }
     }
 
@@ -225,6 +225,96 @@ impl StoredInputs {
                 }
             })
             .collect()
+    }
+
+    /// Experimental A4 indexed retrieval. Reject before cloning input-owned
+    /// bytes. Body handles are Arc-backed; string/point/evidence clones count.
+    #[cfg(test)]
+    pub(crate) fn pair_bounded(
+        &self,
+        index: usize,
+        max_bytes: usize,
+        admit: impl FnOnce(usize) -> bool,
+    ) -> Result<Option<Pair>, ()> {
+        fn item_size(item: &Item) -> Option<usize> {
+            let e = &item.entry;
+            [
+                item.req.len(),
+                item.host.len(),
+                e.method.len(),
+                e.host.len(),
+                e.path.len(),
+                e.status.len(),
+                e.note.as_ref().map_or(0, String::len),
+                e.extension.len(),
+                e.title.len(),
+                e.cookies.len(),
+                e.ip.len(),
+            ]
+            .into_iter()
+            .try_fold(std::mem::size_of::<Item>(), usize::checked_add)
+        }
+        fn point_size(p: &InsertionPoint, depth: usize) -> Option<usize> {
+            if depth >= 16 {
+                return None;
+            }
+            let kind = match &p.kind {
+                webprobe_support::insertion::IpKind::Json(v) => {
+                    if v.len() > 256 {
+                        return None;
+                    }
+                    v.iter().try_fold(
+                        v.len().checked_mul(std::mem::size_of::<String>())?,
+                        |n, s| n.checked_add(s.len()),
+                    )?
+                }
+                webprobe_support::insertion::IpKind::Multipart { filename, .. } => {
+                    filename.as_ref().map_or(0, String::len)
+                }
+                _ => 0,
+            };
+            std::mem::size_of::<InsertionPoint>()
+                .checked_add(p.name.len())?
+                .checked_add(p.value.len())?
+                .checked_add(kind)?
+                .checked_add(match &p.parent {
+                    Some(p) => point_size(p, depth + 1)?,
+                    None => 0,
+                })
+        }
+        let g = self.inner.lock().unwrap();
+        let Some(&(pidx, retrieval)) = g.pairs.get(index) else {
+            return Ok(None);
+        };
+        let Some((item, point, req, resp)) = g.points.get(pidx) else {
+            return Err(());
+        };
+        let Some(injection_item) = g.items.get(*item) else {
+            return Err(());
+        };
+        let Some(retrieval_item) = g.items.get(retrieval) else {
+            return Err(());
+        };
+        let bytes = item_size(injection_item)
+            .and_then(|n| n.checked_add(item_size(retrieval_item)?))
+            .and_then(|n| n.checked_add(point_size(point, 0)?))
+            .and_then(|n| n.checked_add(req.len()))
+            .and_then(|n| n.checked_add(resp.as_ref().map_or(0, Vec::len)))
+            .ok_or(())?;
+        if bytes > max_bytes || !admit(bytes) {
+            return Err(());
+        }
+        Ok(Some(Pair {
+            item: injection_item.clone(),
+            point: point.clone(),
+            retrieval: retrieval_item.clone(),
+            injection: (req.clone(), resp.clone()),
+        }))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_pair(&self, index: usize) -> bool {
+        self.inner.lock().unwrap().pairs.get(index).is_some()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -297,6 +387,34 @@ mod tests {
     }
 
     #[test]
+    fn bounded_pair_rejects_many_empty_json_elements_before_clone_and_preserves_next() {
+        let s = StoredInputs::default();
+        let injection = s.add_item(item("/inject"));
+        let retrieval = s.add_item(item("/retrieve"));
+        let point = InsertionPoint::new(
+            webprobe_support::insertion::IpKind::Json(vec![String::new(); 10000]),
+            "x",
+            "",
+        );
+        let token = s.token(injection, &point);
+        s.observe(retrieval, b"GET /retrieve", token.as_bytes());
+        let admitted = std::cell::Cell::new(false);
+        assert!(
+            s.pair_bounded(0, 1024 * 1024, |_| {
+                admitted.set(true);
+                true
+            })
+            .is_err()
+        );
+        assert!(!admitted.get());
+        let valid = InsertionPoint::new(webprobe_support::insertion::IpKind::Query, "y", "");
+        let next = s.token(injection, &valid);
+        s.observe(retrieval, b"GET /retrieve", next.as_bytes());
+        assert!(s.has_pair(0));
+        assert!(s.pair_bounded(1, 1024 * 1024, |_| true).unwrap().is_some());
+        assert!(!s.has_pair(2));
+    }
+    #[test]
     fn tokens_pair_once_and_never_with_their_own_request() {
         let s = StoredInputs::default();
         let a = s.add_item(item("/comment"));
@@ -306,13 +424,14 @@ mod tests {
         assert_eq!(s.token(a, &p), t, "one token per point");
         assert!(t.starts_with(TOKEN_PREFIX) && t.len() == TOKEN_PREFIX.len() + TOKEN_BODY);
         // The probe's own response echoing its token is not stored input.
-        assert!(s
-            .observe(
+        assert!(
+            s.observe(
                 a,
                 format!("POST /comment c={t}").as_bytes(),
                 format!("<p>{t}</p>").as_bytes()
             )
-            .is_empty());
+            .is_empty()
+        );
         // Another item showing it is.
         let got = s.observe(
             b,
@@ -333,9 +452,10 @@ mod tests {
             "recorded once"
         );
         // Unknown tokens and near misses are ignored.
-        assert!(s
-            .observe(b, b"", b"zwq7abcdefghijkl zwq7ABCDEFGHIJKL zwq7short")
-            .is_empty());
+        assert!(
+            s.observe(b, b"", b"zwq7abcdefghijkl zwq7ABCDEFGHIJKL zwq7short")
+                .is_empty()
+        );
         assert_eq!(s.pairs().len(), 1);
         s.clear();
         assert!(s.pairs().is_empty() && s.is_empty());

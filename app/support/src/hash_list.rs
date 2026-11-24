@@ -456,8 +456,8 @@ fn blake2_var(s: bool, out_len: u8, data: &[u8]) -> Vec<u8> {
 }
 
 fn skein(state: usize, out_len: u8, data: &[u8]) -> Vec<u8> {
-    use skein_hash::digest::generic_array::typenum::{U128, U16, U20, U28, U32, U48, U64};
-    use skein_hash::{Digest as _, Skein1024, Skein256, Skein512};
+    use skein_hash::digest::generic_array::typenum::{U16, U20, U28, U32, U48, U64, U128};
+    use skein_hash::{Digest as _, Skein256, Skein512, Skein1024};
     match (state, out_len) {
         (256, 16) => Skein256::<U16>::digest(data).to_vec(),
         (256, 20) => Skein256::<U20>::digest(data).to_vec(),

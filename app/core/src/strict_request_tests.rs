@@ -2,8 +2,8 @@
 //! CONNECT and pipelined byte boundaries, and the tolerant parser beside it.
 
 use crate::strict_request::{
-    scan_request_head as scan, RequestBody as B, RequestFramingError as E, StrictRequest as S,
-    MAX_REQUEST_HEAD,
+    MAX_REQUEST_HEAD, RequestBody as B, RequestFramingError as E, StrictRequest as S,
+    scan_request_head as scan,
 };
 
 fn framed(raw: &str) -> Option<B> {

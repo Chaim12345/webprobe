@@ -105,7 +105,9 @@ pub enum IntruderError {
     NoExtensionGenerator,
     #[error("Collaborator payloads need a count of at least 1.")]
     CollaboratorCountZero,
-    #[error("Bit flipper payload source cannot operate on the base payload position value when using the battering ram attack type.")]
+    #[error(
+        "Bit flipper payload source cannot operate on the base payload position value when using the battering ram attack type."
+    )]
     BitFlipperBaseUnsupported,
     #[error("No bits are selected.")]
     NoBitsSelected,
@@ -759,11 +761,7 @@ fn substitution_variants(item: &str, table: &[(char, char)], cap: usize) -> Vec<
                 Some(&(_, to)) => {
                     let on = j < 64 && (i >> j) & 1 == 1;
                     j += 1;
-                    if on {
-                        to
-                    } else {
-                        c
-                    }
+                    if on { to } else { c }
                 }
             })
             .collect();
@@ -1544,11 +1542,7 @@ impl PayloadSource {
                         total = total.saturating_mul(n);
                     }
                 }
-                if any {
-                    total.min(MAX_PAYLOADS)
-                } else {
-                    0
-                }
+                if any { total.min(MAX_PAYLOADS) } else { 0 }
             }
             PayloadSource::CharacterSubstitution {
                 items,
@@ -1836,10 +1830,10 @@ pub fn count_specs(kind: AttackType, positions: usize, specs: &[SetSpec]) -> Opt
 /// Fill copy positions from their source position.
 fn apply_copies(values: &mut [Option<&str>], specs: &[SetSpec]) {
     for (i, spec) in specs.iter().enumerate() {
-        if let SetSpec::Copy(src) = spec {
-            if i < values.len() {
-                values[i] = values.get(*src).copied().flatten();
-            }
+        if let SetSpec::Copy(src) = spec
+            && i < values.len()
+        {
+            values[i] = values.get(*src).copied().flatten();
         }
     }
 }
@@ -2266,10 +2260,10 @@ pub fn process_set(set: &[String], rules: &[Processor]) -> Vec<String> {
             if !seen.insert(value.clone()) {
                 continue;
             }
-            if let Some(max) = unique.filter(|max| *max > 0) {
-                if out.len() >= max {
-                    continue;
-                }
+            if let Some(max) = unique.filter(|max| *max > 0)
+                && out.len() >= max
+            {
+                continue;
             }
         }
         out.push(value);
@@ -2418,7 +2412,7 @@ pub fn order_step(
     recent: bool,
     dirty: bool,
 ) -> OrderStep {
-    if new == old && !(dirty && !recent) {
+    if new == old && (!dirty || recent) {
         return OrderStep::Keep;
     }
     let (old_len, old_col, old_asc) = old;
@@ -2529,13 +2523,15 @@ mod tests {
             .is_err(),
             "over the limit"
         );
-        assert!(requests(
-            &Template::parse("no positions").unwrap(),
-            AttackType::Sniper,
-            &[set(&["x"])],
-            100
-        )
-        .is_err());
+        assert!(
+            requests(
+                &Template::parse("no positions").unwrap(),
+                AttackType::Sniper,
+                &[set(&["x"])],
+                100
+            )
+            .is_err()
+        );
         assert_eq!(
             count(AttackType::ClusterBomb, 2, &[usize::MAX, 2]),
             None,
@@ -2714,13 +2710,15 @@ mod tests {
         };
         assert_eq!(source.generate(), ["b", "a", "bb", "ba", "ab", "aa"]);
         assert_eq!(source.len(), 6);
-        assert!(PayloadSource::BruteForcer {
-            charset: String::new(),
-            min_len: 1,
-            max_len: 2
-        }
-        .generate()
-        .is_empty());
+        assert!(
+            PayloadSource::BruteForcer {
+                charset: String::new(),
+                min_len: 1,
+                max_len: 2
+            }
+            .generate()
+            .is_empty()
+        );
     }
 
     #[test]
@@ -2775,13 +2773,15 @@ mod tests {
         };
         assert_eq!(source.generate(), ["a", "ab", "aba"]);
         assert_eq!(source.len(), 3);
-        assert!(PayloadSource::CharacterBlocks {
-            base: String::new(),
-            min_len: 1,
-            max_len: 3
-        }
-        .generate()
-        .is_empty());
+        assert!(
+            PayloadSource::CharacterBlocks {
+                base: String::new(),
+                min_len: 1,
+                max_len: 3
+            }
+            .generate()
+            .is_empty()
+        );
     }
 
     #[test]
@@ -3667,11 +3667,13 @@ mod tests {
         }];
         assert_eq!(expand_runtime(&plain, &mint).unwrap(), plain);
         // Zero count is rejected at validation.
-        assert!(PayloadSource::CollaboratorPayloads {
-            include_location: false,
-            count: 0
-        }
-        .validate(AttackType::Sniper, 0, &[])
-        .is_err());
+        assert!(
+            PayloadSource::CollaboratorPayloads {
+                include_location: false,
+                count: 0
+            }
+            .validate(AttackType::Sniper, 0, &[])
+            .is_err()
+        );
     }
 }

@@ -51,12 +51,12 @@ pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
             let body = String::from_utf8_lossy(resp.get(rp.head_len..).unwrap_or(&[]));
             // The closing tag is searched after the opening one, so the
             // range is never reversed ("</title>x<title>" has no title).
-            if let Some(a) = body.find("<title") {
-                if let Some(b) = body[a..].find("</title>").map(|b| a + b) {
-                    let inner = &body[a..b];
-                    if let Some(gt) = inner.find('>') {
-                        title = inner[gt + 1..].trim().to_string();
-                    }
+            if let Some(a) = body.find("<title")
+                && let Some(b) = body[a..].find("</title>").map(|b| a + b)
+            {
+                let inner = &body[a..b];
+                if let Some(gt) = inner.find('>') {
+                    title = inner[gt + 1..].trim().to_string();
                 }
             }
         }
@@ -225,13 +225,13 @@ pub fn record_entry_verbatim(
     shared.push_history(e.clone());
     // Live passive crawl (Dashboard task 1): "Add links. Add item itself, same
     // domain and URLs in suite scope."
-    if shared.crawl_capture.load(Ordering::SeqCst) {
-        if let (Some(resp), Some(hooks)) = (&e.resp_raw, scan_hooks()) {
-            let origin = history_host(&e);
-            let mut links = shared.site_links.lock().unwrap();
-            for path in hooks.crawl_links(&origin, &e.path, resp) {
-                links.insert((origin.clone(), path));
-            }
+    if shared.crawl_capture.load(Ordering::SeqCst)
+        && let (Some(resp), Some(hooks)) = (&e.resp_raw, scan_hooks())
+    {
+        let origin = history_host(&e);
+        let mut links = shared.site_links.lock().unwrap();
+        for path in hooks.crawl_links(&origin, &e.path, resp) {
+            links.insert((origin.clone(), path));
         }
     }
     // live passive audit (AuditDefaults.json: scan_type_passive enabled),
@@ -321,7 +321,11 @@ pub fn browser_item_response(shared: &Shared, path: &str) -> Option<Vec<u8>> {
             esc(&util::url_decode(v))
         ));
     }
-    let html = format!("<html><body><form method=\"{}\" action=\"{}\">{inputs}</form><script>document.forms[0].submit()</script></body></html>", esc(&e.method), esc(&url));
+    let html = format!(
+        "<html><body><form method=\"{}\" action=\"{}\">{inputs}</form><script>document.forms[0].submit()</script></body></html>",
+        esc(&e.method),
+        esc(&url)
+    );
     Some(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{html}", html.len()).into_bytes())
 }
 

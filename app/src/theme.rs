@@ -330,10 +330,10 @@ pub fn install_fonts(ctx: &egui::Context) {
     // Phosphor icon font (egui-phosphor): Burp's toolbar glyphs (globe,
     // terminal, search, gear, funnel, check) without drawing them by hand.
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
-    if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
-        if !family.iter().any(|name| name == "Hack") {
-            family.push("Hack".to_owned());
-        }
+    if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional)
+        && !family.iter().any(|name| name == "Hack")
+    {
+        family.push("Hack".to_owned());
     }
     ctx.set_fonts(fonts);
 }
@@ -594,11 +594,11 @@ fn base_text_styles(font_scale: f32) -> std::collections::BTreeMap<egui::TextSty
 
 // ---------- live appearance state (M-05) ----------
 
-use std::sync::atomic::{AtomicU32, AtomicU8};
+use std::sync::atomic::{AtomicU8, AtomicU32};
 
 // Burp default: user_options.display.user_interface.look_and_feel = Light (UserDefaults.json).
 static PALETTE: AtomicU8 = AtomicU8::new(1); // 0 dark, 1 light, 2 high contrast
-                                             // Burp's Swing UI is compact: ~20 px rows and menu items.
+// Burp's Swing UI is compact: ~20 px rows and menu items.
 static DENSITY: AtomicU8 = AtomicU8::new(0); // 0 compact, 1 comfortable
 static FONT_SCALE_BITS: AtomicU32 = AtomicU32::new(1.0f32.to_bits());
 

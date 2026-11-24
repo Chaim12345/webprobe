@@ -1,10 +1,10 @@
 //! Fixtures for the strict chunked scanner, including the tolerant scanner
 //! side by side and back-to-back (pipelined) messages.
 
-use crate::codec::{scan_chunked, ChunkCursor, Chunked};
+use crate::codec::{ChunkCursor, Chunked, scan_chunked};
 use crate::strict_chunked::{
-    scan_chunked_strict as strict, scan_chunked_strict_from, StrictChunkCursor, StrictChunkLimits,
-    StrictChunked as S,
+    StrictChunkCursor, StrictChunkLimits, StrictChunked as S, scan_chunked_strict as strict,
+    scan_chunked_strict_from,
 };
 
 fn run(b: &[u8]) -> (S, Vec<u8>) {

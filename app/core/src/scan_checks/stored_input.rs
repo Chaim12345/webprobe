@@ -1,6 +1,6 @@
 use crate::diagnostics::Field;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use super::*;
 
@@ -86,6 +86,10 @@ pub(crate) struct PairCtx {
     pub shared: Arc<Shared>,
     pub pair: crate::stored::Pair,
     g11_hit: std::cell::Cell<bool>,
+    #[cfg(test)]
+    incomplete: std::cell::Cell<bool>,
+    #[cfg(test)]
+    partial: std::cell::Cell<bool>,
 }
 
 impl PairCtx {
@@ -94,6 +98,10 @@ impl PairCtx {
             shared,
             pair,
             g11_hit: std::cell::Cell::new(false),
+            #[cfg(test)]
+            incomplete: std::cell::Cell::new(false),
+            #[cfg(test)]
+            partial: std::cell::Cell::new(false),
         }
     }
 
@@ -114,6 +122,10 @@ impl PairCtx {
     }
 
     pub(crate) fn stopped(&self) -> bool {
+        #[cfg(test)]
+        if crate::scan_lifecycle::captured().is_some_and(|c| c.validate(&self.shared).is_err()) {
+            return true;
+        }
         self.shared.scan.stop.load(Ordering::SeqCst)
     }
 
@@ -133,6 +145,54 @@ impl PairCtx {
             if self.stopped() {
                 break;
             }
+            #[cfg(test)]
+            let resp = match crate::scan_lifecycle::captured() {
+                Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) => {
+                    use crate::net::scanner_io::{ExchangeStatus, send_budgeted};
+                    let outcome = send_budgeted(
+                        &self.shared,
+                        &p,
+                        item.https,
+                        &item.host,
+                        item.port,
+                        req.as_bytes(),
+                    );
+                    if outcome.status == ExchangeStatus::Complete {
+                        Some(outcome.response)
+                    } else {
+                        self.incomplete.set(true);
+                        // Only a strict valid final identity response's payload
+                        // prefix may reach positive-only stored detectors. No
+                        // redirect or completed-negative claim follows partial.
+                        let raw = outcome.response;
+                        let method = req.split_whitespace().next().unwrap_or("");
+                        let headers =
+                            util::find_head_end(&raw).map(|end| util::parse_http(&raw[..end]));
+                        let qualified = headers.is_some_and(|h| {
+                            !h.headers
+                                .iter()
+                                .any(|(name, _)| name.eq_ignore_ascii_case("Transfer-Encoding"))
+                        }) && host_response::assess(&raw, method)
+                            .is_some_and(|a| a.status >= 200 && !a.body.is_empty())
+                            && !raw.starts_with(b"HTTP/1.1 1")
+                            && !raw.starts_with(b"HTTP/1.0 1");
+                        if qualified {
+                            self.partial.set(true);
+                            Some(raw)
+                        } else {
+                            None
+                        }
+                    }
+                }
+                _ => send_one(
+                    &self.shared,
+                    item.https,
+                    &item.host,
+                    item.port,
+                    req.as_bytes(),
+                ),
+            };
+            #[cfg(not(test))]
             let resp = send_one(
                 &self.shared,
                 item.https,
@@ -154,12 +214,39 @@ impl PairCtx {
                 })
                 .map(|p| get_request_like(&item.req, &p));
             out.push((req, resp));
+            #[cfg(test)]
+            if self.incomplete.get() {
+                break;
+            }
             match next {
                 Some(n) => req = n,
                 None => break,
             }
         }
         out
+    }
+
+    /// Temporary evidence copy admission precedes the bounded Arc copies.
+    /// Retained proven issue accounting is separate, at report time.
+    pub(crate) fn record_exchange(
+        &self,
+        request: &[u8],
+        response: Option<&[u8]>,
+    ) -> Option<ScanEvidence> {
+        #[cfg(test)]
+        if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) =
+            crate::scan_lifecycle::captured()
+        {
+            let cap = webprobe_support::issues::EVIDENCE_MAX_BYTES;
+            let bytes = std::mem::size_of::<ScanEvidence>()
+                .checked_add(request.len().min(cap))?
+                .checked_add(response.map_or(0, |r| r.len().min(cap)))?;
+            if p.ledger().retain_input(bytes as u64).is_err() {
+                self.incomplete.set(true);
+                return None;
+            }
+        }
+        Some(ScanEvidence::new(request, response))
     }
 
     pub(crate) fn report(&self, mut issues: Vec<ScanIssue>) {
@@ -170,6 +257,45 @@ impl PairCtx {
             let cfg_slot = crate::scan_config::shared_config(&self.shared);
             let config = cfg_slot.lock().unwrap();
             issues.retain(|i| config.issue_allowed(&i.name, true));
+        }
+        #[cfg(test)]
+        if self.partial.get() {
+            for issue in &mut issues {
+                issue.detail.push_str("<p>Incomplete exchange: this finding uses only the received prefix of a strictly validated final identity response. The full response was not received or assessed; no complete-negative result is implied.</p>");
+                issue.confidence = "Tentative".into();
+            }
+        }
+        #[cfg(test)]
+        if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) =
+            crate::scan_lifecycle::captured()
+        {
+            issues.retain(|issue| {
+                let bytes = [
+                    issue.sev.len(),
+                    issue.name.len(),
+                    issue.host.len(),
+                    issue.path.len(),
+                    issue.detail.len(),
+                    issue.confidence.len(),
+                    issue.ident.len(),
+                ]
+                .into_iter()
+                .try_fold(std::mem::size_of::<ScanIssue>(), usize::checked_add)
+                .and_then(|n| {
+                    issue.evidence.iter().try_fold(n, |n, e| {
+                        n.checked_add(std::mem::size_of::<ScanEvidence>())?
+                            .checked_add(e.request.len())?
+                            .checked_add(e.response.as_ref().map_or(0, |r| r.len()))
+                    })
+                });
+                match bytes {
+                    Some(n) => p.ledger().retain_proven(n as u64).is_ok(),
+                    None => {
+                        p.mark_incomplete();
+                        false
+                    }
+                }
+            });
         }
         add_issues(&self.shared, issues);
     }
@@ -213,5 +339,102 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
                 check.run(&cx);
             }
         }
+    }
+}
+
+/// Experimental real A4 registry path. Explicit limits/permit only, no legacy
+/// fallback. Network accounting/deadline integration remains a separate gate.
+#[cfg(test)]
+#[allow(dead_code)] // experimental A4 registry path, not wired to a production caller yet
+pub(crate) fn run_stored_stage_budgeted(
+    shared: &Arc<Shared>,
+    permit: &crate::scan_lifecycle::BudgetedExecution,
+    max_pairs: usize,
+    max_pair_bytes: usize,
+) -> crate::scan_lifecycle::Finish {
+    use crate::scan_budget::Resource;
+    use crate::scan_lifecycle::{ExecutionContext, Finish, captured};
+    if max_pairs == 0
+        || max_pairs > 65536
+        || max_pair_bytes == 0
+        || max_pair_bytes > 64 * 1024 * 1024
+        || permit.validate_shared(shared).is_err()
+    {
+        return Finish::Incomplete;
+    }
+    let Some(ExecutionContext::Budgeted(inherited)) = captured() else {
+        return Finish::Incomplete;
+    };
+    if !std::ptr::eq(inherited.ledger(), permit.ledger())
+        || !Arc::ptr_eq(inherited.owner(), permit.owner())
+    {
+        return Finish::Incomplete;
+    }
+    // Only the fixed registry selection crosses the configuration lock.
+    // Do not clone arbitrary project sets/strings into the bounded stage.
+    let enabled: [bool; 5] = {
+        let config_slot = crate::scan_config::shared_config(shared);
+        let config = config_slot.lock().unwrap();
+        std::array::from_fn(|i| {
+            config.issue_allowed(STORED_CHECKS[i].issue(), true)
+                && config.check_enabled(STORED_CHECKS[i].id())
+        })
+    };
+    let mut incomplete = false;
+    for index in 0..max_pairs {
+        if permit.validate_shared(shared).is_err() || permit.ledger().reserve(&[]).is_err() {
+            return Finish::Incomplete;
+        }
+        if !shared.stored.has_pair(index) {
+            return if incomplete {
+                Finish::Incomplete
+            } else {
+                Finish::Complete
+            };
+        }
+        if permit.ledger().reserve(&[(Resource::Record, 1)]).is_err() {
+            return Finish::Incomplete;
+        }
+        let pair = shared.stored.pair_bounded(index, max_pair_bytes, |bytes| {
+            permit
+                .ledger()
+                .reserve(&[(Resource::Input, bytes as u64)])
+                .is_ok()
+        });
+        let pair = match pair {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return if incomplete {
+                    Finish::Incomplete
+                } else {
+                    Finish::Complete
+                };
+            }
+            Err(()) => {
+                incomplete = true;
+                continue;
+            }
+        };
+        let cx = PairCtx::new(shared.clone(), pair);
+        for (check, enabled) in STORED_CHECKS.iter().zip(enabled) {
+            if permit.validate_shared(shared).is_err() || permit.ledger().reserve(&[]).is_err() {
+                return Finish::Incomplete;
+            }
+            if (is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst))
+                && enabled
+                && check.applies_to(&cx.pair.point)
+                && !(check.server_side() && cx.pair.point.skips_server_side())
+            {
+                check.run(&cx);
+                if cx.incomplete.get() {
+                    incomplete = true;
+                }
+            }
+        }
+    }
+    if incomplete || shared.stored.has_pair(max_pairs) {
+        Finish::Incomplete
+    } else {
+        Finish::Complete
     }
 }

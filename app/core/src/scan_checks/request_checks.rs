@@ -138,21 +138,23 @@ impl RequestCheck for TraceEnabled {
                     .collect()
             };
             let probe = bc::trace_probe(cx.req.as_bytes(), &token);
-            if let Some(resp) = burp_send(cx, &probe) {
-                if bc::trace_hit(&resp, &token) {
-                    let mut e = cx.entry.clone();
-                    e.path = "/".into();
-                    let mut i = mk(
-                        "info",
-                        "HTTP TRACE method is enabled",
-                        &e,
-                        format!("The TRACE method is enabled on this server: the request's Cookie value {token} was echoed back in the response."),
-                    );
-                    i.confidence = "Certain".into();
-                    cx.report(vec![
-                        i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))])
-                    ]);
-                }
+            if let Some(resp) = burp_send(cx, &probe)
+                && bc::trace_hit(&resp, &token)
+            {
+                let mut e = cx.entry.clone();
+                e.path = "/".into();
+                let mut i = mk(
+                    "info",
+                    "HTTP TRACE method is enabled",
+                    &e,
+                    format!(
+                        "The TRACE method is enabled on this server: the request's Cookie value {token} was echoed back in the response."
+                    ),
+                );
+                i.confidence = "Certain".into();
+                cx.report(vec![
+                    i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))]),
+                ]);
             }
         }
     }
@@ -188,7 +190,9 @@ impl RequestCheck for OpenApiDefinition {
                 if cx.stopped() {
                     break;
                 }
-                let probe = format!("GET {path} HTTP/1.1\r\nHost: {host_hdr}\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+                let probe = format!(
+                    "GET {path} HTTP/1.1\r\nHost: {host_hdr}\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+                );
                 if let Some(resp) = burp_send(cx, probe.as_bytes()) {
                     let hit = if path == bc::SWAGGER_UI_INIT {
                         bc::openapi_in_swagger_init(&resp)
@@ -401,16 +405,18 @@ impl RequestCheck for ServerOptions {
             let allow = util::get_header(&rp.headers, "Allow");
             let risky = risky_methods_allowed(&status, allow.as_deref());
             if !risky.is_empty() {
-                cx.report(vec![mk(
-                    "low",
-                    "Active probe: permissive HTTP methods advertised via OPTIONS",
-                    &cx.entry,
-                    format!("Allow advertises risky methods: {}.", risky.join(", ")),
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    options_req.as_bytes(),
-                    Some(&resp[..]),
-                )])]);
+                cx.report(vec![
+                    mk(
+                        "low",
+                        "Active probe: permissive HTTP methods advertised via OPTIONS",
+                        &cx.entry,
+                        format!("Allow advertises risky methods: {}.", risky.join(", ")),
+                    )
+                    .with_evidence(vec![ScanEvidence::new(
+                        options_req.as_bytes(),
+                        Some(&resp[..]),
+                    )]),
+                ]);
             }
         }
         cx.progress();
@@ -443,13 +449,17 @@ impl RequestCheck for HeaderManipulation {
             let rp = util::parse_http(resp);
             let rbody = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
             if is_header_manipulation_hit(&rbody, &rp.headers, FIP_MARKER) {
-                cx.report(vec![mk(
-                    "low",
-                    "Active probe: attacker-set header value reflected (header manipulation)",
-                    &cx.entry,
-                    format!("The response echoes the {FIP_MARKER} value sent in X-Forwarded-For."),
-                )
-                .with_evidence(vec![ScanEvidence::new(&manip, Some(&resp[..]))])]);
+                cx.report(vec![
+                    mk(
+                        "low",
+                        "Active probe: attacker-set header value reflected (header manipulation)",
+                        &cx.entry,
+                        format!(
+                            "The response echoes the {FIP_MARKER} value sent in X-Forwarded-For."
+                        ),
+                    )
+                    .with_evidence(vec![ScanEvidence::new(&manip, Some(&resp[..]))]),
+                ]);
             }
         }
         cx.progress();
@@ -639,12 +649,12 @@ impl RequestCheck for CsrfTokenNotEnforced {
         let (req, parts) = (&cx.req, &cx.parts);
         let req_ct = request_ct(cx);
         let req_body = request_body(cx);
-        if !(csrf_applicable(&parts.method, &req_ct, &parts.headers)
-            && req_ct
+        if !csrf_applicable(&parts.method, &req_ct, &parts.headers)
+            || !req_ct
                 .to_ascii_lowercase()
                 .contains("x-www-form-urlencoded")
-            && !req_body.trim().is_empty()
-            && !cx.stopped())
+            || req_body.trim().is_empty()
+            || cx.stopped()
         {
             return;
         }
@@ -778,24 +788,47 @@ impl RequestCheck for RobotsTxt {
     fn run(&self, cx: &ScanCtx) {
         let (scheme, _) = origin_of(cx);
         let key = format!("{scheme}://{}:{}|robots", cx.host, cx.port);
-        if cx.stopped() || !cx.state().openapi_hosts.lock().unwrap().insert(key.clone()) {
+        if cx.stopped() {
             return;
         }
+        let claim = match cx.host_scope.acquire(key) {
+            crate::host_probe_state::Acquire::Acquired(c) => c,
+            crate::host_probe_state::Acquire::Complete => return,
+            crate::host_probe_state::Acquire::Suppressed => {
+                cx.shared.log(
+                    "Host probe incomplete/deferred: an attempt already owns this logical run",
+                );
+                return;
+            }
+            crate::host_probe_state::Acquire::Capacity => {
+                cx.shared.log("Host probe incomplete/deferred: bounded claim capacity exhausted; no request sent");
+                return;
+            }
+        };
         let probe = format!(
             "GET /robots.txt HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n",
             server_host_hdr(cx)
         );
         let Some(resp) = burp_send(cx, probe.as_bytes()) else {
-            cx.state().openapi_hosts.lock().unwrap().remove(&key);
+            cx.shared
+                .log("Host probe incomplete: transport failed; no same-run retry");
             return;
         };
-        let parsed = util::parse_http(&resp);
-        let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
-        let body =
-            String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]).to_ascii_lowercase();
-        let ctype = util::get_header(&parsed.headers, "Content-Type")
-            .unwrap_or_default()
-            .to_ascii_lowercase();
+        let Some(assessed) = super::host_response::assess(&resp, "GET") else {
+            cx.shared
+                .log("Host probe incomplete: no valid final response head; no same-run retry");
+            return;
+        };
+        let complete = assessed.complete;
+        if complete {
+            claim.complete();
+        } else {
+            cx.shared
+                .log("Host probe incomplete body: later explicit scan may retry, never this run");
+        }
+        let status = assessed.status.to_string();
+        let body = String::from_utf8_lossy(&assessed.body).to_ascii_lowercase();
+        let ctype = assessed.content_type.to_ascii_lowercase();
         let looks_html = ctype.contains("html")
             || body.trim_start().starts_with("<!doctype html")
             || body.trim_start().starts_with("<html");
@@ -810,6 +843,9 @@ impl RequestCheck for RobotsTxt {
         e.method = "GET".into();
         e.path = "/robots.txt".to_string();
         let mut i = mk("info", self.issue(), &e, "The site publishes a /robots.txt file. Its entries may reveal paths the site does not want indexed.".to_string());
+        if !complete {
+            i.detail.push_str(" The response body is incomplete; this positive is based only on the received decoded prefix.");
+        }
         i.confidence = "Certain".into();
         cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
             probe.as_bytes(),
@@ -849,9 +885,23 @@ impl RequestCheck for React2Shell {
         }
         let (scheme, _) = origin_of(cx);
         let key = format!("{scheme}://{}:{}|react2shell", cx.host, cx.port);
-        if cx.stopped() || !cx.state().openapi_hosts.lock().unwrap().insert(key.clone()) {
+        if cx.stopped() {
             return;
         }
+        let claim = match cx.host_scope.acquire(key) {
+            crate::host_probe_state::Acquire::Acquired(c) => c,
+            crate::host_probe_state::Acquire::Complete => return,
+            crate::host_probe_state::Acquire::Suppressed => {
+                cx.shared.log(
+                    "Host probe incomplete/deferred: an attempt already owns this logical run",
+                );
+                return;
+            }
+            crate::host_probe_state::Acquire::Capacity => {
+                cx.shared.log("Host probe incomplete/deferred: bounded claim capacity exhausted; no request sent");
+                return;
+            }
+        };
         let (action, req_id, boundary) = {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -872,13 +922,25 @@ impl RequestCheck for React2Shell {
             body.len()
         );
         let Some(resp) = burp_send(cx, probe.as_bytes()) else {
-            cx.state().openapi_hosts.lock().unwrap().remove(&key);
+            cx.shared
+                .log("Host probe incomplete: transport failed; no same-run retry");
             return;
         };
-        let parsed = util::parse_http(&resp);
-        let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
-        let text = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]);
-        if !react2shell_hit(status, &text) {
+        let Some(assessed) = super::host_response::assess(&resp, "POST") else {
+            cx.shared
+                .log("Host probe incomplete: no valid final response head; no same-run retry");
+            return;
+        };
+        let complete = assessed.complete;
+        if complete {
+            claim.complete();
+        } else {
+            cx.shared
+                .log("Host probe incomplete body: later explicit scan may retry, never this run");
+        }
+        let status = assessed.status.to_string();
+        let text = String::from_utf8_lossy(&assessed.body);
+        if !react2shell_hit(&status, &text) {
             return;
         }
         let mut e = cx.entry.clone();
@@ -890,6 +952,9 @@ impl RequestCheck for React2Shell {
             &e,
             "The server answered the React Server Components probe with status 500 and a flight-protocol error digest, the React2Shell signature (CVE-2025-55182 class).".to_string(),
         );
+        if !complete {
+            i.detail.push_str(" The response body is incomplete; this positive is based only on the received decoded prefix.");
+        }
         i.confidence = "Tentative".into();
         cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
             probe.as_bytes(),
@@ -1032,7 +1097,11 @@ impl RequestCheck for TlsCertificate {
             .as_deref()
             .map(|e| format!(" Verification failed: {e}."))
             .unwrap_or_default();
-        let desc = format!("{} The certificate {}.{error} Clients cannot rely on the server's identity or on the protection of data in transit.", summary, problems.join(" and "));
+        let desc = format!(
+            "{} The certificate {}.{error} Clients cannot rely on the server's identity or on the protection of data in transit.",
+            summary,
+            problems.join(" and ")
+        );
         let e = cx.entry.clone();
         let mut i = mk(crate::tls_cert::severity(&flags), self.issue(), &e, desc);
         i.confidence = "Certain".into();
@@ -1087,11 +1156,13 @@ mod tls_dedupe_tests {
             Some(TlsAttempt::Done(_))
         ));
         let mut called = false;
-        assert!(claim_and_capture(&seen, key, || {
-            called = true;
-            TlsAttempt::Done(cap())
-        })
-        .is_none());
+        assert!(
+            claim_and_capture(&seen, key, || {
+                called = true;
+                TlsAttempt::Done(cap())
+            })
+            .is_none()
+        );
         assert!(!called, "an already-claimed host is not captured again");
     }
 
@@ -1110,11 +1181,13 @@ mod tls_dedupe_tests {
             "route failure is terminal for the run: key stays claimed"
         );
         let mut called = false;
-        assert!(claim_and_capture(&seen, key, || {
-            called = true;
-            TlsAttempt::Retry
-        })
-        .is_none());
+        assert!(
+            claim_and_capture(&seen, key, || {
+                called = true;
+                TlsAttempt::Retry
+            })
+            .is_none()
+        );
         assert!(!called, "a failed route is not re-dialed on every pass");
     }
 }

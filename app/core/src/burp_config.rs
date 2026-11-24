@@ -11,7 +11,7 @@
 //! support are ignored on import with a note, the same way Burp ignores
 //! keys it does not know.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 fn obj(pairs: Vec<(&str, Value)>) -> Value {
     Value::Object(

@@ -43,6 +43,13 @@ pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(
     stream: &mut S,
     routed: &[u8],
 ) -> Result<Option<(Vec<u8>, bool)>, String> {
+    #[cfg(test)]
+    if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(permit)) =
+        crate::scan_lifecycle::captured()
+    {
+        permit.mark_incomplete();
+        return Err("budgeted transport incomplete: unmanaged h2c unsupported".into());
+    }
     let parts = util::parse_http(routed);
     if parts.head_len == 0 || parts.head_len > routed.len() {
         return Ok(None);
@@ -171,6 +178,19 @@ pub fn send_inner(
     req: &[u8],
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Result<Vec<u8>, String> {
+    #[cfg(test)]
+    scanner_send_admission(shared)?;
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        scanner_io::supported(shared, host, sink.is_some())
+            .inspect_err(|_| permit.mark_incomplete())?;
+        let outcome = scanner_io::exchange(shared, &permit, host, port, req);
+        return if outcome.status == scanner_io::ExchangeStatus::Complete {
+            Ok(outcome.response)
+        } else {
+            Err(outcome.diagnostic.unwrap_or_else(|| "incomplete".into()))
+        };
+    }
     let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let routed = crate::upstream::absolute_form_request(&config, &req, host, port);
@@ -186,15 +206,17 @@ pub fn send_inner(
     } else {
         None
     };
-    if let Some(conn) = pooled.as_mut() {
-        if !conn.writable() {
-            pooled = None;
-        }
+    if let Some(conn) = pooled.as_mut()
+        && !conn.writable()
+    {
+        pooled = None;
     }
     let reused = pooled.is_some();
     let mut stream = match pooled {
         Some(conn) => conn,
         None => {
+            #[cfg(test)]
+            scanner_send_admission(shared)?;
             shared.conns_opened.fetch_add(1, Ordering::SeqCst);
             let tcp = crate::upstream::connect_target(&config, host, port)?;
             tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
@@ -209,6 +231,8 @@ pub fn send_inner(
     // ordinary HTTP/1.1 response.
     let h2c = shared.h2c_upgrade.load(Ordering::SeqCst);
     if h2c && !reused && config.kind == crate::upstream::UpstreamKind::None {
+        #[cfg(test)]
+        scanner_send_admission(shared)?;
         match try_h2c_upgrade(&mut stream, &routed) {
             Ok(Some((resp, _upgraded))) => {
                 // A real upgrade leaves the socket speaking HTTP/2, so it must
@@ -230,6 +254,8 @@ pub fn send_inner(
     // A failed exchange may already have committed the request at the origin.
     // Neither a pooled socket nor an idempotent method proves it was not sent.
     // Retire on error and let the caller decide whether another send is safe.
+    #[cfg(test)]
+    scanner_send_admission(shared)?;
     let (resp, reusable) = exchange(&mut stream, &routed, sink)?;
     if keep_alive && reusable && response_headers_allow_reuse(&resp) {
         shared.pool.lock().unwrap().insert(key, stream);
@@ -252,6 +278,21 @@ pub fn send_tls_raw_with(
     request: &[u8],
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Upstream {
+    #[cfg(test)]
+    if let Err(error) = scanner_send_admission(shared) {
+        return Upstream {
+            resp: None,
+            error: Some(error),
+        };
+    }
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        permit.mark_incomplete();
+        return Upstream {
+            resp: None,
+            error: Some("budgeted transport incomplete: TLS unsupported".into()),
+        };
+    }
     let request = jar_request(shared, host, true, request);
     let request = match session_request(shared, port, true, request) {
         Ok(request) => request,
@@ -259,7 +300,7 @@ pub fn send_tls_raw_with(
             return Upstream {
                 resp: None,
                 error: Some(error),
-            }
+            };
         }
     };
     let mut tool_sink = tool_sink(shared, host, port, true, &request);
@@ -320,6 +361,14 @@ pub fn send_tls_inner(
     req: &[u8],
     mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Result<Vec<u8>, String> {
+    #[cfg(test)]
+    scanner_send_admission(shared)?;
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        permit.mark_incomplete();
+        return Err("budgeted transport incomplete: TLS unsupported".into());
+    }
+
     let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
@@ -331,6 +380,10 @@ pub fn send_tls_inner(
     let key = (host.to_string(), port);
     let choice = H2_CHOICE.with(|c| c.get());
     let want_h2 = choice.and_then(|c| c.want_h2);
+    // A custom SNI (D-12) needs its own connection, and that connection is
+    // not pooled under the host's key afterwards: a pooled connection was
+    // negotiated under another name.
+    let custom_sni = super::sni::sni_override().is_some();
     // Capture the effective TLS policy once: the pool key and any fresh
     // connection's TLS config below come from the same snapshot.
     let policy = EffectiveTlsPolicy::capture(shared, host);
@@ -338,15 +391,15 @@ pub fn send_tls_inner(
     // A pooled HTTP/2 connection answers on its next odd stream. Pooling is
     // off entirely when keep-alive is disabled or the sender pinned HTTP/1;
     // a dead socket, a GOAWAY connection or a retired connection is dropped.
-    let mut h2conn = if keep_alive && want_h2 != Some(false) {
+    let mut h2conn = if keep_alive && want_h2 != Some(false) && !custom_sni {
         shared.h2_pool.lock().unwrap().remove(&h2key)
     } else {
         None
     };
-    if let Some(c) = h2conn.as_mut() {
-        if !c.idle() || !c.get_mut().writable() {
-            h2conn = None;
-        }
+    if let Some(c) = h2conn.as_mut()
+        && (!c.idle() || !c.get_mut().writable())
+    {
+        h2conn = None;
     }
     if let Some(mut conn) = h2conn {
         LAST_PROTOCOL.with(|p| p.set("HTTP/2"));
@@ -356,6 +409,8 @@ pub fn send_tls_inner(
             let parts = util::parse_http(&req);
             h2req.connection = util::get_header(&parts.headers, "Connection");
         }
+        #[cfg(test)]
+        scanner_send_admission(shared)?;
         match conn.exchange(&h2req, sink.as_deref_mut()) {
             Ok(resp) => {
                 shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -379,26 +434,29 @@ pub fn send_tls_inner(
     }
     // Pooled HTTP/1 connections are HTTP/1.x: an HTTP/2 demand without a
     // pooled h2 connection needs a fresh one.
-    let mut pooled = if want_h2 == Some(true) {
+    let mut pooled = if want_h2 == Some(true) || custom_sni {
         None
     } else {
         shared.tls_pool.lock().unwrap().remove(&key)
     };
-    if let Some(conn) = pooled.as_mut() {
-        if !conn.writable() {
-            pooled = None;
-        }
+    if let Some(conn) = pooled.as_mut()
+        && !conn.writable()
+    {
+        pooled = None;
     }
     let reused = pooled.is_some();
     let mut stream = match pooled {
         Some(conn) => conn,
         None => {
+            #[cfg(test)]
+            scanner_send_admission(shared)?;
             shared.conns_opened.fetch_add(1, Ordering::SeqCst);
             let tcp = crate::upstream::connect_tls_target(&config, host, port)?;
             tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
                 .ok();
-            let name = rustls::pki_types::ServerName::try_from(host.to_string())
-                .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
+            let name =
+                rustls::pki_types::ServerName::try_from(super::sni::effective_server_name(host))
+                    .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
             let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
                 .map_err(|e| format!("configure upstream TLS: {e}"))?;
             UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(conn, tcp)))
@@ -430,10 +488,12 @@ pub fn send_tls_inner(
             h2req.connection = util::get_header(&parts.headers, "Connection");
         }
         let mut conn = crate::h2::Conn::new(stream);
+        #[cfg(test)]
+        scanner_send_admission(shared)?;
         match conn.exchange(&h2req, sink.as_deref_mut()) {
             Ok(resp) => {
                 // Pool the connection for the next request to this origin.
-                if keep_alive && conn.idle() {
+                if keep_alive && !custom_sni && conn.idle() {
                     shared.h2_pool.lock().unwrap().insert(h2key, conn);
                 }
                 return Ok(resp);
@@ -441,6 +501,8 @@ pub fn send_tls_inner(
             Err(e) if e.retryable() => {
                 // The server never processed the stream (GOAWAY/
                 // REFUSED_STREAM), so one retry on a fresh connection is safe.
+                #[cfg(test)]
+                scanner_send_admission(shared)?;
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
                 let fresh = new_tls_conn(&policy, &config, host, port)?;
                 let retried = match fresh {
@@ -448,8 +510,10 @@ pub fn send_tls_inner(
                         let _ = tls.conn.complete_io(&mut tls.sock);
                         if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
                             let mut retry_conn = crate::h2::Conn::new(UpstreamConn::Tls(tls));
+                            #[cfg(test)]
+                            scanner_send_admission(shared)?;
                             let r = retry_conn.exchange(&h2req, sink.as_deref_mut());
-                            if r.is_ok() && keep_alive && retry_conn.idle() {
+                            if r.is_ok() && keep_alive && !custom_sni && retry_conn.idle() {
                                 shared.h2_pool.lock().unwrap().insert(h2key, retry_conn);
                             }
                             r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
@@ -468,8 +532,10 @@ pub fn send_tls_inner(
     let req = as_http1(&req).into_owned();
     // The same unknown-outcome rule applies to HTTP/1 over TLS: never replay
     // after a write/read error, even when the socket came from the pool.
+    #[cfg(test)]
+    scanner_send_admission(shared)?;
     let (result, reusable) = exchange(&mut stream, &req, sink)?;
-    if keep_alive && reusable && response_headers_allow_reuse(&result) {
+    if keep_alive && reusable && !custom_sni && response_headers_allow_reuse(&result) {
         shared.tls_pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -484,16 +550,24 @@ pub fn new_tls_conn(
     host: &str,
     port: u16,
 ) -> Result<UpstreamConn, NetError> {
+    #[cfg(test)]
+    if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(permit)) =
+        crate::scan_lifecycle::captured()
+    {
+        permit.mark_incomplete();
+        return Err(NetError::Upstream(
+            "budgeted transport incomplete: unmanaged TLS unsupported".into(),
+        ));
+    }
     let tcp =
         crate::upstream::connect_tls_target(config, host, port).map_err(NetError::Upstream)?;
     tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
         .ok();
-    let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|source| {
-        NetError::InvalidTlsName {
+    let name = rustls::pki_types::ServerName::try_from(super::sni::effective_server_name(host))
+        .map_err(|source| NetError::InvalidTlsName {
             host: host.to_string(),
             source,
-        }
-    })?;
+        })?;
     let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
         .map_err(|source| NetError::TlsConfig { source })?;
     Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(
@@ -511,6 +585,13 @@ pub fn exchange<S: Read + Write + ResponseRead>(
     req: &[u8],
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Result<(Vec<u8>, bool), String> {
+    #[cfg(test)]
+    if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(permit)) =
+        crate::scan_lifecycle::captured()
+    {
+        permit.mark_incomplete();
+        return Err("budgeted transport incomplete: unmanaged stream exchange unsupported".into());
+    }
     stream.write_all(req).map_err(|e| format!("write: {e}"))?;
     stream.flush().ok();
     let method = req

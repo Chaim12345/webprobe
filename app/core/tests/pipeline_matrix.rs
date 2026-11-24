@@ -1,10 +1,10 @@
 use std::{
     io::{Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
-    sync::{atomic::Ordering, Arc},
+    sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
-use webprobe_core::net::{handle_conn, read_response_head, ws_frame, Shared};
+use webprobe_core::net::{Shared, handle_conn, read_response_head, ws_frame};
 fn proxy(shared: Arc<Shared>) -> (u16, std::thread::JoinHandle<()>) {
     let p = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = p.local_addr().unwrap().port();
@@ -43,44 +43,47 @@ fn reviewer_live_get_post_chunked_and_single_request_matrix() {
                     continue;
                 };
                 let seen = seen.clone();
-                handlers.push(std::thread::spawn(move || loop {
-                    s.set_read_timeout(Some(Duration::from_millis(1500)))
-                        .unwrap();
-                    let mut bytes = vec![];
-                    let mut buf = [0; 8192];
+                handlers.push(std::thread::spawn(move || {
                     loop {
-                        match s.read(&mut buf) {
-                            Ok(0) | Err(_) => break,
-                            Ok(n) => {
-                                bytes.extend_from_slice(&buf[..n]);
-                                s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
+                        s.set_read_timeout(Some(Duration::from_millis(1500)))
+                            .unwrap();
+                        let mut bytes = vec![];
+                        let mut buf = [0; 8192];
+                        loop {
+                            match s.read(&mut buf) {
+                                Ok(0) | Err(_) => break,
+                                Ok(n) => {
+                                    bytes.extend_from_slice(&buf[..n]);
+                                    s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
+                                }
                             }
                         }
-                    }
-                    if bytes.is_empty() {
-                        return;
-                    }
-                    let (n, last) = {
-                        let mut g = seen.lock().unwrap();
-                        g.push(bytes);
-                        (g.len(), g.len() >= count)
-                    };
-                    let b = if n == 1 { "one" } else { "two" };
-                    let conn = if last { "Connection: close\r\n" } else { "" };
-                    s.write_all(
-                        format!("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n{conn}\r\n{b}").as_bytes(),
-                    )
-                    .unwrap();
-                    if last {
-                        return;
+                        if bytes.is_empty() {
+                            return;
+                        }
+                        let (n, last) = {
+                            let mut g = seen.lock().unwrap();
+                            g.push(bytes);
+                            (g.len(), g.len() >= count)
+                        };
+                        let b = if n == 1 { "one" } else { "two" };
+                        let conn = if last { "Connection: close\r\n" } else { "" };
+                        s.write_all(
+                            format!("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n{conn}\r\n{b}")
+                                .as_bytes(),
+                        )
+                        .unwrap();
+                        if last {
+                            return;
+                        }
                     }
                 }));
             }
             for h in handlers {
                 h.join().unwrap();
             }
-            let out = seen.lock().unwrap().clone();
-            out
+
+            seen.lock().unwrap().clone()
         });
         let (pp, worker) = proxy(shared.clone());
         let mut c = client(pp);
@@ -157,9 +160,11 @@ fn reviewer_upgrade_and_early_binary_frame_in_one_write() {
     let mut request=format!("GET http://127.0.0.1:{port}/ws HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").into_bytes();
     request.extend(frame);
     c.write_all(&request).unwrap();
-    assert!(read_response_head(&mut c)
-        .unwrap()
-        .starts_with(b"HTTP/1.1 101"));
+    assert!(
+        read_response_head(&mut c)
+            .unwrap()
+            .starts_with(b"HTTP/1.1 101")
+    );
     let expected_echo = ws_frame(0x82, b"\xff\0early", false);
     let mut echo = vec![0; expected_echo.len()];
     c.read_exact(&mut echo).unwrap();
@@ -171,8 +176,8 @@ fn reviewer_upgrade_and_early_binary_frame_in_one_write() {
 #[test]
 fn reviewer_connect_and_clienthello_same_write() {
     use rustls::{
-        pki_types::ServerName, ClientConfig, ClientConnection, RootCertStore, ServerConnection,
-        StreamOwned,
+        ClientConfig, ClientConnection, RootCertStore, ServerConnection, StreamOwned,
+        pki_types::ServerName,
     };
     let mut shared = Shared::new();
     let mut roots = RootCertStore::empty();
@@ -204,9 +209,11 @@ fn reviewer_connect_and_clienthello_same_write() {
         format!("CONNECT localhost:{port} HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n").into_bytes();
     conn.write_tls(&mut combined).unwrap();
     c.write_all(&combined).unwrap();
-    assert!(read_response_head(&mut c)
-        .unwrap()
-        .starts_with(b"HTTP/1.1 200"));
+    assert!(
+        read_response_head(&mut c)
+            .unwrap()
+            .starts_with(b"HTTP/1.1 200")
+    );
     let mut tls = StreamOwned::new(conn, c);
     tls.write_all(
         format!("GET /tls HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n")
@@ -224,8 +231,8 @@ fn reviewer_connect_and_clienthello_same_write() {
 #[test]
 fn reviewer_tls_pipeline_when_first_request_is_exactly_8192_bytes() {
     use rustls::{
-        pki_types::ServerName, ClientConfig, ClientConnection, RootCertStore, ServerConnection,
-        StreamOwned,
+        ClientConfig, ClientConnection, RootCertStore, ServerConnection, StreamOwned,
+        pki_types::ServerName,
     };
     let mut shared = Shared::new();
     let mut roots = RootCertStore::empty();
@@ -281,9 +288,11 @@ fn reviewer_tls_pipeline_when_first_request_is_exactly_8192_bytes() {
         format!("CONNECT localhost:{port} HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n").as_bytes(),
     )
     .unwrap();
-    assert!(read_response_head(&mut c)
-        .unwrap()
-        .starts_with(b"HTTP/1.1 200"));
+    assert!(
+        read_response_head(&mut c)
+            .unwrap()
+            .starts_with(b"HTTP/1.1 200")
+    );
     let conn = ClientConnection::new(cfg, ServerName::try_from("localhost").unwrap()).unwrap();
     let mut tls = StreamOwned::new(conn, c);
     let mut first =
@@ -320,21 +329,24 @@ fn one_shot_upstream(reply: &'static [u8]) -> (u16, std::thread::JoinHandle<usiz
         let mut heads = 0;
         let mut live = vec![];
         while Instant::now() < end {
-            if let Ok((mut s, _)) = up.accept() {
-                s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
-                let mut buf = [0; 8192];
-                let mut got = vec![];
-                while let Ok(n) = s.read(&mut buf) {
-                    if n == 0 {
-                        break;
+            match up.accept() {
+                Ok((mut s, _)) => {
+                    s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
+                    let mut buf = [0; 8192];
+                    let mut got = vec![];
+                    while let Ok(n) = s.read(&mut buf) {
+                        if n == 0 {
+                            break;
+                        }
+                        got.extend_from_slice(&buf[..n]);
                     }
-                    got.extend_from_slice(&buf[..n]);
+                    heads += got.windows(4).filter(|w| *w == b"\r\n\r\n").count();
+                    let _ = s.write_all(reply);
+                    live.push(s);
                 }
-                heads += got.windows(4).filter(|w| *w == b"\r\n\r\n").count();
-                let _ = s.write_all(reply);
-                live.push(s);
-            } else {
-                std::thread::sleep(Duration::from_millis(5));
+                _ => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
             }
         }
         heads

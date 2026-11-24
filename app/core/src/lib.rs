@@ -40,6 +40,7 @@ pub use webprobe_support::{
     mime, notice, organizer, paths, rules, seq_bits, streaming, sync, tls, util, variations, xss,
 };
 
+pub(crate) mod h2_group;
 #[cfg(test)]
 mod intruder_run_edge_tests;
 pub mod macros;
@@ -57,6 +58,7 @@ pub mod scan;
 pub mod scan_config;
 pub mod scan_library;
 pub mod scan_run;
+pub mod send_group;
 pub mod setup_page;
 pub mod sitemap_compare;
 pub mod stored;
@@ -65,6 +67,7 @@ mod streaming_tests;
 pub mod tasks;
 pub mod tls_cert;
 pub mod upstream;
+pub(crate) mod url_payloads;
 mod util_tests;
 pub mod ws_history;
 pub mod ws_repeater;
@@ -86,3 +89,15 @@ mod parser_fuzz_tests;
 mod strict_chunked_tests;
 #[cfg(test)]
 mod strict_request_tests;
+
+pub mod host_probe_state;
+
+// Experimental, fixture-only primitives. No production budget defaults.
+#[cfg(test)]
+mod scan_budget;
+
+#[cfg(test)]
+mod scan_resolver;
+
+#[cfg(test)]
+mod scan_lifecycle;

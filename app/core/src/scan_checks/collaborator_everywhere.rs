@@ -6,27 +6,30 @@ use super::*;
 /// carries and how Burp names where each went (burp.Zez7.ZP labels).
 pub(crate) struct EverywhereProbe {
     pub request: String,
+    /// The TLS server name to send instead of the host's (the SNI probe).
+    pub sni: Option<String>,
     /// (slot, payload as shown, where it went).
     pub ids: Vec<(&'static str, String, &'static str)>,
 }
 
 /// The slots of burp.Zc7h, in Zs61.Zu order. The request-line variants
 /// (auth fragment, absolute URL, CONNECT) are only built when no upstream
-/// proxy serves the host; the TLS SNI variant is not ported (WebProbe's
-/// sender cannot set an SNI other than the host).
-pub(crate) const EVERYWHERE_SLOTS: [&str; 12] = [
-    "host", "xfh", "hostauth", "authfrag", "absurl", "xff", "tci", "xrip", "referer", "wap",
+/// proxy serves the host; the SNI variant only for an HTTPS target.
+pub(crate) const EVERYWHERE_SLOTS: [&str; 13] = [
+    "host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "tci", "xrip", "referer", "wap",
     "scraped", "connect",
 ];
 
 /// burp.Zcg4's requests for the target `host_hdr` (`host`:`port`), each
 /// with the Collaborator name of its slot (`collab(slot)`), and burp.Zcg4.ZP's
-/// default headers. `direct`: no upstream proxy (request-line variants).
+/// default headers. `direct`: no upstream proxy (request-line variants);
+/// `https`: the target speaks TLS (the SNI variant).
 pub(crate) fn everywhere_probes(
     host_hdr: &str,
     host: &str,
     port: u16,
     direct: bool,
+    https: bool,
     collab: &dyn Fn(&str) -> Option<String>,
 ) -> Vec<EverywhereProbe> {
     const DEFAULTS: &str =
@@ -40,6 +43,7 @@ pub(crate) fn everywhere_probes(
             let (request, shown) = build(&c);
             out.push(EverywhereProbe {
                 request,
+                sni: None,
                 ids: vec![(slot, shown, label)],
             });
         }
@@ -76,6 +80,18 @@ pub(crate) fn everywhere_probes(
                 format!("GET http://{c}/ HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"),
                 format!("http://{c}/"),
             )
+        });
+    }
+    // Zs61.Zu:47-49, only for a TLS target (Zp42.ZLX): the Host-header
+    // request (Zsbf maps SSL_SNI to Zcg4.ZV case 2, which shares case 1)
+    // sent with the same Collaborator name as the TLS server name
+    // (Ze2j.issueRequest: Zs31.ZG(payload), the payload being the bare
+    // domain, Zs61.Zz default case).
+    if https && let Some(c) = collab("sni") {
+        out.push(EverywhereProbe {
+            request: format!("GET / HTTP/1.1\r\nHost: {c}\r\n{DEFAULTS}\r\n"),
+            sni: Some(c.clone()),
+            ids: vec![("sni", c, "SSL SNI value and the HTTP Host header")],
         });
     }
     // Zs61.ZH(NONE) -> Zcg4.ZZ: one request, six headers, an id each.
@@ -122,6 +138,7 @@ pub(crate) fn everywhere_probes(
     if !ids.is_empty() {
         out.push(EverywhereProbe {
             request: format!("GET / HTTP/1.1\r\nHost: {host_hdr}\r\n{lines}{DEFAULTS}\r\n"),
+            sni: None,
             ids,
         });
     }
@@ -181,10 +198,18 @@ impl RequestCheck for CollaboratorEverywhere {
                 .cloned()
         };
         let collab = |slot: &str| find(slot).map(|(_, _, d)| d);
-        for probe in everywhere_probes(&cx.host_hdr, &cx.host, cx.port, direct, &collab) {
+        for probe in everywhere_probes(
+            &cx.host_hdr,
+            &cx.host,
+            cx.port,
+            direct,
+            cx.entry.https,
+            &collab,
+        ) {
             if cx.stopped() {
                 break;
             }
+            let _sni = probe.sni.as_deref().map(net::sni_scope);
             let resp = burp_send(cx, probe.request.as_bytes());
             for (slot, shown, label) in &probe.ids {
                 let Some((_, token, _)) = find(slot) else {
@@ -205,17 +230,17 @@ impl RequestCheck for CollaboratorEverywhere {
                 cx.shared
                     .oob
                     .register_delivered(token.clone(), None, issue, delivery);
-                if let Some(r) = resp.as_deref() {
-                    if inband_hit(r, &token) {
-                        let mut i = oob_resource_load_issue(
-                            &cx.entry,
-                            &crate::oob::delivery_sentence("The payload", shown, label, ""),
-                            &probe.request,
-                            r,
-                        );
-                        i.path = "/".into();
-                        cx.report(vec![i]);
-                    }
+                if let Some(r) = resp.as_deref()
+                    && inband_hit(r, &token)
+                {
+                    let mut i = oob_resource_load_issue(
+                        &cx.entry,
+                        &crate::oob::delivery_sentence("The payload", shown, label, ""),
+                        &probe.request,
+                        r,
+                    );
+                    i.path = "/".into();
+                    cx.report(vec![i]);
                 }
             }
         }

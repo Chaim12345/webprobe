@@ -163,10 +163,11 @@ impl Origin {
         }
     }
     fn warm(&self) {
-        assert!(self
-            .send(b"GET /warm HTTP/1.1\r\nHost: localhost\r\n\r\n")
-            .unwrap()
-            .ends_with(b"ok"));
+        assert!(
+            self.send(b"GET /warm HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                .unwrap()
+                .ends_with(b"ok")
+        );
         let key = ("localhost".to_string(), self.port);
         let pool = if self.tls {
             &self.shared.tls_pool
@@ -284,7 +285,7 @@ fn h2c_post_effect_then_lost_response_is_never_replayed_plainly() {
 
 #[test]
 fn intruder_worker_does_not_replay_a_committed_post_after_response_loss() {
-    use crate::intruder::{resolve_specs, AttackType, PayloadSource, Template};
+    use crate::intruder::{AttackType, PayloadSource, Template, resolve_specs};
     use crate::intruder_run::{self, AttackSettings, RetryConfig};
     for tls in [false, true] {
         let mut origin = Origin::new(tls, Reply::Hold);

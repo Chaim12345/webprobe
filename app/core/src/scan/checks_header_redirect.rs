@@ -219,17 +219,17 @@ pub fn run_open_redirect_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     }
     // ZR
     let lv = value.to_lowercase();
-    if lv.starts_with("http:") || lv.starts_with("https://") {
-        if let Some((proto, rest)) = value.split_once("://") {
-            let (host, file) = rest
-                .find('/')
-                .map(|i| (&rest[..i], &rest[i..]))
-                .unwrap_or((rest, ""));
-            let host = host.split(':').next().unwrap_or(host);
-            let base = format!("{proto}://{host}.a{}", rnd());
-            if let Some(h) = attempt(format!("{base}{file}"), base) {
-                return Some(h);
-            }
+    if (lv.starts_with("http:") || lv.starts_with("https://"))
+        && let Some((proto, rest)) = value.split_once("://")
+    {
+        let (host, file) = rest
+            .find('/')
+            .map(|i| (&rest[..i], &rest[i..]))
+            .unwrap_or((rest, ""));
+        let host = host.split(':').next().unwrap_or(host);
+        let base = format!("{proto}://{host}.a{}", rnd());
+        if let Some(h) = attempt(format!("{base}{file}"), base) {
+            return Some(h);
         }
     }
     // ZV

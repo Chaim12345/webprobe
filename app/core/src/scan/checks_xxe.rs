@@ -19,10 +19,10 @@ pub fn xxe_doctype(entity: &str, variant: u8) -> String {
 /// the XML declaration is stepped over only when the body starts with `<?xml`.
 pub fn xml_doc_start(body: &str) -> usize {
     let mut i = body.bytes().take_while(|b| *b <= b' ').count();
-    if body[i..].starts_with("<?xml") {
-        if let Some(end) = body[i..].find("?>") {
-            i += end + 2;
-        }
+    if body[i..].starts_with("<?xml")
+        && let Some(end) = body[i..].find("?>")
+    {
+        i += end + 2;
     }
     i
 }
@@ -49,10 +49,10 @@ pub fn xml_value_points(body: &str, from: usize, max: usize) -> Vec<(usize, usiz
             && !tag.ends_with('/');
         if is_start {
             let vs = gt + 1;
-            if let Some(next) = body[vs..].find('<').map(|x| x + vs) {
-                if bytes.get(next + 1) == Some(&b'/') {
-                    out.push((vs, next));
-                }
+            if let Some(next) = body[vs..].find('<').map(|x| x + vs)
+                && bytes.get(next + 1) == Some(&b'/')
+            {
+                out.push((vs, next));
             }
         }
         i = gt + 1;

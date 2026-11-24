@@ -40,81 +40,86 @@ pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, NetError> {
 
 pub fn start_proxy(shared: Arc<Shared>) {
     start_extra_listeners(shared.clone());
-    crate::util::spawn_contained("net", move || loop {
-        shared.listener_restart.store(false, Ordering::SeqCst);
-        let addr = format!("127.0.0.1:{}", shared.proxy_port.load(Ordering::SeqCst));
-        let listener = TcpListener::bind(&addr);
-        match listener {
-            Ok(l) => {
-                shared.listener_running.store(true, Ordering::SeqCst);
-                shared.log(&format!(
-                    "Proxy listener started on {addr}, intercept is {}",
-                    {
-                        if shared.intercept_on.load(Ordering::SeqCst) {
-                            "on"
-                        } else {
-                            "off"
-                        }
-                    }
-                ));
-                // Non-blocking accept, so a restart (port change, restored
-                // project) takes effect at once; a blocking accept only saw
-                // the flag after the next client connected.
-                let _ = l.set_nonblocking(true);
-                let mut readiness = super::accept_wait::Readiness::new(&l).ok();
-                if readiness.is_none() {
-                    shared.log("Proxy readiness unavailable; using polling fallback");
-                }
-                loop {
-                    if shared.listener_restart.load(Ordering::SeqCst) {
-                        break;
-                    }
-                    match l.accept() {
-                        Ok((stream, _)) => {
-                            let _ = stream.set_nonblocking(false);
-                            let sh = shared.clone();
-                            spawn_connection(sh, stream);
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            if let Some(wait) = &mut readiness {
-                                if wait.wait(Duration::from_millis(50)).is_err() {
-                                    // Preserve service if the OS poller fails. Dropping
-                                    // unregisters the borrowed listener before reuse.
-                                    readiness = None;
-                                    shared.log("Proxy readiness failed; using polling fallback");
-                                    std::thread::sleep(Duration::from_millis(50));
-                                }
+    crate::util::spawn_contained("net", move || {
+        loop {
+            shared.listener_restart.store(false, Ordering::SeqCst);
+            let addr = format!("127.0.0.1:{}", shared.proxy_port.load(Ordering::SeqCst));
+            let listener = TcpListener::bind(&addr);
+            match listener {
+                Ok(l) => {
+                    shared.listener_running.store(true, Ordering::SeqCst);
+                    shared.log(&format!(
+                        "Proxy listener started on {addr}, intercept is {}",
+                        {
+                            if shared.intercept_on.load(Ordering::SeqCst) {
+                                "on"
                             } else {
-                                std::thread::sleep(Duration::from_millis(50));
+                                "off"
                             }
                         }
-                        Err(_) => continue,
+                    ));
+                    // Non-blocking accept, so a restart (port change, restored
+                    // project) takes effect at once; a blocking accept only saw
+                    // the flag after the next client connected.
+                    let _ = l.set_nonblocking(true);
+                    let mut readiness = super::accept_wait::Readiness::new(&l).ok();
+                    if readiness.is_none() {
+                        shared.log("Proxy readiness unavailable; using polling fallback");
+                    }
+                    loop {
+                        if shared.listener_restart.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        match l.accept() {
+                            Ok((stream, _)) => {
+                                let _ = stream.set_nonblocking(false);
+                                let sh = shared.clone();
+                                spawn_connection(sh, stream);
+                            }
+                            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                                if let Some(wait) = &mut readiness {
+                                    if wait.wait(Duration::from_millis(50)).is_err() {
+                                        // Preserve service if the OS poller fails. Dropping
+                                        // unregisters the borrowed listener before reuse.
+                                        readiness = None;
+                                        shared
+                                            .log("Proxy readiness failed; using polling fallback");
+                                        std::thread::sleep(Duration::from_millis(50));
+                                    }
+                                } else {
+                                    std::thread::sleep(Duration::from_millis(50));
+                                }
+                            }
+                            Err(_) => continue,
+                        }
+                    }
+                    shared.listener_running.store(false, Ordering::SeqCst);
+                    shared.log("Proxy listener stopped for restart");
+                    // fall through and rebind below (flag cleared at loop top via check)
+                }
+                Err(e) => {
+                    shared.listener_running.store(false, Ordering::SeqCst);
+                    shared.log(&format!(
+                        "Proxy listener bind failed on {addr}: {e}; waiting for restart command"
+                    ));
+                    // Burp alerts on this; a silent failure leaves the user
+                    // browsing through nothing.
+                    crate::notice::toast(
+                        crate::notice::Level::Error,
+                        format!(
+                            "Failed to start proxy service on {addr}. Check whether another service is already using this port. ({e})"
+                        ),
+                    );
+                    // wait for a restart command instead of exiting
+                    while !shared.listener_restart.load(Ordering::SeqCst) {
+                        std::thread::sleep(Duration::from_millis(500));
                     }
                 }
-                shared.listener_running.store(false, Ordering::SeqCst);
-                shared.log("Proxy listener stopped for restart");
-                // fall through and rebind below (flag cleared at loop top via check)
             }
-            Err(e) => {
-                shared.listener_running.store(false, Ordering::SeqCst);
-                shared.log(&format!(
-                    "Proxy listener bind failed on {addr}: {e}; waiting for restart command"
-                ));
-                // Burp alerts on this; a silent failure leaves the user
-                // browsing through nothing.
-                crate::notice::toast(
-                    crate::notice::Level::Error,
-                    format!("Failed to start proxy service on {addr}. Check whether another service is already using this port. ({e})"),
-                );
-                // wait for a restart command instead of exiting
-                while !shared.listener_restart.load(Ordering::SeqCst) {
-                    std::thread::sleep(Duration::from_millis(500));
-                }
-            }
+            // Short delay so the old socket closes before rebinding on the next pass;
+            // the loop top clears the restart flag.
+            std::thread::sleep(Duration::from_millis(250));
         }
-        // Short delay so the old socket closes before rebinding on the next pass;
-        // the loop top clears the restart flag.
-        std::thread::sleep(Duration::from_millis(250));
     });
 }
 
@@ -204,9 +209,9 @@ pub fn listener_status(shared: &Arc<Shared>) -> Vec<(String, bool, Option<String
     out
 }
 
-pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64) {
+pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, r#gen: u64) {
     loop {
-        if shared.listener_generation.load(Ordering::SeqCst) != gen {
+        if shared.listener_generation.load(Ordering::SeqCst) != r#gen {
             break;
         }
         let addr = format!("{}:{}", state.spec.bind, state.spec.port);
@@ -217,7 +222,7 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64)
                 *state.error.lock().unwrap() = None;
                 shared.log(&format!("Proxy listener started on {addr}"));
                 loop {
-                    if shared.listener_generation.load(Ordering::SeqCst) != gen {
+                    if shared.listener_generation.load(Ordering::SeqCst) != r#gen {
                         break;
                     }
                     match l.accept() {
@@ -246,7 +251,7 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64)
                     format!("Listener {addr} failed: {e}"),
                 );
                 // Wait for a configuration change before retrying.
-                while shared.listener_generation.load(Ordering::SeqCst) == gen {
+                while shared.listener_generation.load(Ordering::SeqCst) == r#gen {
                     std::thread::sleep(Duration::from_millis(500));
                 }
             }
@@ -261,13 +266,13 @@ pub fn start_extra_listeners(shared: Arc<Shared>) {
     crate::util::spawn_contained("net", move || {
         let mut spawned_gen = u64::MAX;
         loop {
-            let gen = shared.listener_generation.load(Ordering::SeqCst);
-            if gen != spawned_gen {
-                spawned_gen = gen;
+            let r#gen = shared.listener_generation.load(Ordering::SeqCst);
+            if r#gen != spawned_gen {
+                spawned_gen = r#gen;
                 let specs: Vec<Arc<ListenerState>> = shared.listeners.lock().unwrap().clone();
                 for st in specs {
                     let sh = shared.clone();
-                    crate::util::spawn_contained("net", move || listener_worker(sh, st, gen));
+                    crate::util::spawn_contained("net", move || listener_worker(sh, st, r#gen));
                 }
             }
             std::thread::sleep(Duration::from_millis(250));
@@ -883,10 +888,11 @@ impl<W: Write> crate::streaming::ResponseSink for ProxySink<'_, W> {
         }
         self.wired += 1;
         // Without stripping, the stored copy is the body as it was framed.
-        if !self.settings.strip_chunked && self.wired > 1 {
-            if let Some(t) = self.tee.as_mut() {
-                t.push(bytes);
-            }
+        if !self.settings.strip_chunked
+            && self.wired > 1
+            && let Some(t) = self.tee.as_mut()
+        {
+            t.push(bytes);
         }
         let sent = self
             .client
@@ -897,10 +903,10 @@ impl<W: Write> crate::streaming::ResponseSink for ProxySink<'_, W> {
     }
 
     fn payload(&mut self, bytes: &[u8]) {
-        if self.settings.strip_chunked {
-            if let Some(t) = self.tee.as_mut() {
-                t.push(bytes);
-            }
+        if self.settings.strip_chunked
+            && let Some(t) = self.tee.as_mut()
+        {
+            t.push(bytes);
         }
     }
 
@@ -987,13 +993,13 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     // Burp's "Show response in browser" / "Request in browser" URLs
     // (http://burpsuite/show/N, /repeat/N): WebProbe serves the same under
     // http://webprobe.
-    if host.eq_ignore_ascii_case("webprobe") {
-        if let Some(resp) = browser_item_response(shared, &path_of(&parts)) {
-            let _ = stream.write_all(&resp);
-            let _ = stream.flush();
-            shared.log(&format!("Served {} for the browser", path_of(&parts)));
-            return true;
-        }
+    if host.eq_ignore_ascii_case("webprobe")
+        && let Some(resp) = browser_item_response(shared, &path_of(&parts))
+    {
+        let _ = stream.write_all(&resp);
+        let _ = stream.flush();
+        shared.log(&format!("Served {} for the browser", path_of(&parts)));
+        return true;
     }
     // Burp answers `http://burpsuite` itself: the browser must already be
     // proxying through the listener, and the page it returns is where the CA
@@ -1199,7 +1205,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         }
         None => {
             let err = up.error.clone().unwrap_or_default();
-            let msg = format!("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nWebProbe: upstream failed: {err}");
+            let msg = format!(
+                "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nWebProbe: upstream failed: {err}"
+            );
             let _ = stream.write_all(msg.as_bytes());
             let note = up.error.clone().unwrap_or_else(|| "failed".into());
             record(

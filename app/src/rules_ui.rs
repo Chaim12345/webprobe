@@ -6,7 +6,7 @@
 
 use eframe::egui;
 
-use crate::rules::{edit_rules, MrRule, MrScope, RuleEdit};
+use crate::rules::{MrRule, MrScope, RuleEdit, edit_rules};
 use crate::theme;
 
 /// Edit one list of match-and-replace rules. `request_side` controls the

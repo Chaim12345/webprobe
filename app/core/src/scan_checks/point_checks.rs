@@ -41,43 +41,72 @@ impl PointCheck for ExternalInteraction {
     }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
-        let Some((_, token, domain)) = oob_slot(&cx.oob, idx, &ip.name, "ext", &mut st.oob_used)
-        else {
-            return;
-        };
-        if cx.stopped() {
-            return;
-        }
-        let new_req = inject(&cx.req, ip, domain);
-        let resp = cx.send(new_req.as_bytes());
-        let issue = mk(
-            "medium",
-            &format!("Out-of-band payload embedded via parameter {}", ip.name),
-            &cx.entry,
-            format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
-        )
-        .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
-        // burp.Zez7.Ze (URL payload) wording for the issue the interaction raises.
-        let point = ip.describe_short(true);
-        let delivery = crate::oob::delivery_sentence("The payload", domain, &point, ".");
-        cx.shared
-            .oob
-            .register_delivered(token.clone(), None, issue, delivery);
-        // burp.Zxfo.lambda$doCheck$0: the response itself may carry what the
-        // Collaborator served for this id (Ze2n.Zt): the server fetched the
-        // URL and returned its content in-band.
-        if let Some(r) = resp.as_deref() {
-            if inband_hit(r, token) {
+        let value = ip.decoded_value();
+        // burp.Zxfo.doCheck: one request per burp.Zbxl.Zu variant, each with
+        // a Collaborator id of its own.
+        for (k, variant) in ext_variants(ip, cx.settings.speed).into_iter().enumerate() {
+            let Some((_, token, domain)) =
+                oob_slot(&cx.oob, idx, &ip.name, &ext_slot(k), &mut st.oob_used)
+            else {
+                continue;
+            };
+            if cx.stopped() {
+                return;
+            }
+            let shown = crate::url_payloads::payload(&value, variant, domain);
+            let new_req = inject(&cx.req, ip, &shown);
+            let resp = cx.send(new_req.as_bytes());
+            let issue = mk(
+                "medium",
+                &format!("Out-of-band payload embedded via parameter {}", ip.name),
+                &cx.entry,
+                format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
+            )
+            .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
+            // burp.Zez7.Ze (URL payload) wording for the issue the interaction raises.
+            let point = ip.describe_short(true);
+            let delivery = crate::oob::delivery_sentence("The payload", &shown, &point, ".");
+            cx.shared
+                .oob
+                .register_delivered(token.clone(), None, issue, delivery);
+            // burp.Zxfo.lambda$doCheck$0: the response itself may carry what the
+            // Collaborator served for this id (Ze2n.Zt): the server fetched the
+            // URL and returned its content in-band.
+            if let Some(r) = resp.as_deref()
+                && inband_hit(r, token)
+            {
                 cx.report(vec![oob_resource_load_issue(
                     &cx.entry,
-                    &crate::oob::delivery_sentence("The payload", domain, &point, ""),
+                    &crate::oob::delivery_sentence("The payload", &shown, &point, ""),
                     &new_req,
                     r,
                 )]);
             }
+            cx.progress();
+            cx.pace(50);
         }
-        cx.progress();
-        cx.pace(50);
+    }
+}
+
+/// burp.Zbxl.Zu's URL payload variants for the point (burp.Zxfo: the
+/// audit thoroughness, Thorough when the base value looks like a URL,
+/// Zibp.ZN). Slot allocation and the check both use this, so they agree.
+pub(crate) fn ext_variants(
+    ip: &InsertionPoint,
+    speed: ScanSpeed,
+) -> Vec<crate::url_payloads::UrlVariant> {
+    let value = ip.decoded_value();
+    let thorough = speed == ScanSpeed::Thorough || crate::url_payloads::looks_like_url(&value);
+    crate::url_payloads::variants(&value, thorough)
+}
+
+/// The Collaborator slot of variant `k`: "ext" for the first (also keyed
+/// by parameter name in older callers), "ext1".. for the rest.
+pub(crate) fn ext_slot(k: usize) -> String {
+    if k == 0 {
+        "ext".to_string()
+    } else {
+        format!("ext{k}")
     }
 }
 
@@ -185,9 +214,27 @@ impl PointCheck for JwtAttacks {
         let place = ip.describe_short(true);
         // Zwfx.Zf detail texts; Zmir.ZL: High, Tentative (Zs_2.java:48).
         let attacks: Vec<(&str, Vec<String>, String)> = vec![
-            ("JWT signature not verified", vec![crate::jwt::corrupt_signature(&token)], format!("The signature of the JWT within the {place} does not appear to be verified correctly by the application.")),
-            ("JWT none algorithm supported", crate::jwt::none_variants(&token), format!("The JWT within the {place} appears to be trusted by the application even when using the \"none\" algorithm with an empty signature.")),
-            ("JWT self-signed JWK header supported", crate::jwt::jwk_variant(&token).into_iter().collect(), format!("The JWT within the {place} appears to use an arbitrary key embedded in the \"jwk\" header to validate the token.")),
+            (
+                "JWT signature not verified",
+                vec![crate::jwt::corrupt_signature(&token)],
+                format!(
+                    "The signature of the JWT within the {place} does not appear to be verified correctly by the application."
+                ),
+            ),
+            (
+                "JWT none algorithm supported",
+                crate::jwt::none_variants(&token),
+                format!(
+                    "The JWT within the {place} appears to be trusted by the application even when using the \"none\" algorithm with an empty signature."
+                ),
+            ),
+            (
+                "JWT self-signed JWK header supported",
+                crate::jwt::jwk_variant(&token).into_iter().collect(),
+                format!(
+                    "The JWT within the {place} appears to use an arbitrary key embedded in the \"jwk\" header to validate the token."
+                ),
+            ),
         ];
         for (name, variants, detail) in attacks {
             if !cx.runs(name)
@@ -199,19 +246,11 @@ impl PointCheck for JwtAttacks {
                 continue;
             }
             if let Some(v) = variants.iter().find(|v| accepted(v)) {
-                cx.report(vec![mk_point(
-                    name,
-                    "high",
-                    "Tentative",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(evidence([
-                    rec.last(v),
-                    rec.last(&token.raw),
-                    rec.last(&control),
-                ]))]);
+                cx.report(vec![
+                    mk_point(name, "high", "Tentative", &cx.entry, ip, detail).with_evidence(
+                        evidence([rec.last(v), rec.last(&token.raw), rec.last(&control)]),
+                    ),
+                ]);
             }
         }
         // Zs83: jku / x5u at a Collaborator URL; Zmir.Zl: High, Certain,
@@ -384,18 +423,17 @@ impl PointCheck for ExpressionLanguageInjection {
                     ip.describe_short(false),
                     util::html_encode(&expected)
                 );
-                cx.report(vec![mk_point(
-                    "Expression Language injection",
-                    "high",
-                    "Certain",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    new_req.as_bytes(),
-                    Some(&resp),
-                )])]);
+                cx.report(vec![
+                    mk_point(
+                        "Expression Language injection",
+                        "high",
+                        "Certain",
+                        &cx.entry,
+                        ip,
+                        detail,
+                    )
+                    .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp))]),
+                ]);
             }
         }
         cx.progress();
@@ -571,18 +609,10 @@ impl PointCheck for XPathInjection {
                 } else {
                     "<br><br>The application appears to be using the Java XPath APIs."
                 });
-                cx.report(vec![mk_point(
-                    "XPath injection",
-                    "high",
-                    "Firm",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    new_req.as_bytes(),
-                    Some(&resp),
-                )])]);
+                cx.report(vec![
+                    mk_point("XPath injection", "high", "Firm", &cx.entry, ip, detail)
+                        .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp))]),
+                ]);
                 reported = true;
                 break;
             }
@@ -676,7 +706,15 @@ impl RequestCheck for HttpPutEnabled {
         if find_sub(status_body(&r2).1, marker.as_bytes()) {
             let mut e = cx.entry.clone();
             e.path = path.clone();
-            let i = mk("high", "HTTP PUT method is enabled", &e, format!("The server allowed a file to be created with PUT: the file {} was uploaded and its contents were then retrieved.", util::html_encode(&path)));
+            let i = mk(
+                "high",
+                "HTTP PUT method is enabled",
+                &e,
+                format!(
+                    "The server allowed a file to be created with PUT: the file {} was uploaded and its contents were then retrieved.",
+                    util::html_encode(&path)
+                ),
+            );
             let mut i = i.with_evidence(vec![
                 ScanEvidence::new(&put, Some(&r1)),
                 ScanEvidence::new(&get, Some(&r2)),
@@ -797,8 +835,14 @@ impl RequestCheck for AspNetDebugging {
         };
         let (st, body) = status_body(&resp);
         let verdict = match st {
-            500 if find_sub(body, b"DebugSessionID corrupted or not provided.") => Some(("medium", "The user context used to scan the application appears to be permitted to perform debugging, so this is potentially an important issue.")),
-            401 if find_sub(body, b"Debug access denied to '/Default.aspx'.") => Some(("info", "The user context used to scan the application does not appear to be permitted to perform debugging, so this is not an immediately exploitable issue. However, if you were able to obtain or guess appropriate platform-level credentials, you may be able to perform debugging.")),
+            500 if find_sub(body, b"DebugSessionID corrupted or not provided.") => Some((
+                "medium",
+                "The user context used to scan the application appears to be permitted to perform debugging, so this is potentially an important issue.",
+            )),
+            401 if find_sub(body, b"Debug access denied to '/Default.aspx'.") => Some((
+                "info",
+                "The user context used to scan the application does not appear to be permitted to perform debugging, so this is not an immediately exploitable issue. However, if you were able to obtain or guess appropriate platform-level credentials, you may be able to perform debugging.",
+            )),
             _ => None,
         };
         if let Some((sev, more)) = verdict {

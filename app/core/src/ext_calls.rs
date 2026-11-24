@@ -7,7 +7,7 @@
 
 use std::sync::atomic::Ordering;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::net::{HistEntry, Shared};
 use crate::util;
@@ -457,16 +457,19 @@ mod tests {
             ),
             ("r.test", "/p", "high", "Certain")
         );
-        assert!(i
-            .detail
-            .ends_with("<p>Reported by the extension Ext One.</p>"));
+        assert!(
+            i.detail
+                .ends_with("<p>Reported by the extension Ext One.</p>")
+        );
         dispatch(&shared, "x", "cookiejar.set", &json!({"name": "sid", "value": "1", "domain": ".r.test", "path": "/", "expires": null})).unwrap();
         assert_eq!(
             dispatch(&shared, "x", "cookiejar.cookies", &json!({})).unwrap()[0]["domain"],
             "r.test"
         );
-        assert!(dispatch(&shared, "x", "nope", &json!({}))
-            .unwrap_err()
-            .contains("not supported by WebProbe"));
+        assert!(
+            dispatch(&shared, "x", "nope", &json!({}))
+                .unwrap_err()
+                .contains("not supported by WebProbe")
+        );
     }
 }

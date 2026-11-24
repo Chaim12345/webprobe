@@ -1,5 +1,5 @@
 use webprobe_core::scan::{ScanEvidence, ScanIssue};
-use webprobe_report::report::{build_report_issues, select_issues, KnowledgeBase, ReportOptions};
+use webprobe_report::report::{KnowledgeBase, ReportOptions, build_report_issues, select_issues};
 
 #[test]
 fn hardening_report_boundary_keeps_probe_order_and_missing_response() {

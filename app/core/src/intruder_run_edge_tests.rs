@@ -120,9 +120,11 @@ fn extract_value_edge_cases() {
         end: ExtractEnd::Length(10_000),
         ..Default::default()
     };
-    assert!(extract_value(&len, multi, 100)
-        .unwrap()
-        .starts_with("ééééé;"));
+    assert!(
+        extract_value(&len, multi, 100)
+            .unwrap()
+            .starts_with("ééééé;")
+    );
     // Invalid regex and regex without a capture group give nothing.
     let bad = ExtractItem {
         regex: Some("(".into()),

@@ -21,18 +21,23 @@ defaults:
 jobs:
   core:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain: ["1.95.0", stable]
     steps:
       - uses: actions/checkout@v4
-      - run: rustup update stable && rustup default stable && rustup component add clippy
+      - run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal --component clippy && rustup default ${{ matrix.toolchain }}
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             app/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('app/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          key: cargo-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('app/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-${{ matrix.toolchain }}-
       # webprobe-core has no UI dependency, so no system libraries are needed.
+      - run: cargo check --workspace --all-targets --all-features --locked
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo check -p webprobe-core --locked
       - run: cargo test -p webprobe-core --locked --no-run
       # Zero-warning policy (issue #33): clippy is blocking.

@@ -679,30 +679,26 @@ fn smart_decode(input: &str) -> Result<String, String> {
         && cleaned
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='));
-    if b64_shaped {
-        if let Ok(bytes) = util::b64_decode(&cleaned) {
-            if let Ok(text) = String::from_utf8(bytes.clone()) {
-                if !text.is_empty() && text != input && util::b64_encode(&bytes) == cleaned {
-                    return Ok(text);
-                }
-            }
-        }
+    if b64_shaped
+        && let Ok(bytes) = util::b64_decode(&cleaned)
+        && let Ok(text) = String::from_utf8(bytes.clone())
+        && !text.is_empty()
+        && text != input
+        && util::b64_encode(&bytes) == cleaned
+    {
+        return Ok(text);
     }
 
     if input.len() >= 2
         && input.len().is_multiple_of(2)
         && input.bytes().all(|b| b.is_ascii_hexdigit())
+        && let Ok(bytes) = util::hex_decode(input)
+        && let Ok(text) = String::from_utf8(bytes.clone())
+        && !text.is_empty()
+        && text != input
+        && util::hex_encode(&bytes) == input.to_ascii_lowercase()
     {
-        if let Ok(bytes) = util::hex_decode(input) {
-            if let Ok(text) = String::from_utf8(bytes.clone()) {
-                if !text.is_empty()
-                    && text != input
-                    && util::hex_encode(&bytes) == input.to_ascii_lowercase()
-                {
-                    return Ok(text);
-                }
-            }
-        }
+        return Ok(text);
     }
 
     Err(format!("no decoder layer recognised in {input:?}"))
@@ -809,13 +805,30 @@ mod tests {
         // 55/56 straddle the 64-byte block edge, 111/112 the 128-byte one.
         for (op, input, want) in [
             (Op::Md5, String::new(), "d41d8cd98f00b204e9800998ecf8427e"),
-            (Op::Sha256, String::new(), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+            (
+                Op::Sha256,
+                String::new(),
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
             (Op::Md5, "a".repeat(55), "ef1772b6dff9a122358552954ad0df65"),
-            (Op::Sha256, "a".repeat(56), "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"),
-            (Op::Sha512, "a".repeat(111), "fa9121c7b32b9e01733d034cfc78cbf67f926c7ed83e82200ef86818196921760b4be\
-                                               ff48404df811b953828274461673c68d04e297b0eb7b2b4d60fc6b566a2"),
+            (
+                Op::Sha256,
+                "a".repeat(56),
+                "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a",
+            ),
+            (
+                Op::Sha512,
+                "a".repeat(111),
+                "fa9121c7b32b9e01733d034cfc78cbf67f926c7ed83e82200ef86818196921760b4be\
+                                               ff48404df811b953828274461673c68d04e297b0eb7b2b4d60fc6b566a2",
+            ),
         ] {
-            assert_eq!(apply(op, &input).unwrap(), want, "{op:?} len {}", input.len());
+            assert_eq!(
+                apply(op, &input).unwrap(),
+                want,
+                "{op:?} len {}",
+                input.len()
+            );
         }
     }
 
@@ -1005,8 +1018,10 @@ mod gzip_contract_tests {
             "GZIP output is not UTF-8 text"
         );
         let legacy = String::from_utf8_lossy(&gzip_compress(b"legacy").unwrap()).into_owned();
-        assert!(apply(Op::GzipDecode, &legacy)
-            .unwrap_err()
-            .starts_with("expected base64-encoded GZIP:"));
+        assert!(
+            apply(Op::GzipDecode, &legacy)
+                .unwrap_err()
+                .starts_with("expected base64-encoded GZIP:")
+        );
     }
 }

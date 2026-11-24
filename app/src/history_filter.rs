@@ -183,10 +183,10 @@ impl HistoryFilter {
             .chars()
             .next()
             .and_then(|c| c.to_digit(10))
+            && (2..=5).contains(&d)
+            && !self.show_status[(d - 2) as usize]
         {
-            if (2..=5).contains(&d) && !self.show_status[(d - 2) as usize] {
-                return false;
-            }
+            return false;
         }
         if self.hide_without_response && entry.resp_raw.is_none() {
             return false;
@@ -242,8 +242,8 @@ impl HistoryFilter {
         };
         let parts = crate::util::parse_http(resp);
         let value = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
-        let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
-        essence
+
+        value.split(';').next().unwrap_or("").trim().to_lowercase()
     }
 
     pub fn matches(&self, entry: &HistEntry, shared: &std::sync::Arc<net::Shared>) -> bool {
@@ -635,8 +635,8 @@ mod tests {
         assert!(f.matches(&e, &shared));
         f.text = "/v1/users".into();
         assert!(f.matches(&e, &shared)); // literal substring
-                                         // The haystack is "id method host port path status", so an anchor that
-                                         // only fits the path does not match it.
+        // The haystack is "id method host port path status", so an anchor that
+        // only fits the path does not match it.
         f.text = "^/v1/".into();
         f.regex = true;
         assert!(!f.matches(&e, &shared));

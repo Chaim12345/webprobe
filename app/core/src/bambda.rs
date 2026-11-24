@@ -9,8 +9,8 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -166,7 +166,9 @@ impl Program {
             Kind::Filter => "boolean",
             Kind::Column => "Object",
         };
-        let code = format!("import burp.api.montoya.proxy.ProxyHttpRequestResponse;\nimport burp.api.montoya.utilities.Utilities;\nimport burp.api.montoya.http.message.StatusCodeClass;\nimport burp.api.montoya.http.message.params.HttpParameterType;\npublic final class WebProbeUserBambda {{\npublic static {ty} evaluate(ProxyHttpRequestResponse requestResponse, Utilities utilities) throws Exception {{\n{source}\n}}\n}}\n");
+        let code = format!(
+            "import burp.api.montoya.proxy.ProxyHttpRequestResponse;\nimport burp.api.montoya.utilities.Utilities;\nimport burp.api.montoya.http.message.StatusCodeClass;\nimport burp.api.montoya.http.message.params.HttpParameterType;\npublic final class WebProbeUserBambda {{\npublic static {ty} evaluate(ProxyHttpRequestResponse requestResponse, Utilities utilities) throws Exception {{\n{source}\n}}\n}}\n"
+        );
         let source_path = classes.0.join("WebProbeUserBambda.java");
         std::fs::write(&source_path, code)?;
         let mut sources = Vec::new();
@@ -373,7 +375,7 @@ fn run(
         }
         match child.try_wait() {
             Ok(Some(status)) if out.is_some() && err.is_some() => {
-                break Ok((status, out.take().unwrap(), err.take().unwrap()))
+                break Ok((status, out.take().unwrap(), err.take().unwrap()));
             }
             Ok(_) => {}
             Err(e) => break Err(e.into()),

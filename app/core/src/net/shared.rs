@@ -63,6 +63,7 @@ pub struct Shared {
     /// The active scanner's run state (claim, stop, pause, progress).
     pub scan: Arc<crate::scan_run::ScanRun>,
     /// The current scan run's dedup sets (swapped fresh at run start).
+    pub host_admission: crate::host_probe_state::HostAdmission,
     pub scan_state: Mutex<Arc<webprobe_support::dedup::ScanDedup>>,
     /// Collaborator ids: the payload pool, registered ids and matching.
     pub oob: crate::oob::OobState,
@@ -289,6 +290,7 @@ impl Shared {
             tool_sends: Mutex::new(Vec::new()),
             scan: Default::default(),
             scan_state: Default::default(),
+            host_admission: Default::default(),
             oob: Default::default(),
             stored: Default::default(),
             bcheck_ran: Mutex::new(std::collections::HashSet::new()),
@@ -428,11 +430,11 @@ impl Shared {
             // Claim the window under the lock: when two threads race, the
             // loser's event is already visible to the winner's frame.
             let mut last = self.last_wake_ms.lock().unwrap();
-            if let Some(prev) = *last {
-                if now.saturating_sub(prev) < WAKE_COALESCE_MS {
-                    self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
-                    return;
-                }
+            if let Some(prev) = *last
+                && now.saturating_sub(prev) < WAKE_COALESCE_MS
+            {
+                self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
+                return;
             }
             *last = Some(now);
         }
@@ -565,14 +567,18 @@ mod diagnostic_tests {
         }
         let events = shared.events.lock().unwrap();
         assert_eq!(events.len(), 500);
-        assert!(events
-            .first()
-            .unwrap()
-            .ends_with("test.event: Test event n=3"));
-        assert!(events
-            .last()
-            .unwrap()
-            .ends_with("test.event: Test event n=502"));
+        assert!(
+            events
+                .first()
+                .unwrap()
+                .ends_with("test.event: Test event n=3")
+        );
+        assert!(
+            events
+                .last()
+                .unwrap()
+                .ends_with("test.event: Test event n=502")
+        );
         // Wakes are coalesced (see `Shared::wake`): every event either woke the
         // frontend or was counted as coalesced, and the first one always woke it.
         let woke = wakes.load(Ordering::SeqCst) as u64;

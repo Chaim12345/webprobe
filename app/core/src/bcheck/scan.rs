@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use super::exec::{Collaborator, Exchange, RequestData, ResponseData};
-use super::runner::{run_definition, InsertionPoint as BcheckIp, Transport};
-use super::{parse, Definition, GivenMode, InsertionPointKind};
+use super::runner::{InsertionPoint as BcheckIp, Transport, run_definition};
+use super::{Definition, GivenMode, InsertionPointKind, parse};
 use crate::net::{HistEntry, Shared};
 use crate::scan::checks::ScanCtx;
 use crate::scan::insertion::{InsertionPoint, IpKind};
@@ -27,10 +27,10 @@ fn configured_defs(shared: &Shared) -> Arc<Vec<Definition>> {
         .unwrap()
         .bchecks
         .clone();
-    if let Some((srcs, defs)) = &*shared.bcheck_defs.lock().unwrap() {
-        if *srcs == sources {
-            return defs.clone();
-        }
+    if let Some((srcs, defs)) = &*shared.bcheck_defs.lock().unwrap()
+        && *srcs == sources
+    {
+        return defs.clone();
     }
     let mut defs = Vec::new();
     for src in &sources {
@@ -686,10 +686,11 @@ mod tests {
         let r = parse_response(raw).unwrap();
         assert_eq!(r.status_code, 200);
         assert_eq!(r.http_version, "HTTP/1.1");
-        assert!(r
-            .headers
-            .iter()
-            .any(|(k, v)| k == "Content-Type" && v == "text/html"));
+        assert!(
+            r.headers
+                .iter()
+                .any(|(k, v)| k == "Content-Type" && v == "text/html")
+        );
         assert_eq!(r.body, "<html>hi</html>");
         assert!(parse_response(b"").is_none());
     }
@@ -939,9 +940,11 @@ mod tests {
         e2.req_raw = b"GET / HTTP/1.1\r\nHost: lab.local\r\n\r\n".to_vec().into();
         e2.resp_raw = Some(resp2.into());
         let issues2 = crate::scan::passive_check_for(&shared, &e2);
-        assert!(!issues2
-            .iter()
-            .any(|i| i.name == "Response-level (passive) check"));
+        assert!(
+            !issues2
+                .iter()
+                .any(|i| i.name == "Response-level (passive) check")
+        );
     }
 
     #[test]

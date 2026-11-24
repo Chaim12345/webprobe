@@ -9,10 +9,10 @@ use std::sync::OnceLock;
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::report::KnowledgeBase;
 use crate::scan::ScanIssue;
 use crate::theme;
-use crate::App;
 
 /// Burp's issue definitions, read once from the knowledge-base folder (none
 /// are bundled; without the folder the advisory omits those sections).
@@ -694,7 +694,9 @@ mod tests {
 
     #[test]
     fn advisory_text_drops_markup_and_keeps_the_words() {
-        let text = advisory_text("<p>SQL injection arises when <b>user-controllable</b> data is used.</p><ul><li>First</li><li>Second</li></ul>");
+        let text = advisory_text(
+            "<p>SQL injection arises when <b>user-controllable</b> data is used.</p><ul><li>First</li><li>Second</li></ul>",
+        );
         assert!(text.contains("SQL injection arises when"), "{text}");
         assert!(text.contains("user-controllable"), "{text}");
         assert!(text.contains("First") && text.contains("Second"), "{text}");

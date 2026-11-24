@@ -232,7 +232,11 @@ pub fn check_note(id: &str) -> Option<String> {
     }
     match retirejs::repository() {
         Err(e) => Some(e),
-        Ok(r) if !r.skipped.is_empty() => Some(format!("{} retire.js extractor(s) use regex features WebProbe does not support (look-around, back-references) and are skipped: {}", r.skipped.len(), r.skipped.join("; "))),
+        Ok(r) if !r.skipped.is_empty() => Some(format!(
+            "{} retire.js extractor(s) use regex features WebProbe does not support (look-around, back-references) and are skipped: {}",
+            r.skipped.len(),
+            r.skipped.join("; ")
+        )),
         Ok(_) => None,
     }
 }

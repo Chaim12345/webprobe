@@ -42,6 +42,7 @@ use webprobe_core::rest_api;
 mod project_start;
 mod proxy_settings;
 mod recovery;
+mod repeater_groups;
 mod repeater_ops;
 mod report;
 use webprobe_core::rules;
@@ -66,8 +67,8 @@ use webprobe_core::upstream;
 use webprobe_core::util;
 
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::sync::Mutex;
 
@@ -324,6 +325,13 @@ pub struct App {
     /// Reporting, engagement tools, content discovery, crash recovery.
     pub eng: engagement::State,
     pub repeater: tool_state::RepeaterState,
+    /// Repeater tab groups (R-12): membership, colours and bar order,
+    /// persisted in the project file and sent through core's send_group.
+    pub rep_groups: Vec<webprobe_core::send_group::RepGroup>,
+    /// The create/edit group dialog, when open.
+    pub rep_group_dialog: Option<repeater_groups::GroupDialog>,
+    /// The group send in flight, if any.
+    pub rep_group_send: Option<repeater_groups::GroupSend>,
     pub comparer: tool_state::ComparerState,
     pub decoder: tool_state::DecoderState,
     pub sequencer: tool_state::SequencerState,
@@ -478,12 +486,12 @@ fn response_mime(entry: &net::HistEntry) -> String {
         let head_end = util::find_head_end(resp).unwrap_or(resp.len());
         let head = String::from_utf8_lossy(&resp[..head_end]);
         for line in head.split("\r\n").flat_map(|l| l.split('\n')) {
-            if let Some((name, value)) = line.split_once(':') {
-                if name.trim().eq_ignore_ascii_case("content-type") {
-                    let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
-                    if !essence.is_empty() {
-                        return essence;
-                    }
+            if let Some((name, value)) = line.split_once(':')
+                && name.trim().eq_ignore_ascii_case("content-type")
+            {
+                let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
+                if !essence.is_empty() {
+                    return essence;
                 }
             }
         }
@@ -611,7 +619,9 @@ impl eframe::App for App {
                         let auth = rest.split('/').next().unwrap_or_default();
                         let path_rest = &url["http://".len() + auth.len()..];
                         let path = if path_rest.is_empty() { "/" } else { path_rest };
-                        let req = format!("GET {path} HTTP/1.1\r\nHost: {auth}\r\nUser-Agent: WebProbe/1.0\r\nConnection: close\r\n\r\n");
+                        let req = format!(
+                            "GET {path} HTTP/1.1\r\nHost: {auth}\r\nUser-Agent: WebProbe/1.0\r\nConnection: close\r\n\r\n"
+                        );
                         let out = crate::send_internal_probe(port, req.as_bytes());
                         sh.log(&format!(
                             "Selftest probe got {} byte(s) via proxy :{port}",
@@ -743,12 +753,9 @@ fn schedule_grab(
                 }
             }
 
-            if let Ok(png) =
-                std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped))
-            {
-                std::fs::write(&path, png).is_ok()
-            } else {
-                false
+            match std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped)) {
+                Ok(png) => std::fs::write(&path, png).is_ok(),
+                _ => false,
             }
         };
         *done.lock().unwrap() = ok;
@@ -954,6 +961,9 @@ impl App {
             screenshot: None,
             eng: engagement::State::default(),
             repeater: tool_state::RepeaterState::default(),
+            rep_groups: Vec::new(),
+            rep_group_dialog: None,
+            rep_group_send: None,
             comparer: tool_state::ComparerState::default(),
             decoder: tool_state::DecoderState::default(),
             sequencer: tool_state::SequencerState::default(),
@@ -1032,6 +1042,8 @@ fn startup_chooser_allowed(autosave: bool, project_file: Option<&str>) -> bool {
 }
 
 fn main() {
+    // Environment mutation precedes diagnostics, signal setup and worker/window libraries.
+    gl_env::apply();
     webprobe_core::diagnostics::init_stderr();
     // Panic policy "contain and continue" (issue #32): worker panics are
     // contained per thread (catch_unwind at spawn boundaries, poison-tolerant
@@ -1054,8 +1066,6 @@ fn main() {
     for sig in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         let _ = signal_hook::flag::register(sig, Arc::clone(&TERMINATE));
     }
-    // Must run before any thread or window exists (see gl_env for why).
-    gl_env::apply();
 
     let mut screenshot: Option<PathBuf> = None;
     // Burp's command line flags (R-15): --project-file FILE opens that
@@ -1108,14 +1118,16 @@ fn main() {
                 // worker threads exist yet (gl_env ran, nothing else), so
                 // setting the environment is race-free here.
                 if let Some(v) = args.get(i + 1) {
-                    std::env::set_var("WEBPROBE_DATA_DIR", v);
+                    // SAFETY: no worker threads exist yet; gl_env ran first.
+                    unsafe { std::env::set_var("WEBPROBE_DATA_DIR", v) };
                 }
                 i += 2;
             }
             "--temporary-project" => {
                 // recovery.rs treats WEBPROBE_TEMP_PROJECT=1 as Burp's
                 // temporary project: nothing is saved or restored.
-                std::env::set_var("WEBPROBE_TEMP_PROJECT", "1");
+                // SAFETY: no worker threads exist yet; gl_env ran first.
+                unsafe { std::env::set_var("WEBPROBE_TEMP_PROJECT", "1") };
                 i += 1;
             }
             "--version" => {
@@ -1123,7 +1135,9 @@ fn main() {
                 return;
             }
             "--help" => {
-                println!("usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--disable-extensions] [--temporary-project] [--data-dir DIR] [--diagnostics] [--screenshot FILE]");
+                println!(
+                    "usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--disable-extensions] [--temporary-project] [--data-dir DIR] [--diagnostics] [--screenshot FILE]"
+                );
                 return;
             }
             _ => i += 1,
@@ -1138,11 +1152,11 @@ fn main() {
         );
         return;
     }
-    if let Some(f) = &project_file {
-        if !std::path::Path::new(f).is_file() {
-            eprintln!("could not open project file {f}");
-            std::process::exit(1);
-        }
+    if let Some(f) = &project_file
+        && !std::path::Path::new(f).is_file()
+    {
+        eprintln!("could not open project file {f}");
+        std::process::exit(1);
     }
     // Read and merge the config JSONs (notes name files and sections only;
     // API keys are never logged). Scan-configuration keys go through R-11's
@@ -1440,6 +1454,54 @@ fn main() {
         project_files::note_used(&app.project_path.clone());
     }
 
+    // Test hook: WEBPROBE_SEED_REP_GROUP=1 seeds three Repeater tabs with
+    // the first two grouped ("login") and the group's edit dialog open —
+    // the R-12 group UI screenshot check.
+    if std::env::var("WEBPROBE_SEED_REP_GROUP").is_ok() {
+        {
+            let mut reps = app.shared.repeaters.lock().unwrap();
+            reps.clear();
+            for (n, path) in [(1, "/login"), (2, "/login/step2"), (3, "/account")] {
+                let id = app.shared.rep.new_tab_id();
+                let mut tab = repeater_ops::new_tab(
+                    id,
+                    "example.com",
+                    443,
+                    true,
+                    format!(
+                        "POST {path} HTTP/1.1\r\nHost: example.com\r\nContent-Length: 0\r\n\r\n"
+                    ),
+                );
+                tab.name = format!("Rep {n}");
+                reps.push(tab);
+            }
+        }
+        let mut order: Vec<u64> = app
+            .shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        let gid = app.shared.rep.new_tab_id();
+        let members = order[..2].to_vec();
+        webprobe_core::send_group::create_group(
+            &mut app.rep_groups,
+            &mut order,
+            gid,
+            "login",
+            5,
+            &members,
+        );
+        app.rep_group_dialog = Some(repeater_groups::GroupDialog {
+            group: Some(gid),
+            tab: members[0],
+            name: "login".into(),
+            colour: 5,
+        });
+    }
+
     let marker = app.eng.marker.clone();
     if let Err(e) = eframe::run_native(
         "WebProbe",
@@ -1493,12 +1555,14 @@ mod tests {
             panic!("disabled extensions must not inspect startup source {key}")
         });
         ext_host::with_host(&shared, |host| assert!(host.extensions.is_empty()));
-        assert!(!shared
-            .events
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|e| e.contains("extension")));
+        assert!(
+            !shared
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| e.contains("extension"))
+        );
     }
 
     #[test]
