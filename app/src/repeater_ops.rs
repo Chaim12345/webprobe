@@ -1411,6 +1411,10 @@ pub enum RepAction {
     CompareWithPrevious,
     CompareRequestWithPrevious,
     SaveItem,
+    /// "Record an issue" > "Create an issue" / "Add to manually created
+    /// issue" (burp.Zgmp, 133392 / 133397).
+    CreateIssue,
+    AddToIssue,
 }
 
 /// The Repeater request editor's context menu (Burp's order, the items
@@ -1470,6 +1474,13 @@ pub fn request_menu(
     }
     if has_response && item(ui, "Compare request with previous request") {
         out = Some(RepAction::CompareRequestWithPrevious);
+    }
+    // Burp: after "Open response in browser", before "Request in browser";
+    // the request editor offers it once the tab has a response.
+    match crate::manual_issue_ui::record_menu(ui, true, has_response) {
+        Some(crate::manual_issue_ui::Pick::Create) => out = Some(RepAction::CreateIssue),
+        Some(crate::manual_issue_ui::Pick::AddTo) => out = Some(RepAction::AddToIssue),
+        None => {}
     }
     ui.separator();
     if item(ui, "Change request method") {
@@ -1920,6 +1931,17 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         .map(|r| String::from_utf8_lossy(r).into_owned())
         .unwrap_or_default();
     match action {
+        RepAction::CreateIssue | RepAction::AddToIssue => {
+            if let Some(e) = tab_entry(app) {
+                let pick = if action == RepAction::CreateIssue {
+                    crate::manual_issue_ui::Pick::Create
+                } else {
+                    crate::manual_issue_ui::Pick::AddTo
+                };
+                let req = e.req_raw.to_vec();
+                crate::manual_issue_ui::open_for_entry(app, pick, &e, &req);
+            }
+        }
         RepAction::PassiveScan => {
             if let Some(e) = tab_entry(app) {
                 let issues = crate::scan::passive_check_for(&app.shared, &e);

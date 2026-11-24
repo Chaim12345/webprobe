@@ -36,6 +36,8 @@ pub struct State {
     pub marker: Option<std::path::PathBuf>,
     /// Logger "Export as CSV" target path.
     pub log_export_path: String,
+    /// "Create an issue" / "Add to an issue" (Record an issue submenu).
+    pub manual_issue: crate::manual_issue_ui::State,
 }
 
 /// A Find comments / Find scripts / Find references result window.
@@ -650,6 +652,7 @@ pub fn windows(app: &mut crate::App, ctx: &egui::Context) {
     crate::discovery::discovery_window(app, ctx);
     crate::sitemap_compare_ui::window(app, ctx);
     browser_recovery_window(app, ctx);
+    crate::manual_issue_ui::windows(app, ctx);
 }
 
 /// Burp's in-browser session recovery prompt: a "check session" rule found

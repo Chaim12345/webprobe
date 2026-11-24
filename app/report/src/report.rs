@@ -376,10 +376,21 @@ pub fn build_report_issues(
             let origin = ev
                 .map(webprobe_core::net::history_host)
                 .unwrap_or_else(|| format!("http://{}", i.host));
-            let k = kb.lookup(&i.name);
+            // A manual issue carries the user's name; its type and
+            // definition are those of MANUALLY_GENERATED (burp.Zcxr.ZD).
+            let manual = webprobe_core::scan::is_manual_issue(i);
+            let k = if manual {
+                kb.lookup(webprobe_core::scan::MANUAL_ISSUE_TYPE)
+            } else {
+                kb.lookup(&i.name)
+            };
             ReportIssue {
                 serial: i.id,
-                type_index: k.map(|k| k.type_index).unwrap_or(EXTENSION_TYPE),
+                type_index: if manual {
+                    i.type_id
+                } else {
+                    k.map(|k| k.type_index).unwrap_or(EXTENSION_TYPE)
+                },
                 name: i.name.clone(),
                 origin,
                 ip: ev.map(|e| e.ip.clone()).unwrap_or_default(),
@@ -1542,6 +1553,11 @@ mod tests {
         assert_eq!(r[0].evidence[0].method, "POST");
         assert_eq!(r[0].type_index, EXTENSION_TYPE);
         assert_eq!(r[0].severity_label(), "Medium");
+        // A manually generated issue keeps its type whatever it is called.
+        let mut manual = issue(10, "low", "Certain", "SQL injection", "shop.local", "/");
+        manual.type_id = webprobe_core::scan::issue_type_id("Manually generated issue");
+        let r = build_report_issues(&[manual], &[], &KnowledgeBase::default());
+        assert_eq!(r[0].type_index, 0x0800_8000);
         // No history: plain http origin, no evidence.
         let r = build_report_issues(&issues, &[], &KnowledgeBase::default());
         assert_eq!(r[0].origin, "http://shop.local");

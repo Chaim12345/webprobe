@@ -41,10 +41,6 @@
       "note": "Static JavaScript analysis only: seven sinks in burp.Zeys (FileReader.readAsArrayBuffer, readAsBinaryString, readAsDataURL, readAsText, readAsFile, root.getFile, root.getDirectory); the dynamic decoder never returns this type. Needs the static analyser (tasks.json S-04; stages in docs/specs/R-13-static-js-analysis.research.md)",
       "status": "todo"
     },
-    "Manually generated issue": {
-      "note": "type 0x08008000, for an issue the user adds by hand; WebProbe has no such action yet",
-      "status": "todo"
-    },
     "Perl code injection": {
       "note": "Timing only in build 52685: the only payloads for these types are the sleep() entries of burp.Zfhw (sleep(lc(%%)) for Perl, time.sleep(%%) for Python, sleep(%%.to_i) for Ruby, sleep(%%) for the unidentified type), driven by the timing engine burp.Zwj_. Excluded by the owner's no-timing rule",
       "status": "excluded"
