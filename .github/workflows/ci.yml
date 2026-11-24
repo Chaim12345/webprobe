@@ -92,11 +92,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Fetch the pinned Montoya test API (not redistributed)
+      - name: Restore and verify pinned Montoya test API
+        uses: ./.github/actions/montoya-api
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
-        run: |
-          curl --fail --location --retry 3 https://repo.maven.apache.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar -o "$RUNNER_TEMP/montoya-api.jar"
-          echo "cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94  $RUNNER_TEMP/montoya-api.jar" | sha256sum --check
       - name: Montoya public API regressions (required)
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
         env:
@@ -129,10 +127,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Fetch pinned Montoya API
-        run: |
-          curl --fail --location --retry 3 https://repo1.maven.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar -o "$RUNNER_TEMP/montoya-api.jar"
-          printf '%s  %s\n' cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94 "$RUNNER_TEMP/montoya-api.jar" | sha256sum --check -
+      - name: Restore and verify pinned Montoya test API
+        uses: ./.github/actions/montoya-api
+        with:
+          url: https://repo1.maven.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar
       - name: Test real Java Bambda compilation and evaluation
         run: |
           WEBPROBE_BAMBDA_TEST_JAVA="$JAVA_HOME/bin/java" \
