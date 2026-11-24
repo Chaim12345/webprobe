@@ -1708,6 +1708,102 @@ jQuery.globalEval = function (v) {};
     );
 }
 
+/// R-13 gap closure: jQuery.parseJSON (client-side JSON injection) and
+/// jQuery.parseXML (client-side XPath injection) are wrapped on the
+/// jQuery constructor. The lab inlines a minimal window.jQuery (no
+/// network). Positive: the hash token reaches both sinks (both families
+/// fire, Tentative per burp.Zwf8.Zd flag 4). Positive with query
+/// provenance: location.search reaches jQuery.parseJSON (Tentative).
+/// Benign negative: jQuery present but no sink call reports nothing.
+/// Skipped when no Chromium is available.
+#[test]
+fn dom_jquery_parsejson_parsexml_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let jq = r#"window.jQuery = window.$ = function () { return Object.create(jQuery.fn); };
+jQuery.fn = jQuery.prototype = {};
+jQuery.parseJSON = function (v) { window.__pj = v; return null; };
+jQuery.parseXML = function (v) { window.__px = v; return null; };
+"#;
+        let body: String = if path.starts_with("/jq-json-hash") {
+            format!(
+                r#"<html><body><script>{jq}setTimeout(function () {{ jQuery.parseJSON(location.hash.slice(1)); }}, 50);</script></body></html>"#
+            )
+        } else if path.starts_with("/jq-xml-hash") {
+            format!(
+                r#"<html><body><script>{jq}setTimeout(function () {{ jQuery.parseXML(location.hash.slice(1)); }}, 50);</script></body></html>"#
+            )
+        } else if path.starts_with("/jq-json-search") {
+            format!(
+                r#"<html><body><script>{jq}setTimeout(function () {{ jQuery.parseJSON(location.search.slice(1)); }}, 50);</script></body></html>"#
+            )
+        } else {
+            // Benign negative: jQuery loaded, token present, no sink call.
+            format!(
+                r#"<html><body><script>{jq}setTimeout(function () {{ void location.hash; void location.search; }}, 50);</script></body></html>"#
+            )
+        };
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-json-injection"],
+        "GET",
+        "/jq-json-hash",
+        format!("GET /jq-json-hash HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Client-side JSON injection (DOM-based)"
+            && s == "low"
+            && c == "Tentative"),
+        "jQuery.parseJSON hash: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xpath-injection"],
+        "GET",
+        "/jq-xml-hash",
+        format!("GET /jq-xml-hash HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Client-side XPath injection (DOM-based)"
+            && s == "low"
+            && c == "Tentative"),
+        "jQuery.parseXML hash: {got:?}"
+    );
+    // Query provenance: same sink, search token -> still Tentative.
+    let got = lab_scan(
+        port,
+        &["active.dom-json-injection"],
+        "GET",
+        "/jq-json-search",
+        format!("GET /jq-json-search HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Client-side JSON injection (DOM-based)"
+            && s == "low"
+            && c == "Tentative"),
+        "jQuery.parseJSON search: {got:?}"
+    );
+    // Benign negative: no sink call -> no finding.
+    let got = lab_scan(
+        port,
+        &["active.dom-json-injection", "active.dom-xpath-injection"],
+        "GET",
+        "/jq-benign",
+        format!("GET /jq-benign HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "benign jQuery page must not report: {got:?}");
+}
+
+
 /// The location.search source reaches six selected families beyond the
 /// XSS sinks: the wpdom query canary into storage, cookie,
 /// document.domain, JSON.parse and document.evaluate. Coverage is

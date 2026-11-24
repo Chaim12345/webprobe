@@ -2457,6 +2457,18 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       var origGe = jq.globalEval;
       jq.globalEval = function (v) { record("jQuery.globalEval", v); return origGe.apply(jq, arguments); };
     }
+    // jQuery.parseJSON is a static on jQuery itself (JSON-injection
+    // family); jQuery.parseXML likewise (XPath family). Both are wrapped
+    // here because jQuery arrives after this script and they live on the
+    // constructor, not on jQuery.fn.
+    if (typeof jq.parseJSON === "function") {
+      var origPj = jq.parseJSON;
+      jq.parseJSON = function (v) { record("jQuery.parseJSON", v); return origPj.apply(jq, arguments); };
+    }
+    if (typeof jq.parseXML === "function") {
+      var origPx = jq.parseXML;
+      jq.parseXML = function (v) { record("jQuery.parseXML", v); return origPx.apply(jq, arguments); };
+    }
     ["attr", "prop"].forEach(function (m) {
       if (typeof jq.fn[m] === "function") {
         var orig = jq.fn[m];
