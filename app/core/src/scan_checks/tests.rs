@@ -305,7 +305,8 @@ fn registry_order_is_pinned() {
             "active.link-manipulation-stored",
             "active.css-injection-stored",
             "active.client-side-hpp-stored",
-            "active.form-action-hijacking-stored"
+            "active.form-action-hijacking-stored",
+            "active.open-redirection-stored"
         ]
     );
     let requests: Vec<(&str, Scope, Option<&str>)> = REQUEST_CHECKS
@@ -487,6 +488,29 @@ fn every_burp_issue_name_has_a_type() {
         KB_ISSUE_NAMES.lines().count()
     );
     assert_eq!(issue_type_id("SQL injection"), 0x0010_0200);
+    // The four generated types (burp.Zcot and the KnowledgeBase file names).
+    assert_eq!(issue_type_id("Extension generated issue"), 0x0800_0000);
+    assert_eq!(issue_type_id("Manually generated issue"), 0x0800_8000);
+    assert_eq!(issue_type_id("BCheck generated issue"), 0x0900_0000);
+    assert_eq!(issue_type_id("Bambda generated issue"), 0x0900_8000);
+    // No two names share a type.
+    let mut ids: Vec<u64> = webprobe_support::issues::KB_ISSUE_TYPES
+        .iter()
+        .map(|(_, id)| *id)
+        .collect();
+    ids.sort_unstable();
+    let total = ids.len();
+    ids.dedup();
+    assert_eq!(ids.len(), total, "two issue names share a type id");
+    // An issue an extension reports is filed under the extension type,
+    // whatever its name, even a name Burp's own scanner uses.
+    for name in ["My custom finding", "SQL injection"] {
+        let i = crate::ext_host::issue_of(
+            &serde_json::json!({"name": name, "baseUrl": "https://example.com/a", "severity": "HIGH"}),
+            "Ext",
+        );
+        assert_eq!((i.name.as_str(), i.type_id), (name, 0x0800_0000));
+    }
     assert_eq!(
         issue_type_id("External service interaction (DNS)"),
         3_146_240

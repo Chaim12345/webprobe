@@ -69,9 +69,12 @@ impl ScanIssue {
 // ---------------------------------------------------------------- issue types
 
 /// Burp's numeric issue type for every name in kb_issue_names.txt, from the
-/// `typeIndex` field of Burp's KnowledgeBase (resources/KnowledgeBase/Issues
-/// /*.json of build 52685; the file-name prefix is the same number in hex
-/// except for two entries, where the JSON field wins).
+/// KnowledgeBase of build 52685 (resources/KnowledgeBase/Issues/*.json) and
+/// its issue-type enum burp.Zcot. The JSON `typeIndex` field, the file-name
+/// prefix and the enum agree except for two entries, React2Shell and the
+/// Bambda type, whose JSON field repeats another type's number (Perl code
+/// injection, the BCheck type). There the enum and the file name are used:
+/// the enum is what a running Burp reports, and no two types share an id.
 pub const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("ASP.NET ViewState without MAC enabled", 0x00400600),
     ("ASP.NET debugging enabled", 0x00100800),
@@ -87,7 +90,7 @@ pub const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ),
     ("BCheck generated issue", 0x09000000),
     ("Backup file", 0x006000d8),
-    ("Bambda generated issue", 0x09000000),
+    ("Bambda generated issue", 0x09008000),
     ("Base64-encoded data in parameter", 0x00700200),
     ("Broken access control", 0x00100850),
     ("Browser cross-site scripting filter disabled", 0x005009b0),
@@ -279,7 +282,7 @@ pub const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("Python code injection", 0x00100f10),
     (
         "React Server Components remote code execution (React2Shell)",
-        0x00100e00,
+        0x00101200,
     ),
     ("Referer-dependent response", 0x00400100),
     ("Request URL override", 0x00400f00),

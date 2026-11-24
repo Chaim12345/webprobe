@@ -3951,6 +3951,11 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
             } else {
                 None
             };
+            // GET /go redirects to the newest stored comment (the stored
+            // open-redirection lab).
+            let go = head
+                .starts_with("GET /go")
+                .then(|| comments.lock().unwrap().last().cloned().unwrap_or_default());
             let resp = match page {
                 Some(b) => format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
@@ -3958,6 +3963,12 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                 ),
                 None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                     .to_string(),
+            };
+            let resp = match go {
+                Some(to) => format!(
+                    "HTTP/1.1 302 Found\r\nLocation: {to}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                ),
+                None => resp,
             };
             let _ = s.write_all(resp.as_bytes());
         }
@@ -4137,6 +4148,60 @@ fn stage_a4_finds_the_stored_g11_families() {
     }
 }
 
+/// Stage A4's stored open redirection: input stored by POST /comment
+/// becomes the Location of GET /go. A retrieval page that only shows the
+/// input (GET /list) is not a redirect.
+#[test]
+fn stage_a4_finds_stored_open_redirection() {
+    let name = "Open redirection (stored)";
+    let run = |retrieval: &str| {
+        let (port, _) = guestbook(false);
+        let shared = Shared::new();
+        let item = |method: &str, path: &str, body: &str| {
+            let entry = guestbook_entry(port, method, path, body);
+            crate::stored::Item {
+                req: String::from_utf8_lossy(&entry.req_raw).into_owned(),
+                entry,
+                host: "127.0.0.1".into(),
+                port,
+                https: false,
+            }
+        };
+        let pair = crate::stored::Pair {
+            item: item("POST", "/comment", "c=hi"),
+            point: InsertionPoint::new(IpKind::Body, "c", "hi"),
+            retrieval: item("GET", retrieval, ""),
+            injection: (vec![], None),
+        };
+        let cx = checks::PairCtx::new(shared.clone(), pair);
+        checks::STORED_CHECKS
+            .iter()
+            .find(|c| c.issue() == name)
+            .unwrap()
+            .run(&cx);
+        issues_named(&shared, name)
+    };
+    let hits = run("/go");
+    let h = hits
+        .iter()
+        .find(|i| i.path == "/comment")
+        .expect("stored open redirection");
+    assert_eq!(
+        (h.sev.as_str(), h.confidence.as_str()),
+        ("medium", "Certain")
+    );
+    assert!(
+        h.detail.contains("\"GET /go HTTP/1.1\"") && h.detail.contains("redirect to \"http"),
+        "{}",
+        h.detail
+    );
+    assert_eq!(h.evidence.len(), 2, "injection and retrieval exchanges");
+    assert!(
+        run("/list").is_empty(),
+        "a page that shows the input does not redirect"
+    );
+}
+
 #[test]
 fn stored_g11_skips_unsafe_retrieval_and_stops_after_first_family_hit() {
     let (port, hits) = guestbook(false);
@@ -4157,6 +4222,9 @@ fn stored_g11_skips_unsafe_retrieval_and_stops_after_first_family_hit() {
         retrieval: item(method, "/embed", ""),
         injection: (vec![], None),
     };
+    // The four G.11 families follow stored XSS in the registry.
+    let g11 = || checks::STORED_CHECKS.iter().skip(1).take(4);
+    assert!(g11().all(|c| c.id() != "active.open-redirection-stored"));
     for method in ["POST", "PUT", "DELETE"] {
         let cx = checks::PairCtx::new(shared.clone(), pair(method));
         for check in checks::STORED_CHECKS.iter().skip(1) {
@@ -4169,7 +4237,7 @@ fn stored_g11_skips_unsafe_retrieval_and_stops_after_first_family_hit() {
         );
     }
     let cx = checks::PairCtx::new(shared.clone(), pair("GET"));
-    for check in checks::STORED_CHECKS.iter().skip(1) {
+    for check in g11() {
         check.run(&cx);
     }
     assert_eq!(

@@ -332,8 +332,9 @@ fn to_scan_issue(i: super::runner::Issue, e: &HistEntry, evidence: Vec<ScanEvide
         false_positive: false,
         confidence: confidence.to_string(),
         ts: util::now_secs(),
-        // Burp reports every BCheck issue under its generated type.
-        type_id: 0x09000000,
+        // Burp reports every BCheck issue under its generated type
+        // (burp.Zcot.BCHECK_GENERATED), whatever the BCheck calls it.
+        type_id: webprobe_support::issues::issue_type_id("BCheck generated issue"),
         evidence,
         ident: String::new(),
     }

@@ -28,6 +28,9 @@ REGISTRIES = {os.path.join("scan_library.rs")}
 # Types whose name is assembled at run time. Each is covered while every
 # listed fragment is still in the named file (non-test code).
 DYNAMIC = {
+    # Not scanner checks: the type every issue from that source is filed under.
+    "BCheck generated issue": [("bcheck/scan.rs", 'issue_type_id("BCheck generated issue")')],
+    "Extension generated issue": [("ext_host.rs", 'issue_type_id("Extension generated issue")')],
     "External service interaction (HTTP)": [
         ("oob.rs", 'format!("External service interaction ({kind})")'),
         ("collaborator.rs", 'Self::Http => "HTTP"'),
