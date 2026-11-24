@@ -1012,7 +1012,7 @@ fn load_startup_extensions(
     }
     // Extensions the user installed earlier (Extensions > Installed), loaded
     // in the background. Burp's --disable-extensions skips them, and so does
-n    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
+    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
     if env("WEBPROBE_NO_EXTENSIONS").is_none() {
         webprobe_core::ext_store::load_all(shared);
     }
