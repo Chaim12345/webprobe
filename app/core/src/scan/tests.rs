@@ -761,9 +761,7 @@ fn known_file_follow_up_retrieves_only_with_a_clean_control() {
 
     // The marker in the control too: the server shows it regardless of
     // the filename, so nothing was retrieved.
-    let fixed = |_: &str| -> Option<Vec<u8>> {
-        Some(b"<system.web>always</system.web>".to_vec())
-    };
+    let fixed = |_: &str| -> Option<Vec<u8>> { Some(b"<system.web>always</system.web>".to_vec()) };
     assert!(known_file_follow_up("a/b.txt", b"", fixed).is_none());
 
     // A control that errors out aborts the follow-up: no hit, not a
@@ -4240,8 +4238,14 @@ fn entity_expansion_depth2_confirmed_by_depth3() {
     };
     let body = "<?xml version=\"1.0\"?><order><id>7</id></order>";
     let hit = run_entity_expansion_check(body, "ab", "SEEDSEED", expanding).unwrap();
-    assert!(hit.0.contains("<!ENTITY ab3"), "the confirmation is at depth 3");
-    assert!(hit.0.contains("&ab3;"), "the insertion carries the top reference");
+    assert!(
+        hit.0.contains("<!ENTITY ab3"),
+        "the confirmation is at depth 3"
+    );
+    assert!(
+        hit.0.contains("&ab3;"),
+        "the insertion carries the top reference"
+    );
 
     // A non-expanding parser never reports.
     assert!(run_entity_expansion_check(body, "ab", "SEEDSEED", |_| Some("OK".into())).is_none());
@@ -4268,7 +4272,10 @@ fn entity_expansion_probe_is_internal_and_finite() {
         let d = entity_expansion_doctype("xeeabcde", "12345678", depth);
         assert_eq!(d.matches("<!ENTITY ").count(), depth + 1);
         for banned in ["SYSTEM", "PUBLIC", "%", "<!ATTLIST", "<!ELEMENT", "http"] {
-            assert!(!d.contains(banned), "depth {depth} must not contain {banned:?}: {d}");
+            assert!(
+                !d.contains(banned),
+                "depth {depth} must not contain {banned:?}: {d}"
+            );
         }
         // The real doc start and the <id>7</id> value range.
         let probe = expansion_probe_at(
