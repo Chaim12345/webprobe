@@ -114,3 +114,20 @@ F-06 needs an owner decision on timing-based checks. Nothing in F-D/F-E blocks B
 3. AI assist: acceptable at all, and only with the user's own key (F-21/F-22)?
 4. Is a team server (F-26) in scope for this project, or does WebProbe stay single-user?
 5. Old superseded PRs #8..#44: close them once the linear/team replacements land?
+
+## 10. Status 2026-11-24
+
+Parity is `7648c40`. The task ledger is reconciled to **120 done / 15 todo / 2 rejected**.
+
+Landed since this roadmap was written:
+
+- **F-09 / R-11** scan configuration library — 29 BuiltInConfigs load and the overlay/passive-only behaviour is covered by the #194 verification harness (merged via #205).
+- **F-10 / R-12** Repeater send groups and single-packet attack — sequence/separate/parallel modes, h2 single-packet burst and h1 last-byte sync are in `core/src/send_group.rs` + `h2_group.rs`, with the 20-sender lab test.
+- **F-11 / R-15** CLI flags, options JSON and `/v0.1` REST API — landed in #190 (loopback default, keyed path auth, 9 REST tests).
+- **R-14** BCheck interpreter — parser/validator/runner and scanner wiring landed in #187.
+- **R-17** Intruder payload completeness — Collaborator payloads, extension generators and the missing predefined processors landed in #191.
+- **R-13 (partial)** DOM analysis — 14 wrapped families plus addition-only prototype pollution landed via #186/#188/#200/#205. Stored-token submission is deliberately disabled, and `docs/specs/R-13-dom-coverage-matrix.md` lists uncovered sinks, so the 48-type acceptance is not yet proved.
+- **D-12** Collaborator SNI and scheme payload variants — landed in #192.
+- **Rust 2024 / MSRV 1.95** — landed via #196; CI runs both 1.95.0 and stable.
+
+Still open from this plan: F-01/F-02/F-05/F-06/F-07/F-08, F-12..F-20, and the F-D/F-E bets. The concrete remaining engineering items are the 15 non-done entries in `tasks.json` (R-13, R-16, R-18, R-19, R-20 and AR-01..AR-10).
