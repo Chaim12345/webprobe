@@ -757,6 +757,7 @@ fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress(
             speed: ScanSpeed::from_u8(0),
             accuracy: crate::variations::Accuracy::from_u8(0),
         },
+        host_scope: crate::host_probe_state::experimental_scope(&shared),
         baseline: Baseline {
             resp: Some(baseline.clone()),
             raw: baseline,
