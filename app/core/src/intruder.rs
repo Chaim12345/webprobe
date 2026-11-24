@@ -569,7 +569,10 @@ fn illegal_hex_pairs(byte: u8) -> Vec<[u8; 2]> {
 
 /// The illegal encodings of byte `c` (burp.Zccv.ZM), in Burp's order and
 /// deduplicated, capped at `max` (0 = no cap).
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parameters are one call's inputs; a struct would only move the list to the call sites"
+)]
 fn illegal_unicode_encodings(
     c: u8,
     max_bytes: u8,

@@ -1,0 +1,142 @@
+{
+  "covered": 149,
+  "not_covered": {
+    "ASP.NET ViewState without MAC enabled": {
+      "note": "",
+      "status": "todo"
+    },
+    "BCheck generated issue": {
+      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
+      "status": "todo"
+    },
+    "Bambda generated issue": {
+      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
+      "status": "todo"
+    },
+    "Base64-encoded data in parameter": {
+      "note": "",
+      "status": "todo"
+    },
+    "Browser cross-site scripting filter disabled": {
+      "note": "",
+      "status": "todo"
+    },
+    "Client-side SQL injection (DOM-based)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Client-side SQL injection (reflected DOM-based)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Client-side SQL injection (stored DOM-based)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Client-side desync": {
+      "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
+      "status": "excluded"
+    },
+    "Content type incorrectly stated": {
+      "note": "",
+      "status": "todo"
+    },
+    "Cross-domain POST": {
+      "note": "",
+      "status": "todo"
+    },
+    "Cross-domain Referer leakage": {
+      "note": "",
+      "status": "todo"
+    },
+    "Extension generated issue": {
+      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
+      "status": "todo"
+    },
+    "External service interaction (HTTP)": {
+      "note": "",
+      "status": "todo"
+    },
+    "External service interaction (SMTP)": {
+      "note": "",
+      "status": "todo"
+    },
+    "File upload functionality": {
+      "note": "",
+      "status": "todo"
+    },
+    "HTTP request smuggling": {
+      "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",
+      "status": "excluded"
+    },
+    "Hidden HTTP 2": {
+      "note": "",
+      "status": "todo"
+    },
+    "Json Web Key Set disclosed": {
+      "note": "",
+      "status": "todo"
+    },
+    "Local file path manipulation (DOM-based)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Local file path manipulation (reflected DOM-based)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Local file path manipulation (stored DOM-based)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Long redirection response": {
+      "note": "",
+      "status": "todo"
+    },
+    "Manually generated issue": {
+      "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
+      "status": "todo"
+    },
+    "Open redirection (stored)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Perl code injection": {
+      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
+      "status": "decision"
+    },
+    "Python code injection": {
+      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
+      "status": "decision"
+    },
+    "Ruby code injection": {
+      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
+      "status": "decision"
+    },
+    "SQL injection (second order)": {
+      "note": "",
+      "status": "todo"
+    },
+    "SQL statement in request parameter": {
+      "note": "",
+      "status": "todo"
+    },
+    "Server-side JavaScript code injection": {
+      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
+      "status": "decision"
+    },
+    "Suspicious input transformation (reflected)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Suspicious input transformation (stored)": {
+      "note": "",
+      "status": "todo"
+    },
+    "Unidentified code injection": {
+      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
+      "status": "decision"
+    }
+  },
+  "total": 183
+}

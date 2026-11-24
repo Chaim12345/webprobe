@@ -190,7 +190,7 @@ pub(crate) struct StoredXssHit {
     pub payload: String,
     pub context: u8,
     /// Which retrieval request showed the stored payload.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "read only by tests"))]
     pub retrieval: usize,
 }
 

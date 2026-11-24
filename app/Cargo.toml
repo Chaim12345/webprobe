@@ -4,6 +4,9 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 tracing.workspace = true
 # SIGTERM / SIGINT close the window cleanly (project saved, no crash prompt).
@@ -74,6 +77,17 @@ default-members = [".", "core"]
 [workspace.package]
 edition = "2024"
 rust-version = "1.95"
+
+# One lint policy for every workspace member (ADR 0002, phase 0); members
+# opt in with `[lints] workspace = true`. CI runs clippy with -D warnings,
+# so "warn" here fails a pull request.
+[workspace.lints.clippy]
+# A suppression must say why, and must stop compiling when it is no longer
+# needed: `#[expect(lint, reason = "..")]` instead of `#[allow(lint)]`.
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+dbg_macro = "warn"
+todo = "warn"
 
 [workspace.dependencies]
 tracing = "0.1"

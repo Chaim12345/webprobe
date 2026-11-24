@@ -183,7 +183,10 @@ fn https_request(
 
 /// `https_request` with the TLS client config supplied (tests inject a
 /// fixture root; production uses the verified system roots).
-#[allow(clippy::too_many_arguments)] // one request's worth of parameters
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one request's worth of parameters"
+)]
 fn https_request_with(
     host: &str,
     port: u16,

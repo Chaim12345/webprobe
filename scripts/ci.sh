@@ -30,6 +30,9 @@ step() {
     fi
 }
 
+step "architecture ratchet self-test" python3 "$ROOT/scripts/test-arch-gate.py"
+step "architecture ratchet (ADR 0002)" python3 "$ROOT/scripts/arch-gate.py"
+step "issue-type coverage (F-08)" python3 "$ROOT/scripts/issue-coverage.py"
 step "test suites (core + desktop)" env WP_APP_DIR="$APP" "$Q" test
 step "headless engine binary" env WP_APP_DIR="$APP" "$Q" run -- cargo build --bin webprobe-headless
 if [ -z "${CI_SKIP_MCP:-}" ]; then

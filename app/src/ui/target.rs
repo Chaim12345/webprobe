@@ -1157,7 +1157,7 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                         scope_set: bool,
                     }
                     // Recursive tree painter; its arguments are the path down the tree.
-                    #[allow(clippy::too_many_arguments)]
+                    #[expect(clippy::too_many_arguments, reason = "the parameters are one call's inputs; a struct would only move the list to the call sites")]
                     fn draw(ui: &mut Ui, app: &mut App, marks: &Marks, origin: &str, prefix: &str, name: &str, node: &MapNode, depth: usize) {
                         let full = format!("{prefix}{name}");
                         let sel = app.target_node.as_ref().map(|(o, p)| o == origin && p == &full).unwrap_or(false);
