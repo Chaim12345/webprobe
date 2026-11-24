@@ -67,8 +67,9 @@ pub struct TlsCapture {
 pub enum CertFlag {
     NotYetValid,
     Expired,
-    /// The delegated verifier reported a validity problem but the leaf
-    /// could not be parsed, so expired vs not-yet-valid is unknown.
+    /// The delegated verifier reported a validity problem but the failing
+    /// certificate could not be identified from the leaf (an unparseable
+    /// leaf or a chain certificate), so expired vs not-yet-valid is unknown.
     ValidityUnknown,
     HostnameMismatch,
     Untrusted,
@@ -309,20 +310,21 @@ pub fn analyze(capture: &TlsCapture, host: &str, now: SystemTime) -> Vec<CertFla
             flags.push(f);
         }
     };
-    let mut parsed = false;
+    let mut validity_from_leaf = false;
     if let Some(leaf) = capture.chain.first()
         && let Ok((_, cert)) = parse_x509_certificate(leaf)
     {
-        parsed = true;
         let ts = now
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
         let validity = cert.validity();
         if validity.not_before.timestamp() > ts {
+            validity_from_leaf = true;
             push(CertFlag::NotYetValid);
         }
         if validity.not_after.timestamp() < ts {
+            validity_from_leaf = true;
             push(CertFlag::Expired);
         }
         let names = cert_names(&cert);
@@ -331,10 +333,12 @@ pub fn analyze(capture: &TlsCapture, host: &str, now: SystemTime) -> Vec<CertFla
         }
     }
     // The delegated verifier's outcome backs up (or, for a certificate we
-    // could not parse, replaces) our own reading of the leaf.
+    // could not parse, replaces) our own reading of the leaf. A validity
+    // failure that our leaf read did not explain belongs to another
+    // certificate in the chain (typically an expired intermediate).
     match capture.error_kind {
         Some(VerifyKind::Hostname) => push(CertFlag::HostnameMismatch),
-        Some(VerifyKind::Validity) if !parsed => push(CertFlag::ValidityUnknown),
+        Some(VerifyKind::Validity) if !validity_from_leaf => push(CertFlag::ValidityUnknown),
         Some(VerifyKind::Trust) => push(CertFlag::Untrusted),
         // Inconclusive stays unflagged: the diagnostic travels in
         // `verify_error`, and no trust failure is claimed without proof.
@@ -424,13 +428,16 @@ mod tests {
     }
 
     #[test]
-    fn parsed_leaf_with_a_validity_failure_keeps_its_own_reading() {
+    fn parsed_leaf_with_a_chain_validity_failure_is_unknown() {
+        // The leaf's own dates are fine, so the verifier's validity error
+        // can only come from another certificate in the chain.
         let cap = cap_for(
             leaf_der(&["example.com"], (2020, 1, 1), (2030, 1, 1)),
             Some(VerifyKind::Validity),
         );
         let flags = analyze(&cap, "example.com", SystemTime::now());
-        assert!(!flags.contains(&CertFlag::ValidityUnknown));
+        assert_eq!(flags, vec![CertFlag::ValidityUnknown]);
+        assert_eq!(severity(&flags), "medium");
     }
 
     #[test]
