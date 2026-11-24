@@ -401,8 +401,9 @@ pub fn send_tls_inner(
             let tcp = crate::upstream::connect_tls_target(&config, host, port)?;
             tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
                 .ok();
-            let name = rustls::pki_types::ServerName::try_from(super::sni::effective_server_name(host))
-                .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
+            let name =
+                rustls::pki_types::ServerName::try_from(super::sni::effective_server_name(host))
+                    .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
             let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
                 .map_err(|e| format!("configure upstream TLS: {e}"))?;
             UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(conn, tcp)))
