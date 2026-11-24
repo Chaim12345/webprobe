@@ -1462,15 +1462,10 @@ mod tests {
         let mut cursor = Cursor::new(burst.as_slice());
         let mut data_lengths = Vec::new();
         let mut end_stream = false;
-        loop {
-            match read_frame(&mut cursor) {
-                Ok(f) => {
-                    if f.ty == FRAME_DATA {
-                        data_lengths.push(f.payload.len());
-                        end_stream = f.flags & FLAG_END_STREAM != 0;
-                    }
-                }
-                Err(_) => break,
+        while let Ok(f) = read_frame(&mut cursor) {
+            if f.ty == FRAME_DATA {
+                data_lengths.push(f.payload.len());
+                end_stream = f.flags & FLAG_END_STREAM != 0;
             }
         }
         assert_eq!(data_lengths, vec![16_384, 16_384, 7_232]);
@@ -1527,13 +1522,23 @@ mod tests {
         };
         let mut conn = Conn::new(io);
         assert!(conn.exchange(&get_request(), None).is_err());
-        assert!(conn.committed(), "the failed HEADERS write is an unknown outcome");
+        assert!(
+            conn.committed(),
+            "the failed HEADERS write is an unknown outcome"
+        );
         let writes = conn.get_mut().writes;
         let bytes = conn.get_mut().out.len();
         assert!(conn.exchange(&get_request(), None).is_err());
-        assert_eq!(conn.get_mut().writes, writes, "retired socket must not write");
+        assert_eq!(
+            conn.get_mut().writes,
+            writes,
+            "retired socket must not write"
+        );
         assert_eq!(conn.get_mut().out.len(), bytes, "no second request bytes");
-        assert!(conn.committed(), "retirement preserves the prior commitment");
+        assert!(
+            conn.committed(),
+            "retirement preserves the prior commitment"
+        );
     }
 
     #[test]
