@@ -532,7 +532,9 @@ fn dom_request_prefix_fits(method: &str, path: &str, host: &str) -> bool {
         .saturating_add(1)
         .saturating_add(path.len())
         .saturating_add(1)
-        .saturating_add("HTTP/1.1\r\nHost: \r\nConnection: close\r\nAccept-Encoding: identity\r\n".len())
+        .saturating_add(
+            "HTTP/1.1\r\nHost: \r\nConnection: close\r\nAccept-Encoding: identity\r\n".len(),
+        )
         .saturating_add(host.len())
         .saturating_add(2)
         <= DOM_MAX_REQUEST_BYTES
@@ -602,7 +604,10 @@ impl DomRoute {
             for (name, value) in headers {
                 if name.eq_ignore_ascii_case("connection") {
                     let value = value.as_str().unwrap_or("");
-                    if connection.len().saturating_add(value.len()).saturating_add(1)
+                    if connection
+                        .len()
+                        .saturating_add(value.len())
+                        .saturating_add(1)
                         > DOM_MAX_REQUEST_BYTES
                     {
                         return blocked();
