@@ -21,7 +21,7 @@ not reported.
 | `location.search` (query token) | **covered** - same sinks, proved by the provenance lab | Tentative: the Zwf8 mapping is established for the hash source only, so search provenance is reported conservatively |
 | both tokens in one value | **covered** | Tentative (mixed provenance) |
 | token present but part not attributable (single-token probe) | reported as source `unknown` | Tentative (inconclusive, never guessed) |
-| stored token (submitted in an earlier request, re-embedded by the application) | **covered** - the stored-variant lab proves detection | Tentative (the Zwf8 mapping is established for the hash source only) |
+| stored token (submitted in an earlier request, re-embedded by the application) | **not enabled in production** - no stored-token submission is sent; fixture-only classification remains | - |
 | `document.URL`, `document.referrer`, `window.name` reads, `localStorage`/`sessionStorage` reads | not covered - no instrumentation emits them as sources | - |
 
 ## Families and sinks (burp.Zcwh dynamic decoder, docs/specs/R-13 section 6)
@@ -52,30 +52,32 @@ local nor the session area) are recorded but reported by no family.
 
 - One browser probe per URL per run; all families read the same result
   (`dom_families_share_one_probe_and_refresh_on_the_next_run`: 8 issues,
-  3 requests per simple page per run: 1 baseline outside the DOM
-  operation budget, 1 stored-token submission, 1 DOM navigation; a fresh run
-  re-probes).
+  2 requests per simple page per run: 1 baseline outside the DOM
+  operation budget and 1 DOM navigation; no stored-token submission; a fresh
+  run re-probes).
 - Source provenance: `dom_source_provenance_matrix_against_a_live_lab`
   proves hash-only (Firm), search-only (Tentative), mixed (Tentative),
   and the negatives: reflected token without a sink, a pre-existing
   unrelated Object.prototype property, and a benign page.
-- Variants (burp.Zf24), attributed per hit in the order stored, then
-  reflected, then base: a token submitted in an earlier request and later
-  observed at a sink selects the stored label. The query token present in
-  script text of the exact navigation response fulfilled to Chromium and
-  also observed at a sink selects the reflected label. This is token
-  co-occurrence, not proof of JavaScript string-literal origin or the path
-  from response text to sink. Both variants are Tentative. The G.11 parser
-  classifies response context only; no later re-request supplies evidence.
-- Admission and failures: the stored submission runs only after probe
-  allowance, browser slot, binary startup and DevTools setup succeed.
-  Stop is checked before sends and navigation. An incomplete/invalid HTTP
-  response leaves submission outcome unknown: no retry, navigation or
-  further request. That failed result is cached for the URL for this run.
+- Variants (burp.Zf24): production currently emits the reflected or base
+  label only. The stored-label code path remains fixture-testable but is
+  dormant because production passes an empty stored token and sends no
+  stored submission. The query token present in script text of the exact
+  navigation response fulfilled to Chromium and also observed at a sink
+  selects the reflected label. This is token co-occurrence, not proof of
+  JavaScript string-literal origin or the path from response text to sink.
+  The reflected variant is Tentative. The G.11 parser classifies response
+  context only; no later re-request supplies evidence.
+- Admission and failures: probe allowance, browser slot, binary startup and
+  DevTools setup must succeed before navigation. Production sends no stored
+  submission. Stop is checked before sends and navigation. An incomplete or
+  invalid navigation response is not retained as evidence and does not cause
+  a retry. The failed result is cached for the URL for this run.
 - New labs pin denied admission with zero target connections; cancellation
   before navigation; effect-then-drop with no replay; safe session headers
-  on captured wire; stored and plain variants through the same sink; and
+  on captured wire; fixture-level stored/plain classification; and
   classification from the actual fulfilled response without later traffic.
+  The stored-submission fixture is not the production path.
 - `dom_probe_tokens_are_distinct_and_substituted` pins the two-token
   substitution (drift test).
 - Budgets: at most `DOM_MAX_CONCURRENT_BROWSERS` (2) live Chromium
@@ -83,9 +85,10 @@ local nor the session area) are recorded but reported by no family.
   budget fails closed (no browser, no hits). Unit-tested in
   webprobe-support (`dedup::tests`).
 - Per-operation request budget: `DOM_MAX_REQUESTS_PER_PROBE` (64) covers
-  the outer stored submission plus every intercepted GET/HEAD through the
-  same counter, consumed before sends. Baseline is outside this operation.
+  intercepted same-origin GET/HEAD requests, consumed before sends. There is
+  no outer stored submission in production. Baseline is outside this operation.
   A resource-heavy live lab pins exactly 1 baseline + 64 operation requests.
+  Each forwarded request is capped at 64 KiB and 128 headers.
 - Egress isolation: Fetch interception answers every page request; a
   dead-loopback `--proxy-server` removes the route for anything that
   bypasses interception (speculative preconnect/prefetch, background
@@ -111,7 +114,7 @@ local nor the session area) are recorded but reported by no family.
 - Only GET history entries with executable HTML baselines are probed;
   inert HTML is skipped.
 
-Submission acknowledgement requires a complete, strictly self-delimited final
+Navigation evidence requires a complete, strictly self-delimited final
 2xx-5xx response. Short Content-Length bodies, incomplete chunked bodies,
 interim-only responses and EOF-delimited responses without a reliable
 completion signal remain unknown, with no replay or navigation.
@@ -130,13 +133,13 @@ interrupt synchronous in-flight transport I/O; no latency bound is claimed.
 additions and rejects reflection and filtered keys. The multi-family lab
 proves query pollution and fragment DOM-XSS keep separate sources/confidence.
 `dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab`
-proves simultaneous query/hash pollution and stored DOM-XSS with separate
-dedup, stored-only pollution exclusion, reflection/unchanged negatives, and
-one shared operation including the outer submission and resource cap.
+proves simultaneous query/hash pollution and the fixture's stored DOM-XSS
+classification with separate dedup, stored-only pollution exclusion,
+reflection/unchanged negatives, and one shared operation with the 64-request
+resource cap. Production does not send the stored-token submission.
 
-The stored-source coverage and reflected/stored variant rules above apply to
-the fourteen wrapped DOM families, not prototype pollution. Pollution uses
-only the base issue name and dedicated URL-part token evidence on new own
-keys. It explicitly excludes the stored token, even when mixed with URL
-tokens. This is addition-only coverage, not an overwrite detector or stored
-pollution detector. Those remain follow-ups.
+Stored-source classification remains fixture-only; it is not active in the
+production fourteen-family probe. Prototype pollution uses only the base
+issue name and dedicated URL-part token evidence on new own keys. It does not
+use a stored token. This is addition-only coverage, not an overwrite detector
+or stored-pollution detector. Those remain follow-ups.
