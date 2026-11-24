@@ -945,8 +945,21 @@ fn mixed_line_endings_get_400_and_close_in_one_read_and_split_reads() {
                 .replace("/x", &format!("http://127.0.0.1:{up_port}/x"))
                 .into_bytes();
             for piece in bytes.chunks(step) {
-                c.write_all(piece).unwrap();
-                c.flush().unwrap();
+                // The proxy can reject the head and close before the last
+                // fragments leave; writes racing its 400/FIN may report
+                // EPIPE or ECONNRESET. The assertions below still require
+                // the 400, terminal close, zero upstream requests and
+                // verbatim captured prefix.
+                if let Err(e) = c.write_all(piece).and_then(|()| c.flush()) {
+                    assert!(
+                        matches!(
+                            e.kind(),
+                            std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+                        ),
+                        "{wire:?} step {step}: unexpected write error: {e}"
+                    );
+                    break;
+                }
                 if step < 16_384 {
                     std::thread::sleep(Duration::from_millis(1));
                 }
