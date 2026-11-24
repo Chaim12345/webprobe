@@ -76,6 +76,9 @@ pub use checks_ssi_ssti::*;
 mod checks_sql;
 pub use checks_sql::*;
 
+mod checks_transform;
+pub(crate) use checks_transform::*;
+
 mod checks_ldap_xml;
 pub use checks_ldap_xml::*;
 

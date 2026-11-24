@@ -3951,6 +3951,16 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                 } else {
                     "<html><body>report ready</body></html>".to_string()
                 })
+            } else if head.starts_with("GET /decoded") {
+                // The newest comment URL-decoded once more (the stored
+                // suspicious input transformation lab).
+                let shown = comments
+                    .lock()
+                    .unwrap()
+                    .last()
+                    .map(|c| String::from_utf8_lossy(&pct_decode(c)).into_owned())
+                    .unwrap_or_default();
+                Some(format!("<html><body>{shown}</body></html>"))
             } else if head.starts_with("POST /search") {
                 let q = field("q=").unwrap_or_default();
                 let shown = if post_only {
@@ -4596,4 +4606,406 @@ fn entity_expansion_probe_is_internal_and_finite() {
             assert!(!probe.contains(banned), "probe must not contain {banned:?}");
         }
     }
+}
+
+/// Deterministic a-z0-9 strings for the suspicious input transformation
+/// driver (Burp draws them from Zqq.ZR).
+fn transform_rnd() -> impl FnMut(usize) -> String {
+    let mut s: u64 = 0x2545_f491_4f6c_dd1d;
+    move |n| {
+        (0..n)
+            .map(|_| {
+                s = s
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                b"abcdefghijklmnopqrstuvwxyz0123456789"[(s >> 33) as usize % 36] as char
+            })
+            .collect()
+    }
+}
+
+fn replace_bytes(b: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i..].starts_with(from) {
+            out.extend_from_slice(to);
+            i += from.len();
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// A page showing the payload's bytes after `f`, in both placements.
+fn transform_page(f: &dyn Fn(&[u8]) -> Vec<u8>, payload: &str) -> Vec<u8> {
+    let bytes: Vec<u8> = payload.chars().map(|c| c as u32 as u8).collect();
+    let mut r = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<p>".to_vec();
+    r.extend(f(&bytes));
+    r.extend_from_slice(b"</p>");
+    r
+}
+
+/// burp.Zpfn: ASCII case-insensitive, entities decoded (Zpfn.Zl) unless
+/// the HTML probe's matcher (Zpfn.Zj); a decoded byte must be below 0x80,
+/// and `&nbsp;` is a plain space in net.portswigger.Zel.
+#[test]
+fn transformation_needle_matches_like_burp_zpfn() {
+    let n = Needle::new(b"abc", true);
+    assert_eq!(n.find(b"xxABCx", 0, 6), Some((2, 5)));
+    assert_eq!(n.find(b"x&#97;bc", 0, 8), Some((1, 8)));
+    assert_eq!(n.find(b"x&#x41;bc", 0, 9), Some((1, 9)));
+    assert_eq!(n.find(b"x&AMP;abc", 0, 9), Some((6, 9)));
+    assert_eq!(n.find(b"abx", 0, 3), None);
+    assert_eq!(
+        n.find(b"xxabc", 0, 4),
+        None,
+        "the range end bounds the match"
+    );
+    assert_eq!(
+        n.find(b"abcxx", 1, 5),
+        None,
+        "the range start bounds it too"
+    );
+    assert_eq!(
+        Needle::new(b"a b", true).find(b"a&NBSP;b", 0, 8),
+        Some((0, 8))
+    );
+    assert_eq!(
+        Needle::new(b"a\xe9b", true).find(b"a&eacute;b", 0, 10),
+        None
+    );
+    let plain = Needle::new(b"abc", false);
+    assert_eq!(plain.find(b"&#97;bc", 0, 7), None);
+    assert_eq!(plain.find(b"xABC", 0, 4), Some((1, 4)));
+}
+
+/// burp.Zh_1: one byte between prefix and suffix that is not the decoded
+/// character; a suffix that lost its first two characters with up to three
+/// bytes between; entities between count as one byte.
+#[test]
+fn transformed_span_follows_burp_zh1() {
+    let nd = |s: &str| Needle::new(s.as_bytes(), true);
+    let (p, s) = ("pppppppppp", "ssssssssss");
+    let span =
+        |hay: &str| transformed_span(hay.as_bytes(), &nd(p), &nd(s), &nd(&s[2..]), s.len(), b'a');
+    assert_eq!(span("<p>pppppppppp?ssssssssss</p>"), Some((3, 24)));
+    assert_eq!(span("pppppppppp&lt;ssssssssss"), Some((0, 24)));
+    assert_eq!(span("ppppppppppassssssssss"), None, "the decoded character");
+    assert_eq!(span("ppppppppppAssssssssss"), None, "in any case");
+    assert_eq!(span("pppppppppp&#65;ssssssssss"), None, "also as an entity");
+    // The whole suffix with two bytes between: no match, and the
+    // shortened suffix is not tried.
+    assert_eq!(span("pppppppppp??ssssssssss"), None);
+    assert_eq!(span("ppppppppppssssssssss"), None, "nothing between");
+    assert_eq!(span("pppppppppp???ssssssss"), Some((0, 21)));
+    assert_eq!(span("pppppppppp????ssssssss"), None);
+    assert_eq!(
+        span("ssssssssss?pppppppppp"),
+        None,
+        "the suffix follows the prefix"
+    );
+}
+
+/// burp.Zeo6.Zw: each transformation is its own variant; invalid UTF-8
+/// decoding replaces overlong decoding, and a plain echo raises nothing.
+#[test]
+fn transformation_driver_reports_each_burp_variant() {
+    let run = |f: &dyn Fn(&[u8]) -> Vec<u8>| -> Vec<u8> {
+        run_input_transformation_check(false, transform_rnd(), |p: &str, _| {
+            Some(transform_page(f, p))
+        })
+        .iter()
+        .map(|h| h.variant)
+        .collect()
+    };
+    assert!(run(&|b| b.to_vec()).is_empty(), "a plain echo");
+    assert_eq!(run(&|b| replace_bytes(b, b"%41", b"A")), [4]);
+    assert_eq!(run(&|b| replace_bytes(b, b"%41", b"B")), [5]);
+    assert_eq!(run(&|b| replace_bytes(b, b"\\\\", b"\\")), [6]);
+    assert_eq!(run(&|b| replace_bytes(b, b"\\\\", b"/")), [7]);
+    assert_eq!(run(&|b| replace_bytes(b, b"&#65;", b"A")), [8]);
+    assert_eq!(run(&|b| replace_bytes(b, b"&#65;", b"#")), [9]);
+    assert_eq!(run(&|b| replace_bytes(b, b"\xc1\x81", b"A")), [0]);
+    assert_eq!(run(&|b| replace_bytes(b, b"\xc1\x81", b"?")), [1]);
+    assert_eq!(
+        run(&|b| replace_bytes(&replace_bytes(b, b"\xc1\x81", b"A"), b"\xc1\x01", b"A")),
+        [2]
+    );
+    assert_eq!(
+        run(&|b| replace_bytes(&replace_bytes(b, b"\xc1\x81", b"A"), b"\xc1\x01", b"?")),
+        [0, 3]
+    );
+    // Several at once, in burp.Zm26 order.
+    assert_eq!(
+        run(&|b| replace_bytes(&replace_bytes(b, b"&#65;", b"A"), b"%41", b"A")),
+        [4, 8]
+    );
+    // The invalid sequence goes out only after the overlong one decoded.
+    let mut sent = Vec::new();
+    let hits = run_input_transformation_check(false, transform_rnd(), |p: &str, _| {
+        sent.push(p.to_string());
+        Some(transform_page(&|b| replace_bytes(b, b"\xc1\x01", b"A"), p))
+    });
+    assert!(hits.is_empty());
+    assert_eq!(
+        sent.len(),
+        5,
+        "marker, overlong, URL, backslash, HTML: {sent:?}"
+    );
+    assert!(!sent.iter().any(|p| p.contains("\u{c1}\u{1}")));
+    // The payload and the reflection the hit rests on.
+    let hits = run_input_transformation_check(false, transform_rnd(), |p: &str, _| {
+        Some(transform_page(&|b| replace_bytes(b, b"%41", b"A"), p))
+    });
+    let h = &hits[0];
+    assert!(h.payload.contains("%41") && !h.append);
+    assert_eq!(h.reflection, h.payload.replace("%41", "A"));
+}
+
+/// burp.Zm3o / Zr5j / Zp1_: a placement is probed only when its plain
+/// marker comes back; the value is appended to only when allowed; the
+/// overlong variant prefers the appended probe, the others the replacing one.
+#[test]
+fn transformation_driver_placements_follow_burp() {
+    let url = |b: &[u8]| replace_bytes(b, b"%41", b"A");
+    // Only the appended value comes back.
+    let mut sent = Vec::new();
+    let hits = run_input_transformation_check(true, transform_rnd(), |p: &str, append| {
+        sent.push(append);
+        Some(if append {
+            transform_page(&url, p)
+        } else {
+            b"HTTP/1.1 200 OK\r\n\r\nnothing".to_vec()
+        })
+    });
+    assert_eq!(
+        hits.iter()
+            .map(|h| (h.variant, h.append))
+            .collect::<Vec<_>>(),
+        [(4, true)]
+    );
+    assert_eq!(
+        sent.iter().filter(|a| !**a).count(),
+        1,
+        "the replace marker only"
+    );
+    // No append: the replace placement alone.
+    let mut sent = Vec::new();
+    let hits = run_input_transformation_check(false, transform_rnd(), |p: &str, append| {
+        sent.push(append);
+        Some(transform_page(&url, p))
+    });
+    assert_eq!(hits.len(), 1);
+    assert!(sent.iter().all(|a| !*a));
+    // Nothing reflected: one marker per placement and no probe.
+    let mut n = 0;
+    let hits = run_input_transformation_check(true, transform_rnd(), |_: &str, _| {
+        n += 1;
+        Some(b"HTTP/1.1 200 OK\r\n\r\nnothing".to_vec())
+    });
+    assert!(hits.is_empty());
+    assert_eq!(n, 2);
+    // Both placements decode both: overlong from the appended probe, URL
+    // from the replacing one.
+    let both = |b: &[u8]| replace_bytes(&replace_bytes(b, b"\xc1\x81", b"A"), b"%41", b"A");
+    let hits = run_input_transformation_check(true, transform_rnd(), |p: &str, _| {
+        Some(transform_page(&both, p))
+    });
+    assert_eq!(
+        hits.iter()
+            .map(|h| (h.variant, h.append))
+            .collect::<Vec<_>>(),
+        [(0, true), (4, false)]
+    );
+}
+
+/// burp.Zwvh.buildIssueDetail, verbatim, for the reflected and the stored
+/// type; burp.Zwvh.ZB shows Burp's payload bytes as [0xNN].
+#[test]
+fn transformation_detail_is_burps_text() {
+    let bold = "value of the <b>q</b> request parameter";
+    let d = transformation_detail(
+        0,
+        bold,
+        "q parameter",
+        None,
+        "abc\u{c1}\u{81}def",
+        "abcAdef",
+    );
+    assert_eq!(
+        d,
+        "The application appears to decode overlong UTF-8 sequences when processing the value of the <b>q</b> request parameter, and echo the result in the response.<br><br>The payload <strong>abc[0xc1][0x81]def</strong> was submitted in the q parameter. This payload contains the overlong UTF-8 sequence [0xc1][0x81] corresponding to the character 'A'. The input was copied into the application's response as <strong>abcAdef</strong> indicating that the application decoded the overlong UTF-8 sequence as the character 'A'.<br><br>It might be possible to use this behavior to bypass input validation by submitting overlong UTF-8 encodings of any filtered characters."
+    );
+    let d = transformation_detail(
+        7,
+        "value of the <b>c</b> request parameter",
+        "c parameter",
+        Some(("http://h/comment", "http://h/list?a=1&b=<2>")),
+        "abc\\\\ldef",
+        "abc/ldef",
+    );
+    assert_eq!(
+        d,
+        "The application appears to process the value of the <b>c</b> request parameter, transform backslash escape sequences in an unexpected way, and echo the result in a later response.<br><br>The payload <strong>abc\\\\ldef</strong> submitted to the URL http://h/comment is copied into the response for the URL http://h/list?a=1&amp;b=&lt;2&gt;. This payload contains the '\\\\' sequence, which commonly represents an escaped backslash. The input was copied into the application's response as <strong>abc/ldef</strong>. This indicates that the application transformed the sequence in some unexpected way.<br><br>This behavior indicates that the application might be evaluating the input within some interpreted context, which might give rise to code injection or other issues. It might also be possible to cause the application to differently interpret characters from the start of any data that is concatenated onto the input, by finishing the payload with a single backslash character.<br><br>WebProbe has captured the first observed location where this stored input is returned. There might be other locations within the application where the same input is returned. To identify all such locations, perform a full crawl of the application and then do a global search for the highlighted value."
+    );
+    let concat = "<br><br>It might be possible to use this behavior to cause the application to differently interpret characters from the start of any data that is concatenated onto the input, by finishing the payload with the start of the multi-character sequence.";
+    let unexpected =
+        ". This indicates that the application transformed the sequence in some unexpected way.";
+    let r = " The input was copied into the application's response as <strong>R</strong>";
+    let cases: [(u8, String, String); 8] = [
+        (1, "appears to process the B, transform overlong UTF-8 sequences in an unexpected way, and echo the result in the response.".into(), format!(". This payload contains the overlong UTF-8 sequence [0xc1][0x81] corresponding to the character 'A'.{r}{unexpected}{concat}")),
+        (2, "appears to decode invalid UTF-8 sequences when processing the B, and echo the result in the response.".into(), format!(". This payload contains the invalid UTF-8 sequence [0xc1][0x01] corresponding to the character 'A'. The first byte [0xc1] indicates the start of a two-byte sequence, however the following byte [0x01] is not a valid continuation byte according to the UTF-8 specification.{r} indicating that the application decoded the invalid UTF-8 sequence as the character 'A'.<br><br>It might be possible to use this behavior to bypass input validation by submitting invalid UTF-8 encodings of any filtered characters. It might also be possible to cause the application to differently interpret characters from the start of any data that is concatenated onto the input, by finishing the payload with the start of the multi-character sequence.")),
+        (3, "appears to process the B, transform invalid UTF-8 sequences in an unexpected way, and echo the result in the response.".into(), format!("following byte [0x01] is not a valid continuation byte according to the UTF-8 specification.{r}{unexpected}{concat}")),
+        (4, "appears to URL-decode the B, and echo the result in the response.".into(), format!(". This payload contains the %41 sequence, corresponding to the character 'A'.{r} indicating that the application URL-decoded the sequence.<br><br>It might be possible to use this behavior to bypass input validation by submitting superfluous URL-encodings of any filtered characters.")),
+        (5, "appears to process the B, transform URL-encoded data in an unexpected way, and echo the result in the response.".into(), format!(". This payload contains the %41 sequence, corresponding to the character 'A'.{r}{unexpected}{concat}")),
+        (6, "appears to unescape backslash escape sequences when processing the B, and echo the result in the response.".into(), format!("{r} indicating that the application unescaped the '\\\\' sequence as '\\'.<br><br>This behavior indicates that the application might be evaluating the input within some interpreted context, which might give rise to code injection or other issues. It might also be possible to cause the application to differently interpret characters from the start of any data that is concatenated onto the input, by finishing the payload with a single backslash character.")),
+        (8, "appears to HTML-decode the B, and echo the result in the response.".into(), format!(". This payload contains the HTML entity '&amp#65;' corresponding to the character 'A'.{r} indicating that the application HTML-decoded the entity.<br><br>It might be possible to use this behavior to bypass input validation by submitting HTML-encodings of any filtered characters.")),
+        (9, "appears to process the B, transform HTML-encoded data in an unexpected way, and echo the result in the response.".into(), format!(". This payload contains the HTML entity '&amp#65;' corresponding to the character 'A'.{r}{unexpected}{concat}")),
+    ];
+    for (variant, opening, tail) in cases {
+        let d = transformation_detail(variant, "B", "S", None, "P", "R");
+        assert!(d.starts_with(&format!("The application {opening}<br><br>The payload <strong>P</strong> was submitted in the S")), "{variant}: {d}");
+        assert!(d.ends_with(&tail), "{variant}: {d}");
+    }
+    assert_eq!(
+        burp_html("a<b>\tc&d\u{e9}\r\nx"),
+        "a&lt;b&gt; &nbsp;&nbsp;&nbsp;c&amp;d.<br>x"
+    );
+}
+
+/// What the server receives for each payload: burp.Zc1o for query, body
+/// and cookie values, burp.Zpap for path segments (so `%41` arrives as
+/// `%2541` and [0xc1][0x81] as `%c1%81`), a header value as written;
+/// bytes above 0x7f are not sent to the kinds built as UTF-8 text.
+#[test]
+fn transformation_payloads_reach_the_server_as_burp_encodes_them() {
+    let get = "GET /p/seg?q=v HTTP/1.1\r\nHost: h\r\nCookie: c=v\r\nX-H: v\r\n\r\n";
+    let place = |ip: &InsertionPoint, payload: &str, append: bool| {
+        checks::transformation_request(get, ip, payload, append)
+    };
+    let q = InsertionPoint::new(IpKind::Query, "q", "v");
+    let line = |r: Option<String>| r.unwrap().lines().next().unwrap().to_string();
+    assert_eq!(line(place(&q, "%41", false)), "GET /p/seg?q=%2541 HTTP/1.1");
+    assert_eq!(
+        line(place(&q, "x\u{c1}\u{81}y", true)),
+        "GET /p/seg?q=vx%c1%81y HTTP/1.1"
+    );
+    assert_eq!(
+        line(place(&q, "x\u{c1}\u{1}y", false)),
+        "GET /p/seg?q=x%c1%01y HTTP/1.1"
+    );
+    assert_eq!(
+        line(place(&q, "\\\\", false)),
+        "GET /p/seg?q=%5c%5c HTTP/1.1"
+    );
+    assert_eq!(
+        line(place(&q, "&#65;", false)),
+        "GET /p/seg?q=%26%2365%3b HTTP/1.1"
+    );
+    let path = InsertionPoint::new(IpKind::PathFolder(0), "URL path folder 1", "p");
+    assert_eq!(
+        line(place(&path, "%41", false)),
+        "GET /%2541/seg?q=v HTTP/1.1"
+    );
+    let cookie = InsertionPoint::new(IpKind::Cookie, "c", "v");
+    assert!(
+        place(&cookie, "%41", true)
+            .unwrap()
+            .contains("Cookie: c=v%2541\r\n")
+    );
+    let header = InsertionPoint::new(IpKind::Header, "X-H", "v");
+    let h = place(&header, "x%41y", false).unwrap();
+    assert!(h.contains("X-H: x%41y\r\n"), "{h}");
+    assert_eq!(place(&header, "\u{c1}\u{81}", false), None);
+    let post = "POST /f HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 3\r\n\r\na=v";
+    let body = InsertionPoint::new(IpKind::Body, "a", "v");
+    let b = checks::transformation_request(post, &body, "%41", true).unwrap();
+    assert!(b.ends_with("\r\n\r\na=v%2541"), "{b}");
+    let json = "POST /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 9\r\n\r\n{\"a\":\"v\"}";
+    let jp = InsertionPoint::new(IpKind::Json(vec!["a".into()]), "a", "v");
+    assert_eq!(
+        checks::transformation_request(json, &jp, "\u{c1}\u{81}", false),
+        None
+    );
+    let j = checks::transformation_request(json, &jp, "\\\\", false).unwrap();
+    assert!(j.ends_with("{\"a\":\"\\\\\\\\\"}"), "{j}");
+    // burp.Zm3o.ZK: appended to a non-empty value, never to a name.
+    assert!(checks::transformation_appends(&q));
+    assert!(!checks::transformation_appends(&InsertionPoint::new(
+        IpKind::Query,
+        "q",
+        ""
+    )));
+    assert!(!checks::transformation_appends(&InsertionPoint::new(
+        IpKind::ParamName(NameSite::Url),
+        "1",
+        "1"
+    )));
+    // burp.Zeo6.Zh: every kind, but not the server-side skip list.
+    let check = checks::POINT_CHECKS
+        .iter()
+        .find(|c| c.id() == "active.suspicious-input-transformation")
+        .unwrap();
+    assert!(check.server_side() && check.applies_to(&header) && check.applies_to(&jp));
+}
+
+/// Stage A4's stored suspicious input transformation: input stored by POST
+/// /comment and URL-decoded once more by GET /decoded. A retrieval page
+/// that only shows the input (GET /list) raises nothing.
+#[test]
+fn stage_a4_finds_stored_suspicious_input_transformation() {
+    let name = "Suspicious input transformation (stored)";
+    let run = |retrieval: &str| {
+        let (port, _) = guestbook(false);
+        let shared = Shared::new();
+        let item = |method: &str, path: &str, body: &str| {
+            let entry = guestbook_entry(port, method, path, body);
+            crate::stored::Item {
+                req: String::from_utf8_lossy(&entry.req_raw).into_owned(),
+                entry,
+                host: "127.0.0.1".into(),
+                port,
+                https: false,
+            }
+        };
+        let pair = crate::stored::Pair {
+            item: item("POST", "/comment", "c=hi"),
+            point: InsertionPoint::new(IpKind::Body, "c", "hi"),
+            retrieval: item("GET", retrieval, ""),
+            injection: (vec![], None),
+        };
+        let cx = checks::PairCtx::new(shared.clone(), pair);
+        checks::STORED_CHECKS
+            .iter()
+            .find(|c| c.issue() == name)
+            .unwrap()
+            .run(&cx);
+        issues_named(&shared, name)
+    };
+    let hits = run("/decoded");
+    assert_eq!(
+        hits.len(),
+        1,
+        "{:?}",
+        hits.iter().map(|i| i.detail.clone()).collect::<Vec<_>>()
+    );
+    let h = &hits[0];
+    assert_eq!(
+        (h.path.as_str(), h.sev.as_str(), h.confidence.as_str()),
+        ("/comment", "info", "Firm")
+    );
+    assert!(
+        h.detail.starts_with("The application appears to URL-decode the value of the <b>c</b> request parameter, and echo the result in a later response.<br><br>The payload <strong>")
+            && h.detail.contains("</strong> submitted to the URL http://127.0.0.1:")
+            && h.detail.contains("/comment is copied into the response for the URL http://127.0.0.1:")
+            && h.detail.contains("/decoded. This payload contains the %41 sequence, corresponding to the character 'A'.")
+            && h.detail.ends_with("<br><br>WebProbe has captured the first observed location where this stored input is returned. There might be other locations within the application where the same input is returned. To identify all such locations, perform a full crawl of the application and then do a global search for the highlighted value."),
+        "{}",
+        h.detail
+    );
+    assert_eq!(h.evidence.len(), 2, "injection and retrieval exchanges");
+    assert!(run("/list").is_empty(), "a page that only shows the input");
 }

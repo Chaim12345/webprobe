@@ -283,6 +283,7 @@ fn registry_order_is_pinned() {
             "active.client-side-template-injection",
             "active.php-code-injection",
             "active.input-returned-reflected",
+            "active.suspicious-input-transformation",
             "active.http-response-header-injection",
             "active.open-redirection",
             "active.sql-injection-error",
@@ -307,7 +308,8 @@ fn registry_order_is_pinned() {
             "active.client-side-hpp-stored",
             "active.form-action-hijacking-stored",
             "active.open-redirection-stored",
-            "active.sql-injection-second-order"
+            "active.sql-injection-second-order",
+            "active.suspicious-input-transformation-stored"
         ]
     );
     let requests: Vec<(&str, Scope, Option<&str>)> = REQUEST_CHECKS
@@ -4022,4 +4024,78 @@ fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
     run();
     assert_eq!(attempts.load(Ordering::SeqCst), 2);
     assert!(matches!(direct.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
+}
+
+/// Suspicious input transformation (reflected) against a live lab: /double
+/// URL-decodes `q` a second time; /echo shows it as received, which must
+/// raise nothing (Burp sends `%41` as `%2541`).
+#[test]
+fn suspicious_input_transformation_against_a_live_lab() {
+    fn decode(s: &str) -> Vec<u8> {
+        let b = s.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < b.len() {
+            let hex = |c: u8| (c as char).to_digit(16);
+            if b[i] == b'%'
+                && let (Some(h), Some(l)) = (
+                    b.get(i + 1).and_then(|c| hex(*c)),
+                    b.get(i + 2).and_then(|c| hex(*c)),
+                )
+            {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+            out.push(b[i]);
+            i += 1;
+        }
+        out
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_method, target, _raw| {
+        let q = target
+            .split_once("?q=")
+            .map(|(_, v)| v.split('&').next().unwrap_or(""))
+            .unwrap_or("");
+        let once = decode(q);
+        let shown = if target.starts_with("/double") {
+            decode(&String::from_utf8_lossy(&once))
+        } else {
+            once
+        };
+        let body = format!(
+            "<html><body><p>{}</p></body></html>",
+            String::from_utf8_lossy(&shown)
+        );
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    });
+    let host = format!("127.0.0.1:{port}");
+    let name = "Suspicious input transformation (reflected)";
+    let scan = |path: &str| {
+        lab_scan_full(
+            port,
+            &["active.suspicious-input-transformation"],
+            "GET",
+            path,
+            format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        )
+        .into_iter()
+        .filter(|i| i.0 == name)
+        .collect::<Vec<_>>()
+    };
+    let got = scan("/double?q=x");
+    assert_eq!(got.len(), 1, "{got:?}");
+    let (_, sev, conf, detail) = &got[0];
+    assert_eq!((sev.as_str(), conf.as_str()), ("info", "Firm"));
+    assert!(
+        detail.starts_with("The application appears to URL-decode the value of the <b>q</b> request parameter, and echo the result in the response.<br><br>The payload <strong>")
+            && detail.contains("</strong> was submitted in the q parameter. This payload contains the %41 sequence, corresponding to the character 'A'. The input was copied into the application's response as <strong>")
+            && detail.ends_with("</strong> indicating that the application URL-decoded the sequence.<br><br>It might be possible to use this behavior to bypass input validation by submitting superfluous URL-encodings of any filtered characters."),
+        "{detail}"
+    );
+    assert!(scan("/echo?q=x").is_empty(), "a plain echo");
 }

@@ -244,6 +244,95 @@ impl StoredCheck for SqlInjectionSecondOrder {
     }
 }
 
+/// Suspicious input transformation (stored), burp.Zeo6 in the stored stage
+/// (burp.Zcug registers it for SUSPICIOUS_INPUT_TRANSFORMATION_STORED) with
+/// burp.Zc6w's issue: each probe of [`run_input_transformation_check`],
+/// the plain reflection gate included, goes to the pair's injection
+/// request, and the response to the retrieval request replayed after it is
+/// searched. Information, firm; the injection and retrieval exchanges as
+/// evidence. Only a GET or HEAD retrieval is replayed.
+pub(crate) struct SuspiciousInputTransformationStored;
+
+impl StoredCheck for SuspiciousInputTransformationStored {
+    fn id(&self) -> &'static str {
+        "active.suspicious-input-transformation-stored"
+    }
+    fn issue(&self) -> &'static str {
+        "Suspicious input transformation (stored)"
+    }
+    /// As the reflected check (burp.Zeo6.Zh).
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        SuspiciousInputTransformation.applies_to(ip)
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
+    fn run(&self, cx: &PairCtx) {
+        if cx.stopped() || !cx.retrieval_is_safe() {
+            return;
+        }
+        let pair = &cx.pair;
+        let ip = &pair.point;
+        type Logged = (String, ScanEvidence, ScanEvidence);
+        let log: std::cell::RefCell<Vec<Logged>> = std::cell::RefCell::new(Vec::new());
+        let send = |payload: &str, append: bool| -> Option<Vec<u8>> {
+            if cx.stopped() {
+                return None;
+            }
+            let injected = transformation_request(&pair.item.req, ip, payload, append)?;
+            let (req, resp) = cx
+                .send_following(&pair.item, &injected)
+                .into_iter()
+                .last()?;
+            let injection = cx.record_exchange(req.as_bytes(), resp.as_deref())?;
+            if cx.stopped() {
+                return None;
+            }
+            let (req, resp) = cx
+                .send_following(&pair.retrieval, &pair.retrieval.req)
+                .into_iter()
+                .next()?;
+            let retrieval = cx.record_exchange(req.as_bytes(), resp.as_deref())?;
+            log.borrow_mut()
+                .push((payload.to_string(), injection, retrieval));
+            resp
+        };
+        let hits = run_input_transformation_check(
+            transformation_appends(ip),
+            webprobe_support::util::rnd_id,
+            send,
+        );
+        let log = log.into_inner();
+        let (injection_url, retrieval_url) = (pair.item.url(), pair.retrieval.url());
+        let issues: Vec<ScanIssue> = hits
+            .into_iter()
+            .map(|h| {
+                let mut i = mk(
+                    "info",
+                    self.issue(),
+                    &pair.item.entry,
+                    transformation_detail(
+                        h.variant,
+                        &ip.describe_bold(),
+                        &ip.describe_short(false),
+                        Some((&injection_url, &retrieval_url)),
+                        &h.payload,
+                        &h.reflection,
+                    ),
+                );
+                i.confidence = "Firm".into();
+                let ev = log.iter().rev().find(|(p, ..)| *p == h.payload);
+                i.with_evidence(
+                    ev.map(|(_, inj, ret)| vec![inj.clone(), ret.clone()])
+                        .unwrap_or_default(),
+                )
+            })
+            .collect();
+        cx.report(issues);
+        cx.progress();
+    }
+}
+
 /// Stage A4 checks, in run order.
 pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[
     &StoredXss,
@@ -253,6 +342,7 @@ pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[
     &FormActionHijackingStored,
     &OpenRedirectionStored,
     &SqlInjectionSecondOrder,
+    &SuspiciousInputTransformationStored,
 ];
 
 /// One pair being audited in stage A4.

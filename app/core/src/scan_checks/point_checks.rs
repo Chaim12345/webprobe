@@ -977,3 +977,219 @@ impl RequestCheck for AspNetDebugging {
         }
     }
 }
+
+// ---------------------------------------------------------------- suspicious input transformation
+
+/// burp.Zc1o (URL / body parameters, cookies, parameter names) and, with
+/// `slash` false, burp.Zpap (URL path folder and filename; it leaves `/`
+/// alone): the bytes of `s` (ISO-8859-1, wider characters as UTF-8) with
+/// space " # % & + , / : ; < = > ? \ ^ { | }, the backquote and every byte outside
+/// 0x20..0x7e percent-encoded in lower-case hex (net.portswigger.Zsh.ZY).
+/// The "leave as is" sets (Zc1o.Zr, Zpap.ZC) are runtime configuration,
+/// assumed empty as in [`encode_url_param`].
+fn burp_url_encode(s: &str, slash: bool) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    let mut push = |b: u8| {
+        let special = matches!(
+            b,
+            b' ' | b'"'
+                | b'#'
+                | b'%'
+                | b'&'
+                | b'+'
+                | b','
+                | b':'
+                | b';'
+                | b'<'
+                | b'='
+                | b'>'
+                | b'?'
+                | b'\\'
+                | b'^'
+                | b'`'
+                | b'{'
+                | b'|'
+                | b'}'
+        ) || (slash && b == b'/');
+        if special || !(0x20..0x7f).contains(&b) {
+            out.push_str(&format!("%{b:02x}"));
+        } else {
+            out.push(b as char);
+        }
+    };
+    for c in s.chars() {
+        if (c as u32) <= 0xff {
+            push(c as u32 as u8);
+        } else {
+            let mut buf = [0u8; 4];
+            for &b in c.encode_utf8(&mut buf).as_bytes() {
+                push(b);
+            }
+        }
+    }
+    out
+}
+
+/// The request for one payload of the suspicious input transformation
+/// check, the payload in place of the value or after it (`append`), as
+/// Burp's point encoder for the kind writes it (burp.Zfw9.Zr): burp.Zc1o
+/// for query and body parameters, cookies and URL / body parameter names,
+/// burp.Zpap for path segments, so `%41` arrives as `%2541` and the raw
+/// bytes [0xc1][0x81] as `%c1%81`; a header value as written (burp.Zex2).
+/// The other kinds go through [`inject_payload`], which builds the request
+/// as a UTF-8 string: a payload with bytes above 0x7f cannot be placed there
+/// byte for byte, so None (that probe is not sent for those kinds).
+pub(crate) fn transformation_request(
+    req: &str,
+    ip: &InsertionPoint,
+    payload: &str,
+    append: bool,
+) -> Option<String> {
+    use crate::scan::insertion::NameSite;
+    if ip.parent.is_none() {
+        let url = |base: &str, slash: bool| {
+            let p = burp_url_encode(payload, slash);
+            if append { format!("{base}{p}") } else { p }
+        };
+        match &ip.kind {
+            // A query or cookie value is kept as sent, already encoded.
+            IpKind::Query | IpKind::Cookie => return Some(inject(req, ip, &url(&ip.value, true))),
+            // A form body value is kept decoded.
+            IpKind::Body => {
+                return Some(inject(
+                    req,
+                    ip,
+                    &url(&burp_url_encode(&ip.value, true), true),
+                ));
+            }
+            IpKind::ParamName(NameSite::Url | NameSite::Body | NameSite::PhpPathInfo) => {
+                return Some(inject(req, ip, &url("", true)));
+            }
+            IpKind::PathFolder(_) | IpKind::PathFilename(_) => {
+                return Some(inject(req, ip, &url(&ip.value, false)));
+            }
+            // [`inject`] URL-decodes a header value: a '%' is sent as "%25".
+            IpKind::Header => {
+                let v = if append {
+                    format!("{}{payload}", ip.value)
+                } else {
+                    payload.to_string()
+                };
+                return v
+                    .is_ascii()
+                    .then(|| inject(req, ip, &v.replace('%', "%25")));
+            }
+            IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(NameSite::Multipart)
+            | IpKind::Base64 { .. } => {}
+        }
+    }
+    let v = if append {
+        format!("{}{payload}", ip.value)
+    } else {
+        payload.to_string()
+    };
+    v.is_ascii().then(|| inject_payload(req, ip, &v))
+}
+
+/// burp.Zm3o.ZK: the payload is also appended to the value when the value
+/// is not empty and the point is not a parameter name.
+pub(crate) fn transformation_appends(ip: &InsertionPoint) -> bool {
+    !ip.value.is_empty() && !matches!(ip.kind, IpKind::ParamName(_))
+}
+
+/// Suspicious input transformation (reflected), burp.Zeo6 in the audit
+/// stage (burp.Zcug registers it for SUSPICIOUS_INPUT_TRANSFORMATION_
+/// REFLECTED) with burp.Zppb's issue: the probes of
+/// [`run_input_transformation_check`] against the point, one issue per
+/// variant found, information, firm (burp.Zwvh.Zm: `new Zrh(type, variant,
+/// 0, .., (byte) 2, (byte) 1, ..)`), the probe's exchange as evidence.
+/// Burp shares the plain reflection probe with Input returned in response
+/// (reflected) (burp.Zw7s); this check sends its own.
+pub(crate) struct SuspiciousInputTransformation;
+
+impl PointCheck for SuspiciousInputTransformation {
+    fn id(&self) -> &'static str {
+        "active.suspicious-input-transformation"
+    }
+    fn issue(&self) -> &'static str {
+        "Suspicious input transformation (reflected)"
+    }
+    /// burp.Zeo6.Zh is only `Zgx0.Zn` (not on the server-side skip list):
+    /// every kind.
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
+    fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
+        if cx.stopped() {
+            return;
+        }
+        let ip = pt.ip;
+        let log: std::cell::RefCell<Vec<(String, ScanEvidence)>> =
+            std::cell::RefCell::new(Vec::new());
+        let send = |payload: &str, append: bool| -> Option<Vec<u8>> {
+            if cx.stopped() {
+                return None;
+            }
+            let req = transformation_request(&cx.req, ip, payload, append)?;
+            let resp = cx.send(req.as_bytes());
+            log.borrow_mut().push((
+                payload.to_string(),
+                ScanEvidence::new(req.as_bytes(), resp.as_deref()),
+            ));
+            resp
+        };
+        let hits = run_input_transformation_check(
+            transformation_appends(ip),
+            webprobe_support::util::rnd_id,
+            send,
+        );
+        let log = log.into_inner();
+        let issues: Vec<ScanIssue> = hits
+            .into_iter()
+            .map(|h| {
+                let mut i = mk(
+                    "info",
+                    self.issue(),
+                    &cx.entry,
+                    transformation_detail(
+                        h.variant,
+                        &ip.describe_bold(),
+                        &ip.describe_short(false),
+                        None,
+                        &h.payload,
+                        &h.reflection,
+                    ),
+                );
+                i.confidence = "Firm".into();
+                let ev = log.iter().rev().find(|(p, _)| *p == h.payload);
+                i.with_evidence(ev.map(|(_, e)| e.clone()).into_iter().collect())
+            })
+            .collect();
+        cx.report(issues);
+        cx.progress();
+    }
+}
