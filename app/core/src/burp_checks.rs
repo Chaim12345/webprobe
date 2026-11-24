@@ -667,6 +667,34 @@ fn is_xml_policy(resp: &[u8], root: &str) -> bool {
 /// (burp.Zudv.java:45-66), `domain uri="..."` for Silverlight
 /// (burp.Zebv.java:45-67). Attribute order and quoting follow what servers
 /// actually ship; single and double quotes both parse.
+fn xml_attribute_value(tag: &str, name: &str) -> Option<String> {
+    let mut rest = tag;
+    while let Some(i) = rest.find(name) {
+        let (before, matched) = rest.split_at(i);
+        let after_name = &matched[name.len()..];
+        let boundary = before
+            .as_bytes()
+            .last()
+            .is_none_or(|b| b.is_ascii_whitespace() || *b == b'<');
+        let after_name = after_name.trim_start();
+        if boundary {
+            if let Some(value) = after_name.strip_prefix('=') {
+                let value = value.trim_start();
+                if let Some(quote) = value.chars().next().filter(|q| *q == '"' || *q == '\'') {
+                    if let Some(end) = value[1..].find(quote) {
+                        return Some(value[1..1 + end].to_string());
+                    }
+                }
+            }
+        }
+        rest = after_name;
+        if rest.is_empty() {
+            break;
+        }
+    }
+    None
+}
+
 fn policy_domains(body: &str, kind: CrossDomainKind) -> Vec<String> {
     let (elem, attr) = match kind {
         CrossDomainKind::Flash => ("<allow-access-from", "domain"),
@@ -677,16 +705,13 @@ fn policy_domains(body: &str, kind: CrossDomainKind) -> Vec<String> {
     while let Some(i) = rest.find(elem) {
         let tag_end = rest[i..].find('>').map(|e| i + e).unwrap_or(rest.len());
         let tag = &rest[i..tag_end];
-        if let Some(a) = tag.find(&format!("{attr}=")) {
-            let after = &tag[a + attr.len() + 1..];
-            let q = after.chars().next();
-            if let Some(q) = q.filter(|q| *q == '"' || *q == '\'') {
-                if let Some(end) = after[1..].find(q) {
-                    out.push(after[1..1 + end].to_string());
-                }
-            }
+        if let Some(value) = xml_attribute_value(tag, attr) {
+            out.push(value);
         }
         rest = &rest[tag_end..];
+        if rest.is_empty() {
+            break;
+        }
     }
     out
 }
@@ -991,6 +1016,23 @@ Content-Type: text/x-cross-domain-policy
         assert_eq!(
             crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash),
             ["www.example.com"]
+        );
+
+        // Attribute names must match exactly: a prefix/suffix attribute
+        // such as notdomain or subdomain must not be mistaken for domain.
+        let policy = br#"HTTP/1.1 200 OK
+
+<cross-domain-policy><allow-access-from notdomain="*" subdomain="*.example.com"/></cross-domain-policy>"#;
+        assert!(crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash).is_empty());
+
+        // XML permits whitespace around '='; the exact domain attribute
+        // remains recognized with either quote style.
+        let policy = br#"HTTP/1.1 200 OK
+
+<cross-domain-policy><allow-access-from domain = '*.example.com'/></cross-domain-policy>"#;
+        assert_eq!(
+            crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash),
+            ["*.example.com"]
         );
 
         // Not 200, or not XML: nothing. An unrelated-only policy: nothing.
