@@ -13,6 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # The restored target/ cache holds incremental state from older commits;
+  # replayed from it, a dead_code diagnostic does not fulfil #[expect] and
+  # clippy fails on correct code. CI always compiles without it.
+  CARGO_INCREMENTAL: "0"
   CARGO_BUILD_RUSTC: rustc
   CARGO_BUILD_RUSTC_WRAPPER: ""
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: cc
@@ -51,11 +55,11 @@ jobs:
             app/target
           key: workspace-${{ runner.os }}-${{ hashFiles('app/Cargo.lock') }}
           restore-keys: workspace-${{ runner.os }}-
-      - name: Architecture ratchet (ADR 0002): cycles and structural counts only go down
+      - name: "Architecture ratchet (ADR 0002): cycles and structural counts only go down"
         run: |
           python3 ../scripts/test-arch-gate.py
           python3 ../scripts/arch-gate.py
-      - name: Scanner issue-type coverage (roadmap F-08): a covered Burp issue type may not lose its check
+      - name: "Scanner issue-type coverage (roadmap F-08): a covered Burp issue type may not lose its check"
         run: python3 ../scripts/issue-coverage.py
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings

@@ -7,6 +7,10 @@ permissions:
   contents: read
 
 env:
+  # The restored target/ cache holds incremental state from older commits;
+  # replayed from it, a dead_code diagnostic does not fulfil #[expect] and
+  # clippy fails on correct code. CI always compiles without it.
+  CARGO_INCREMENTAL: "0"
   CARGO_BUILD_RUSTC: rustc
   CARGO_BUILD_RUSTC_WRAPPER: ""
   RUSTFLAGS: ""
