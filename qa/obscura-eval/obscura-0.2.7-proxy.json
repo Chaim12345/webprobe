@@ -1,0 +1,38 @@
+{
+ "rc": 0,
+ "through_proxy": [
+  [
+   "GET",
+   "/"
+  ],
+  [
+   "GET",
+   "/api"
+  ],
+  [
+   "GET",
+   "/app.js"
+  ],
+  [
+   "GET",
+   "/i.png"
+  ],
+  [
+   "GET",
+   "/s.css"
+  ],
+  [
+   "POST",
+   "/xhr"
+  ]
+ ],
+ "DIRECT_bypassing_proxy": [],
+ "proxy_saw_post_body": [
+  [
+   "POST",
+   "http://127.0.0.1:<origin>/xhr",
+   "k=v"
+  ]
+ ],
+ "stderr": ""
+}

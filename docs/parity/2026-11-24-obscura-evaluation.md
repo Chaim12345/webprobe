@@ -4,8 +4,16 @@
 Apache-2.0) replace the Chromium that WebProbe launches for the browser crawl (`crawl.rs` `browser_crawl`)
 and the dynamic DOM probe (`crawl.rs` `dom_analysis_probe`, R-13)?
 
-**Answer:** not today. It runs the page JavaScript correctly, but it fails three things WebProbe depends on,
-one of them a safety guarantee. Chromium stays the only engine; nothing in the product was switched.
+**Answer:** not today, for these two DevTools-driven paths. It runs the page JavaScript correctly, but over
+DevTools it fails three things those paths depend on, one of them a safety guarantee. Chromium stays the only
+engine for `browser_crawl` and `dom_analysis_probe`; nothing in the product was switched.
+
+**Scope.** WebProbe already uses Obscura elsewhere, and this document does not change that.
+`app/core/src/headless.rs` has a `HeadlessBrowser` trait whose first choice is Obscura (then Lightpanda, then
+Chromium) for the JS-aware crawl (`headless::js_crawl`, task P-16, `docs/EVAL-OBSCURA.md`). That path runs
+`obscura fetch --dump html` as a one-shot process through the WebProbe proxy with the WebProbe CA in
+`SSL_CERT_FILE`, so it needs none of the DevTools features measured here. The results below apply only to the
+two paths in `crawl.rs` that drive a browser over DevTools.
 
 ## What was tested
 
@@ -31,7 +39,8 @@ one of them a safety guarantee. Chromium stays the only engine; nothing in the p
 | `Fetch` interception of sub-resources | all 6 requests paused, **0** reached the server | paused events arrive, but `/s.css` and `/app.js` **still went to the server directly** and the fulfilled script body was ignored |
 | `Network.setBypassServiceWorker` | works | **unknown method** |
 | `Network.setBlockedURLs` | works | works (off-target script and image were not fetched) |
-| Self-signed / untrusted HTTPS target | works with `--ignore-certificate-errors` | **fails** (`invalid peer certificate`), no flag to accept it |
+| Self-signed / untrusted HTTPS target, direct | works with `--ignore-certificate-errors` | **fails** (`invalid peer certificate`), no flag to accept it; a custom CA can be trusted through `SSL_CERT_FILE` |
+| Egress with `--proxy` (`fetch` mode) | not measured here | document, stylesheet, script, image, `fetch` and XHR POST all went through the proxy, none direct; the proxy saw the POST body |
 | Host confinement (`--host-resolver-rules`) | available | no equivalent |
 | Startup on this box | ~0.2 s to DevTools ready | ~instant; 26 MB RSS idle |
 
@@ -42,8 +51,9 @@ one of them a safety guarantee. Chromium stays the only engine; nothing in the p
    bypass interception, so the "zero direct egress" property proved by
    `host_probe_unknown_routed_batch_has_zero_direct_egress` and the DOM route tests would not hold.
 2. **Untrusted certificates.** Test targets routinely present self-signed or internal-CA certificates.
-   Obscura refuses them and offers no override, so both the crawl and the DOM probe would silently lose
-   HTTPS targets.
+   Connecting directly, Obscura refuses them and offers no override, so both paths would silently lose
+   HTTPS targets. This does not affect the existing `headless.rs` crawl: there Obscura talks to the WebProbe
+   proxy and trusts the WebProbe CA, and WebProbe makes the connection to the target.
 3. **Fidelity.** DOM-based findings are compared against Burp, whose embedded browser is Chromium. Obscura is
    an independent engine (its README lists long-tail CSS and Web API differences), so sink reachability can
    differ from what a real victim browser does.
@@ -54,11 +64,28 @@ HTTPS targets with untrusted certificates, and would need a second CDP connectio
 ## What would change the answer
 
 Re-run `qa/obscura-eval/*.py` against a newer Obscura when it has: enforced sub-resource `Fetch`
-interception, a certificate-error override, and `postData` on requests. Until then an Obscura backend would
-be a weaker, separately-maintained path for no user-visible gain: Chromium start-up measured here is 0.2 s.
+interception, a certificate-error override, and `postData` on requests. Until then an Obscura backend for
+these two paths would be a weaker, separately-maintained path for no user-visible gain: Chromium start-up
+measured here is 0.2 s.
+
+Two things were measured that shorten the distance, neither of them built into WebProbe:
+
+- **Proxy routing.** With `--proxy`, all six request classes of a test page went through the proxy and none
+  went direct (`proxy-egress-probe.py`, result in `obscura-0.2.7-proxy.json`). A design that points Obscura
+  at the WebProbe proxy, as `headless.rs` already does, could therefore take egress control, POST bodies and
+  raw response heads from the proxy instead of from DevTools. This was measured in `fetch` mode only, not
+  under `serve`.
+- **Certificate override.** A 13-line source patch (`obscura-ignore-cert.patch`, against commit `0ecc417`)
+  adds `OBSCURA_IGNORE_CERT_ERRORS=1`. Built without the render feature and run under `serve`, navigation
+  to the self-signed lab returned no error with the variable set and `invalid peer certificate` without it.
+  Using it means maintaining a fork.
+
+Sub-resource `Fetch` interception stays open: script and stylesheet loads call the HTTP client directly at
+about 13 places in `obscura-browser/src/page.rs`.
 
 ## Limits of this evaluation
 
-One Obscura version, one Linux x86_64 box, loopback labs only. The stealth build, proxy mode and the
-multi-worker server were not exercised. The Chromium self-signed row rests on WebProbe's existing
+One Obscura version, one Linux x86_64 box, loopback labs only. The stealth build and the multi-worker server were not exercised;
+proxy mode was exercised for `fetch` only. In `egress-and-tls-probe.py` read `nav_err` for the certificate
+result: its `self_signed_https` value can repeat the marker of the page loaded just before. The Chromium self-signed row rests on WebProbe's existing
 live-browser tests rather than the second probe, whose Chromium run was cut short.
