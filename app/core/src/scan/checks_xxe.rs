@@ -151,7 +151,9 @@ pub fn run_entity_expansion_check<F: FnMut(&str) -> Option<String>>(
             continue;
         }
         let confirm = expansion_probe_at(&base, doc, point, name, seed, 3);
-        let Some(resp3) = send(&confirm) else { continue };
+        let Some(resp3) = send(&confirm) else {
+            continue;
+        };
         if !resp3.contains(&entity_expansion_marker(seed, 3)) {
             continue;
         }
