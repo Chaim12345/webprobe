@@ -47,6 +47,16 @@ pub fn start_proxy(shared: Arc<Shared>) {
             let listener = TcpListener::bind(&addr);
             match listener {
                 Ok(l) => {
+                    // Port 0 asks the system for a free port. Publish the
+                    // one it gave before reporting the listener as running,
+                    // so whoever reads `proxy_port` reaches this listener.
+                    let addr = match l.local_addr() {
+                        Ok(bound) => {
+                            shared.proxy_port.store(bound.port(), Ordering::SeqCst);
+                            bound.to_string()
+                        }
+                        Err(_) => addr,
+                    };
                     shared.listener_running.store(true, Ordering::SeqCst);
                     shared.log(&format!(
                         "Proxy listener started on {addr}, intercept is {}",
