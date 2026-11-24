@@ -1470,6 +1470,335 @@ pub(crate) fn db_connection_string(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
 }
 
+// ------------------------------------------------------------ forms (burp.Zxro)
+
+/// burp.Zwhc: Zrh bytes 3 / 1.
+pub(crate) const CH_CROSS_DOMAIN_POST: CheckDef = CheckDef {
+    id: "passive.cross-domain-post",
+    name: "Cross-domain POST",
+    sev: "info",
+    confidence: "Certain",
+};
+/// burp.Zbjr: Zrh bytes 3 / 1.
+pub(crate) const CH_FILE_UPLOAD: CheckDef = CheckDef {
+    id: "passive.file-upload",
+    name: "File upload functionality",
+    sev: "info",
+    confidence: "Certain",
+};
+
+/// Cross-domain POST (burp.Zxro.ZA, factory burp.Zwhc, text burp.Zwfi): a
+/// form that POSTs to another domain (burp.Zw4k.ZU against the page's
+/// host). One issue per form; the pervasive identifier is the action host.
+pub(crate) fn cross_domain_post(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    if !cx.html {
+        return;
+    }
+    let c = CH_CROSS_DOMAIN_POST;
+    let (base, host) = (page_url(cx.e), cx.e.host.to_lowercase());
+    for f in forms(&cx.text, &cx.low)
+        .into_iter()
+        .filter(|f| f.method_post)
+    {
+        let target = url_host(&resolve(&base, &f.action));
+        if !other_domain(&host, &target) {
+            continue;
+        }
+        let mut t = format!(
+            "The page contains a form which POSTs data to the domain <b>{}</b>. The form contains the following fields:<ul>",
+            util::html_encode(&target)
+        );
+        for name in &f.fields {
+            t.push_str(&format!("<li>{}</li>", util::html_encode(name)));
+        }
+        t.push_str("</ul>");
+        v.push(issue(c, cx, c.sev, c.confidence, target, t));
+    }
+}
+
+/// File upload functionality (burp.Zxro.Za, factory burp.Zbjr, text
+/// burp.Zwff): a POST form with a named file input.
+pub(crate) fn file_upload(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    if !cx.html {
+        return;
+    }
+    let c = CH_FILE_UPLOAD;
+    let base = page_url(cx.e);
+    for f in forms(&cx.text, &cx.low) {
+        if !(f.method_post && f.file_upload) {
+            continue;
+        }
+        let t = format!(
+            "The page contains a form which is used to submit a user-supplied file to the following URL:<ul><li>{}</li></ul>Note that WebProbe has not identified any specific security vulnerabilities with this functionality, and you should manually review it to determine whether any problems exist.",
+            util::html_encode(&resolve(&base, &f.action))
+        );
+        v.push(issue(c, cx, c.sev, c.confidence, String::new(), t));
+    }
+}
+
+/// burp.Zcxc: Zrh bytes 3 / 1.
+pub(crate) const CH_REFERER_LEAK: CheckDef = CheckDef {
+    id: "passive.cross-domain-referer-leakage",
+    name: "Cross-domain Referer leakage",
+    sev: "info",
+    confidence: "Certain",
+};
+
+/// burp.Zgk4.ZD: the Referrer-Policy values Burp recognises.
+const REFERRER_POLICIES: [&str; 8] = [
+    "no-referrer",
+    "no-referrer-when-downgrade",
+    "same-origin",
+    "origin",
+    "strict-origin",
+    "origin-when-cross-origin",
+    "strict-origin-when-cross-origin",
+    "unsafe-url",
+];
+/// burp.Zgk4.Zj: the policies that keep the query string from another
+/// origin.
+const REFERRER_SAFE: [&str; 6] = [
+    "no-referrer",
+    "same-origin",
+    "origin",
+    "strict-origin",
+    "origin-when-cross-origin",
+    "strict-origin-when-cross-origin",
+];
+
+/// burp.Zgk4.Ze: the last recognised value of the response's
+/// Referrer-Policy headers is a safe one.
+fn referrer_policy_safe(cx: &PassiveCtx) -> bool {
+    let mut last = None;
+    for (k, val) in &cx.p.headers {
+        if k.eq_ignore_ascii_case("Referrer-Policy") {
+            for token in val.split(',') {
+                let t = token.trim().to_ascii_lowercase();
+                if REFERRER_POLICIES.contains(&t.as_str()) {
+                    last = Some(t);
+                }
+            }
+        }
+    }
+    last.is_some_and(|p| REFERRER_SAFE.contains(&p.as_str()))
+}
+
+/// Cross-domain Referer leakage (burp.Zgk4.ZT / ZB, factory burp.Zcxc,
+/// text burp.Zwfb): the request URL has a query string and the response
+/// links to another domain (burp.Zw4k.ZU). Not reported when the browser
+/// would withhold the query: a safe Referrer-Policy header, a link from
+/// HTTPS to HTTP, `rel="noreferrer"`, or a safe `referrerpolicy`
+/// attribute. One issue per linked host, listing its URLs in order.
+pub(crate) fn cross_domain_referer(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    let c = CH_REFERER_LEAK;
+    let has_query =
+        cx.e.path
+            .split_once('?')
+            .is_some_and(|(_, q)| !q.is_empty());
+    if !has_query || referrer_policy_safe(cx) {
+        return;
+    }
+    let host = cx.e.host.to_lowercase();
+    let mut by_host: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for l in links(cx) {
+        let h = url_host(&l.url);
+        if !other_domain(&host, &h) || (cx.e.https && !l.url.starts_with("https:")) {
+            continue;
+        }
+        let end = tag_end(&cx.low, l.at);
+        let (low_tag, tag) = (&cx.low[l.at..end], &cx.text[l.at..end]);
+        let no_referrer = attr(low_tag, tag, "rel").is_some_and(|r| r == "noreferrer");
+        let safe_attr = attr(low_tag, tag, "referrerpolicy")
+            .is_some_and(|p| REFERRER_SAFE.contains(&p.trim().to_ascii_lowercase().as_str()));
+        if !no_referrer && !safe_attr {
+            by_host.entry(h).or_default().insert(l.url);
+        }
+    }
+    let page = util::html_encode(&page_url(cx.e));
+    for (h, urls) in by_host {
+        let mut t = format!(
+            "The page was loaded from a URL containing a query string:<ul><li>{page}</li></ul>The response contains the following "
+        );
+        t.push_str(if urls.len() == 1 {
+            "link to another domain:<ul>"
+        } else {
+            "links to other domains:<ul>"
+        });
+        for u in &urls {
+            t.push_str(&format!("<li>{}</li>", util::html_encode(u)));
+        }
+        t.push_str("</ul>");
+        v.push(issue(c, cx, c.sev, c.confidence, h, t));
+    }
+}
+
+/// burp.Zw8m: Zrh bytes 2 / 1.
+pub(crate) const CH_LONG_REDIRECT: CheckDef = CheckDef {
+    id: "passive.long-redirection",
+    name: "Long redirection response",
+    sev: "info",
+    confidence: "Firm",
+};
+
+/// Long redirection response (burp.Zg7g, factory burp.Zw8m; burp.Zwu5
+/// gives it no detail text): a 3xx response with a body of 2,048 bytes or
+/// more.
+pub(crate) fn long_redirection(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    let c = CH_LONG_REDIRECT;
+    let redirect = cx.p.status.len() == 3 && cx.p.status.starts_with('3');
+    if redirect && cx.resp.len().saturating_sub(cx.p.head_len) >= 2048 {
+        v.push(issue(
+            c,
+            cx,
+            c.sev,
+            c.confidence,
+            String::new(),
+            String::new(),
+        ));
+    }
+}
+
+// ------------------------------------------------------------ request parameters (burp.Zs8g)
+
+/// burp.Zp_n: Zrh bytes 2 / 1.
+pub(crate) const CH_BASE64_PARAM: CheckDef = CheckDef {
+    id: "passive.base64-parameter",
+    name: "Base64-encoded data in parameter",
+    sev: "info",
+    confidence: "Firm",
+};
+/// burp.Zgrf: Zrh bytes 1 / 3.
+pub(crate) const CH_SQL_STATEMENT: CheckDef = CheckDef {
+    id: "passive.sql-statement-in-parameter",
+    name: "SQL statement in request parameter",
+    sev: "medium",
+    confidence: "Tentative",
+};
+
+/// burp.Zs8g.Zl with net.portswigger.Zq0.ZC and Zyn.Za: at least 16 bytes
+/// of well-formed Base64 that decode to printable ASCII text. Returns the
+/// decoded text.
+fn base64_text(value: &[u8]) -> Option<String> {
+    if value.len() < 16 || !is_base64(value) {
+        return None;
+    }
+    let decoded = util::b64_decode(&latin1(value)).ok()?;
+    decoded
+        .iter()
+        .all(|&b| (b >= 32 || matches!(b, b'\n' | b'\r' | b'\t')) && b < 127)
+        .then(|| latin1(&decoded))
+}
+
+/// Base64-encoded data in parameter (burp.Zs8g.ZR / Zg, factory
+/// burp.Zp_n, text burp.Zwjq): a request parameter other than
+/// `__VIEWSTATE` whose URL-decoded value is Base64 text. One issue per
+/// parameter name, listing `name = decoded`.
+pub(crate) fn base64_parameter(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    let c = CH_BASE64_PARAM;
+    let mut by_name: Vec<(String, Vec<String>)> = Vec::new();
+    for p in request_params(cx) {
+        if p.name == "__VIEWSTATE" {
+            continue;
+        }
+        let Some(text) = base64_text(&pct_decode(&p.raw)) else {
+            continue;
+        };
+        let item = format!("{} = {}", p.name, text.replace(['\r', '\n', '\t'], ""));
+        match by_name.iter_mut().find(|(n, _)| *n == p.name) {
+            Some((_, items)) if !items.contains(&item) => items.push(item),
+            Some(_) => {}
+            None => by_name.push((p.name, vec![item])),
+        }
+    }
+    for (name, items) in by_name {
+        let mut t = String::from(if items.len() == 1 {
+            "The following parameter appears to contain Base64-encoded data:<ul>"
+        } else {
+            "The following parameters appear to contain Base64-encoded data:<ul>"
+        });
+        for it in &items {
+            t.push_str(&format!("<li><b>{}</b></li>", util::html_encode(it)));
+        }
+        t.push_str("</ul>");
+        v.push(issue(c, cx, c.sev, c.confidence, name, t));
+    }
+}
+
+/// burp.Zmbb.Zf: per statement, the two keywords that must both appear,
+/// in this order (the keywords after them only add highlights in Burp).
+const SQL_STATEMENTS: [[&str; 2]; 4] = [
+    ["select", "from"],
+    ["insert", "into"],
+    ["update", "set"],
+    ["delete", "from"],
+];
+
+/// The character a `%xx` escape at `at` stands for (net.portswigger.Zel.Zr
+/// on three characters); an invalid escape stays `%`.
+fn escape_at(s: &[char], at: usize) -> char {
+    match (s[at + 1].to_digit(16), s[at + 2].to_digit(16)) {
+        (Some(h), Some(l)) => char::from_u32(h * 16 + l).unwrap_or('%'),
+        _ => '%',
+    }
+}
+
+/// burp.Zmbb.ZP: the first occurrence of `word` at or after `from`,
+/// accepted only as a whole word that something follows. A neighbour that
+/// is a letter or digit rejects it, whether literal or written as `%xx`;
+/// a `%xx` that stands for anything else (`%20`) is a word boundary.
+/// Returns the index after the word.
+fn sql_word(s: &[char], word: &str, from: usize) -> Option<usize> {
+    let w: Vec<char> = word.chars().collect();
+    let at = (from..=s.len().checked_sub(w.len())?).find(|&i| s[i..i + w.len()] == w[..])?;
+    let end = at + w.len();
+    if end >= s.len() || s[end].is_alphanumeric() {
+        return None;
+    }
+    let escaped_after = s.len() - end >= 3
+        && s[end] == '%'
+        && s[end + 1].is_alphanumeric()
+        && s[end + 2].is_alphanumeric();
+    if escaped_after && escape_at(s, end).is_alphanumeric() {
+        return None;
+    }
+    if at >= 1 && s[at - 1].is_alphanumeric() {
+        let escaped_before = at >= 3 && s[at - 2].is_alphanumeric() && s[at - 3] == '%';
+        if !escaped_before || escape_at(s, at - 3).is_alphanumeric() {
+            return None;
+        }
+    }
+    Some(end)
+}
+
+/// burp.Zmbb.Z_: a lowercased parameter value that holds the two leading
+/// keywords of one SQL statement form, in order.
+fn sql_statement_in(value: &str) -> bool {
+    let s: Vec<char> = value.chars().collect();
+    SQL_STATEMENTS.iter().any(|[first, second]| {
+        sql_word(&s, first, 0).is_some_and(|end| sql_word(&s, second, end).is_some())
+    })
+}
+
+/// SQL statement in request parameter (burp.Zs8g.ZM / Zo, factory
+/// burp.Zgrf; burp.Zwvb gives it no detail text): a request parameter
+/// whose value, as sent, looks like an SQL statement. One issue a request.
+pub(crate) fn sql_statement(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    let c = CH_SQL_STATEMENT;
+    if request_params(cx)
+        .iter()
+        .any(|p| sql_statement_in(&p.raw.to_lowercase()))
+    {
+        v.push(issue(
+            c,
+            cx,
+            c.sev,
+            c.confidence,
+            String::new(),
+            String::new(),
+        ));
+    }
+}
+
 #[cfg(test)]
 mod php_depth_tests {
     use super::php;
