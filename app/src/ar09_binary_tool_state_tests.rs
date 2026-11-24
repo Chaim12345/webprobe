@@ -109,6 +109,10 @@ fn repeater_send_once_sends_the_lossy_body_with_a_stale_content_length() {
         .recv_timeout(Duration::from_secs(5))
         .expect("origin saw the Repeater request");
     println!("repeater body : {}", hex(body_of(&wire)));
+    assert!(
+        String::from_utf8_lossy(&wire[..head_len(&wire)]).starts_with("POST /ar09?edited=1 "),
+        "the edited request line reached the wire"
+    );
     assert_eq!(body_of(&wire), LOSSY_BODY, "send_once sent the lossy body");
     assert_eq!(declared_len(&wire), 6, "header keeps the captured length");
     assert_eq!(body_of(&wire).len(), 12, "12 bytes under a 6-byte declaration");
