@@ -1,5 +1,5 @@
 {
-  "covered": 149,
+  "covered": 155,
   "not_covered": {
     "ASP.NET ViewState without MAC enabled": {
       "note": "",
@@ -13,13 +13,9 @@
       "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
       "status": "todo"
     },
-    "Base64-encoded data in parameter": {
-      "note": "",
-      "status": "todo"
-    },
     "Browser cross-site scripting filter disabled": {
-      "note": "",
-      "status": "todo"
+      "note": "Burp build 52685 defines the type (text class Zwja) but no class raises it: nothing references Zcot.BROWSER_XSS_FILTER_DISABLED",
+      "status": "excluded"
     },
     "Client-side SQL injection (DOM-based)": {
       "note": "",
@@ -41,14 +37,6 @@
       "note": "",
       "status": "todo"
     },
-    "Cross-domain POST": {
-      "note": "",
-      "status": "todo"
-    },
-    "Cross-domain Referer leakage": {
-      "note": "",
-      "status": "todo"
-    },
     "Extension generated issue": {
       "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
       "status": "todo"
@@ -58,10 +46,6 @@
       "status": "todo"
     },
     "External service interaction (SMTP)": {
-      "note": "",
-      "status": "todo"
-    },
-    "File upload functionality": {
       "note": "",
       "status": "todo"
     },
@@ -89,10 +73,6 @@
       "note": "",
       "status": "todo"
     },
-    "Long redirection response": {
-      "note": "",
-      "status": "todo"
-    },
     "Manually generated issue": {
       "note": "type assigned to issues created by a BCheck, a Bambda, an extension or the user, not by a scanner check",
       "status": "todo"
@@ -114,10 +94,6 @@
       "status": "decision"
     },
     "SQL injection (second order)": {
-      "note": "",
-      "status": "todo"
-    },
-    "SQL statement in request parameter": {
       "note": "",
       "status": "todo"
     },

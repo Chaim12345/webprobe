@@ -205,6 +205,12 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(pack::CH_SESSION_TOKEN_URL, pack::session_token_in_url),
     unit!(pack::CH_DUPLICATE_COOKIES, pack::duplicate_cookies),
     unit!(pack::CH_CROSS_DOMAIN_SCRIPT, pack::cross_domain_script),
+    unit!(pack::CH_CROSS_DOMAIN_POST, pack::cross_domain_post),
+    unit!(pack::CH_FILE_UPLOAD, pack::file_upload),
+    unit!(pack::CH_LONG_REDIRECT, pack::long_redirection),
+    unit!(pack::CH_REFERER_LEAK, pack::cross_domain_referer),
+    unit!(pack::CH_BASE64_PARAM, pack::base64_parameter),
+    unit!(pack::CH_SQL_STATEMENT, pack::sql_statement),
     unit!(pack::CH_COOKIE_PARENT_DOMAIN, pack::cookie_parent_domain),
     unit!(pack::CH_PASSWORD_URL_QUERY, |cx, v| pack::passwords(
         cx,
@@ -260,11 +266,30 @@ pub(crate) const CH_PASSWORD_GET: CheckDef = CheckDef {
     confidence: "Certain",
 };
 
-/// One form of an HTML page: method, action, and its named password fields.
+/// One form of an HTML page: method, action, its named fields in document
+/// order (burp.Zem.ZA4: input, select, textarea and button elements) and,
+/// among them, the password fields and whether one is a file input.
 pub(crate) struct Form {
     pub method_get: bool,
+    pub method_post: bool,
     pub action: String,
+    pub fields: Vec<String>,
     pub passwords: Vec<String>,
+    pub file_upload: bool,
+}
+
+/// The form-field element a lowercase tag opens, if any.
+fn field_tag(rest: &str) -> bool {
+    ["input", "select", "textarea", "button"]
+        .into_iter()
+        .any(|t| {
+            rest.strip_prefix(t).is_some_and(|after| {
+                after
+                    .chars()
+                    .next()
+                    .is_none_or(|c| c.is_ascii_whitespace() || c == '>' || c == '/')
+            })
+        })
 }
 
 /// The value of attribute `name` in a lowercase start tag `low_tag`, read
@@ -318,30 +343,48 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
             .unwrap_or(low.len())
             .min(next_form);
         let (low_tag, tag) = (&low[start..tag_end], &text[start..tag_end]);
-        let method_get =
-            attr(low_tag, tag, "method").is_none_or(|m| m.trim().eq_ignore_ascii_case("get"));
+        let method = attr(low_tag, tag, "method");
+        let method_get = method
+            .as_deref()
+            .is_none_or(|m| m.trim().eq_ignore_ascii_case("get"));
+        let method_post = method
+            .as_deref()
+            .is_some_and(|m| m.trim().eq_ignore_ascii_case("post"));
         let action = attr(low_tag, tag, "action").unwrap_or_default();
-        let mut passwords = Vec::new();
+        let (mut fields, mut passwords, mut file_upload) = (Vec::new(), Vec::new(), false);
         let (body_low, body) = (&low[tag_end..end], &text[tag_end..end]);
         let mut j = 0;
-        while let Some(o) = body_low[j..].find("<input") {
+        while let Some(o) = body_low[j..].find('<') {
             let s = j + o;
+            if !field_tag(&body_low[s + 1..]) {
+                j = s + 1;
+                continue;
+            }
             let e = body_low[s..]
                 .find('>')
                 .map(|x| s + x + 1)
                 .unwrap_or(body_low.len());
             let (lt, t) = (&body_low[s..e], &body[s..e]);
-            if attr(lt, t, "type").is_some_and(|ty| ty.trim().eq_ignore_ascii_case("password"))
-                && let Some(n) = attr(lt, t, "name")
-            {
-                passwords.push(n);
+            if let Some(n) = attr(lt, t, "name") {
+                let kind = attr(lt, t, "type")
+                    .filter(|_| lt.starts_with("<input"))
+                    .map(|ty| ty.trim().to_ascii_lowercase());
+                match kind.as_deref() {
+                    Some("password") => passwords.push(n.clone()),
+                    Some("file") => file_upload = true,
+                    _ => {}
+                }
+                fields.push(n);
             }
             j = e;
         }
         out.push(Form {
             method_get,
+            method_post,
             action,
+            fields,
             passwords,
+            file_upload,
         });
         i = end.max(tag_end);
     }
@@ -2086,6 +2129,191 @@ mod tests {
                 .is_empty(),
                 "{neg}"
             );
+        }
+    }
+
+    #[test]
+    fn cross_domain_post_and_file_upload() {
+        // burp.Zxro: a POST form to another domain, and a POST form with a
+        // named file input. A GET form to another domain is neither.
+        let body = "<form method=POST action=\"https://pay.other.net/charge\"><input name=card><input type=password name=pin>\
+                    <select name=cur></select><textarea name=note></textarea><button name=go>Pay</button><input type=submit></form>\
+                    <form method=post action=/upload><input type=file name=doc><input name=title></form>\
+                    <form action=\"https://pay.other.net/search\"><input type=file name=f></form>";
+        let e = ex("/shop", true, HTML, body);
+        let v = only(&e, pack::CH_CROSS_DOMAIN_POST);
+        assert_eq!(
+            names(&v),
+            [("Cross-domain POST".to_string(), "pay.other.net".to_string())]
+        );
+        assert_eq!(
+            v[0].detail,
+            "The page contains a form which POSTs data to the domain <b>pay.other.net</b>. The form contains the following fields:<ul><li>card</li><li>pin</li><li>cur</li><li>note</li><li>go</li></ul>"
+        );
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("info", "Certain")
+        );
+        let u = only(&e, pack::CH_FILE_UPLOAD);
+        assert_eq!(u.len(), 1, "only the POST form with a file input");
+        assert_eq!(
+            u[0].detail,
+            "The page contains a form which is used to submit a user-supplied file to the following URL:<ul><li>https://example.com/upload</li></ul>Note that WebProbe has not identified any specific security vulnerabilities with this functionality, and you should manually review it to determine whether any problems exist."
+        );
+        // The same site under another host name is not another domain.
+        let same = ex(
+            "/",
+            true,
+            HTML,
+            "<form method=post action=\"https://api.example.com/x\"><input name=a></form>",
+        );
+        assert!(only(&same, pack::CH_CROSS_DOMAIN_POST).is_empty());
+        // The password check still sees its fields after the form parser change.
+        let pw = ex("/", true, HTML, "<form><input type=password name=p></form>");
+        assert_eq!(only(&pw, CH_PASSWORD_GET).len(), 1);
+    }
+
+    #[test]
+    fn cross_domain_referer_leakage() {
+        // burp.Zgk4.ZB: a query string in the request URL and a link the
+        // browser would send it to.
+        let body = "<a href=\"https://b.other.net/2\">x</a><img src=\"https://b.other.net/1\">\
+                    <a rel=\"noreferrer\" href=\"https://skip1.net/\">x</a>\
+                    <a referrerpolicy=\" Origin \" href=\"https://skip2.net/\">x</a>\
+                    <a href=\"http://downgrade.net/\">x</a><a href=\"https://www.example.com/\">x</a>";
+        let e = ex("/search?q=secret", true, HTML, body);
+        let v = only(&e, pack::CH_REFERER_LEAK);
+        assert_eq!(
+            names(&v),
+            [(
+                "Cross-domain Referer leakage".to_string(),
+                "b.other.net".to_string()
+            )]
+        );
+        assert_eq!(
+            v[0].detail,
+            "The page was loaded from a URL containing a query string:<ul><li>https://example.com/search?q=secret</li></ul>The response contains the following links to other domains:<ul><li>https://b.other.net/1</li><li>https://b.other.net/2</li></ul>"
+        );
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("info", "Certain")
+        );
+        // No query string, or a safe policy as the last recognised value.
+        assert!(only(&ex("/search", true, HTML, body), pack::CH_REFERER_LEAK).is_empty());
+        let policy = |p: &str| {
+            let h = format!("{HTML}Referrer-Policy: {p}\r\n");
+            only(
+                &ex("/search?q=secret", true, &h, body),
+                pack::CH_REFERER_LEAK,
+            )
+            .len()
+        };
+        assert_eq!(policy("same-origin"), 0);
+        assert_eq!(policy("unsafe-url, strict-origin"), 0);
+        assert_eq!(policy("strict-origin, unsafe-url"), 1);
+        assert_eq!(policy("nonsense"), 1);
+        // From an HTTP page the link to HTTP is no downgrade.
+        let plain = only(
+            &ex("/search?q=secret", false, HTML, body),
+            pack::CH_REFERER_LEAK,
+        );
+        assert_eq!(plain.len(), 2, "b.other.net and downgrade.net");
+    }
+
+    #[test]
+    fn long_redirection_response() {
+        // burp.Zg7g: a 3xx status and a body of at least 2,048 bytes.
+        let with = |status: &str, len: usize| {
+            let mut e = ex("/", true, HTML, "");
+            e.resp_raw = Some(
+                format!(
+                    "HTTP/1.1 {status}\r\nLocation: /next\r\nContent-Length: {len}\r\n\r\n{}",
+                    "a".repeat(len)
+                )
+                .into_bytes()
+                .into(),
+            );
+            only(&e, pack::CH_LONG_REDIRECT)
+        };
+        let v = with("302 Found", 2048);
+        assert_eq!(v.len(), 1);
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("info", "Firm")
+        );
+        assert!(with("302 Found", 2047).is_empty());
+        assert!(with("200 OK", 4096).is_empty());
+    }
+
+    #[test]
+    fn base64_encoded_data_in_parameter() {
+        // burp.Zs8g.ZR: "user=admin;role=1", plain and with its padding escaped.
+        let e = ex(
+            "/?token=dXNlcj1hZG1pbjtyb2xlPTE=&again=dXNlcj1hZG1pbjtyb2xlPTE%3D&short=YWJj&bin=aaaaaaaaaaaaaaaa&__VIEWSTATE=dXNlcj1hZG1pbjtyb2xlPTE=",
+            true,
+            HTML,
+            "x",
+        );
+        let v = only(&e, pack::CH_BASE64_PARAM);
+        assert_eq!(
+            names(&v),
+            [
+                (
+                    "Base64-encoded data in parameter".to_string(),
+                    "token".to_string()
+                ),
+                (
+                    "Base64-encoded data in parameter".to_string(),
+                    "again".to_string()
+                )
+            ],
+            "under 16 bytes, binary content and __VIEWSTATE are not reported"
+        );
+        assert_eq!(
+            v[0].detail,
+            "The following parameter appears to contain Base64-encoded data:<ul><li><b>token = user=admin;role=1</b></li></ul>"
+        );
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("info", "Firm")
+        );
+    }
+
+    #[test]
+    fn sql_statement_in_request_parameter() {
+        // burp.Zmbb: two keywords of one statement form, each a whole word
+        // that something follows; %20 counts as a word boundary.
+        for q in [
+            "q=select+name+from+users",
+            "q=SELECT%20a%20FROM%20t",
+            "q=insert+into+t+values(1)",
+            "a=1&q=update+t+set+a=1",
+            "q=delete+from+t+where+1",
+        ] {
+            let v = only(
+                &ex(&format!("/?{q}"), true, HTML, "x"),
+                pack::CH_SQL_STATEMENT,
+            );
+            assert_eq!(v.len(), 1, "{q}");
+            assert_eq!(
+                (v[0].sev.as_str(), v[0].confidence.as_str()),
+                ("medium", "Tentative")
+            );
+            assert_eq!(v[0].detail, "");
+        }
+        for q in [
+            "q=selection+from+list",
+            "q=select+from",
+            "q=update+my+settings",
+            "q=from+a+select+b",
+            "q=preselect+x+from+y",
+            "q=select%41+x+from+y",
+        ] {
+            let v = only(
+                &ex(&format!("/?{q}"), true, HTML, "x"),
+                pack::CH_SQL_STATEMENT,
+            );
+            assert!(v.is_empty(), "{q}");
         }
     }
 
