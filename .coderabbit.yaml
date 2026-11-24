@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  auto_review:
+    enabled: true
+    # Include parity, stacked branches, and every other PR target.
+    base_branches:
+      - ".*"
+    drafts: true
+    labels: []
+    ignore_title_keywords: []
+    ignore_usernames: []
+    auto_incremental_review: true
+    # Keep reviewing later commits instead of pausing after five.
+    auto_pause_after_reviewed_commits: 0
