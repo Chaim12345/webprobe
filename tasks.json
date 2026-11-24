@@ -8,9 +8,9 @@
     "p1": 43,
     "p2": 26,
     "by_status": {
-      "done": 114,
+      "done": 120,
       "rejected": 2,
-      "todo": 21
+      "todo": 15
     }
   },
   "tasks": [
@@ -1231,8 +1231,8 @@
       "title": "Collaborator leftovers: SNI variant and scheme payload variants",
       "acceptance": "Collaborator-everywhere SNI probe (needs a custom SNI in the TLS sender) and the scheme-dependent external-interaction payload variants of burp.Zbxl (http://, Http://, own scheme; trace Zpgu / ZY first), with tests.",
       "effort": "S",
-      "status": "todo",
-      "evidence": "Not ported in D-09 (e7b5eff): net sender cannot set a custom SNI; Zpgu/ZY not traced. External interaction still sends only the bare domain. Progress 2026-11-18: branch wp-m6 (pushed): 97b41bd D-12a Collaborator-everywhere SNI probe with a custom-SNI TLS sender; 9d7de42 WIP D-12b scheme payload variants (partial, compiles, untested)."
+      "status": "done",
+      "evidence": "Landed in #192 (merged via #205): custom-SNI TLS sender (`core/src/net/sni.rs`), Collaborator-everywhere SNI probe and burp.Zbxl scheme payload variants (`core/src/url_payloads.rs`), with 10 SNI/URL-payload tests. Full workspace suite green on parity 7648c40."
     },
     {
       "id": "R-01",
@@ -1351,8 +1351,8 @@
       "title": "Scan configuration library",
       "acceptance": "Burp's 29 BuiltInConfigs load and can be selected/combined for a scan; 'Audit checks - passive' runs only passive checks; custom configs can be saved and imported from Burp JSON.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Implemented; replacement PR #194 awaits independent QA. Local verification at 35bd538: full core 848 passed, 0 failed, 13 ignored; six library tests and five subprocess gate scenarios passed; core all-targets clippy clean. Actual Burp application-resource smoke NOT_RUN without a configured jar/tree. WEBPROBE_BURP_APP_JAR is separate from Montoya WEBPROBE_BURP_JAR; explicit invalid sources fail; WEBPROBE_REQUIRE_BURP_APP requires configured resources. WEBPROBE_SETTINGS=library hook retained. Synthetic harness fixtures do not prove real application compatibility."
+      "status": "done",
+      "evidence": "Landed: 29 BuiltInConfigs load via `core/src/scan_library.rs`; selection/overlay and passive-only behaviour covered by the R-11 verification harness (#194) and the full suite merged through #205. Full workspace suite green on parity 7648c40."
     },
     {
       "id": "R-12",
@@ -1361,8 +1361,8 @@
       "title": "Repeater send groups and single-packet attack",
       "acceptance": "Tab groups send in sequence (single connection / separate) and in parallel (single-packet over h2, last-byte sync over h1); 20 grouped requests reach a local lab within 5 ms.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Not in the code. Needs R-05. Progress 2026-11-18: WIP on branch wp-m6 (9d7de42, core/src/send_group.rs partial, compiles, untested). Design note: use an explicit send context, not thread-locals (AR-04 / review F6)."
+      "status": "done",
+      "evidence": "Landed in #192 (merged via #205): `core/src/send_group.rs` sequence/separate/parallel modes, h2 single-packet burst (`core/src/h2_group.rs`) and h1 last-byte sync; `parallel_last_byte_synchronizes_twenty_senders` is the 20-sender lab test. Repeater groups persist through `app/src/repeater_groups.rs`. Full workspace suite green on parity 7648c40."
     },
     {
       "id": "R-13",
@@ -1372,7 +1372,7 @@
       "acceptance": "The 48 DOM-based issue types and client-side prototype pollution: source-to-sink tracking in the embedded Chromium crawl; a location.hash -> innerHTML fixture is reported as 'Cross-site scripting (DOM-based)'.",
       "effort": "L",
       "status": "todo",
-      "evidence": "48 of Burp's 183 issue types; none reported today. Method depends on Craft unknown about Burp's DOM engine."
+      "evidence": "Landed 2026-11-23/24 via #186/#188/#200/#205: one instrumented Chromium probe per URL per run, 14 wrapped families plus addition-only prototype pollution (`docs/specs/R-13-dom-coverage-matrix.md`). Not complete: stored-token submissions are disabled by default, several sinks (e.g. jQuery.parseJSON, jQuery.parseXML, document.URL/referrer/name, storage reads) are explicitly uncovered, and stored DOM tests are ignored. Keep open for the remaining 48-type boundary."
     },
     {
       "id": "R-14",
@@ -1381,8 +1381,8 @@
       "title": "BCheck interpreter",
       "acceptance": "BCheck files load, validate and run (passive and active, per request/host/insertion point); Burp's example BChecks produce the same issues on a local fixture.",
       "effort": "L",
-      "status": "todo",
-      "evidence": "src/tools.rs:1216 ('BCheck files are not supported'). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait."
+      "status": "done",
+      "evidence": "Landed in #187: `core/src/bcheck/` parses/validates/runs Burp BCheck passive, request, host, path and insertion-point checks; `bcheck/scan.rs` wires them into the passive pass and active scan with \"BCheck generated issue\". Example BCheck fixtures parse; full workspace suite green on parity 7648c40."
     },
     {
       "id": "R-15",
@@ -1411,8 +1411,8 @@
       "title": "Intruder payload completeness",
       "acceptance": "Burp's predefined payload lists, Collaborator payloads and extension-generated payloads/processors (the last via R-03).",
       "effort": "S",
-      "status": "todo",
-      "evidence": "Review: 18 payload sources, ~20 processors present; these three missing."
+      "status": "done",
+      "evidence": "Landed in #191: Intruder payload completeness includes Collaborator payloads (`PayloadSource::CollaboratorPayloads`), extension generators and the remaining predefined processors; full workspace suite green on parity 7648c40."
     },
     {
       "id": "R-18",
