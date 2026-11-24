@@ -88,7 +88,11 @@ local nor the session area) are recorded but reported by no family.
   intercepted same-origin GET/HEAD requests, consumed before sends. There is
   no outer stored submission in production. Baseline is outside this operation.
   A resource-heavy live lab pins exactly 1 baseline + 64 operation requests.
-  Each forwarded request is capped at 64 KiB and 128 headers.
+  Each forwarded request accepts at most 128 DevTools-intercepted header
+  entries, then up to 3 fixed fields and up to 4 missing template fields are
+  appended (at most 135 header lines emitted). Its assembled bytes are capped
+  at 64 KiB before the scanner transport; session rules may alter it
+  afterwards, so this is not a final on-the-wire size.
 - Egress isolation: Fetch interception answers every page request; a
   dead-loopback `--proxy-server` removes the route for anything that
   bypasses interception (speculative preconnect/prefetch, background
