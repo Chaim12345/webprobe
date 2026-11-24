@@ -7,6 +7,11 @@ the cells marked **covered** are proved by live-browser lab tests.
 Fourteen wrapped families plus addition-only prototype pollution is not blanket DOM analysis; everything below
 the line is explicitly not established.
 
+The lab evidence below was recorded on 2026-11-23 at source pins up to
+72382c6. It is a historical record, not a per-candidate guarantee: cells are
+not re-executed on every later composition, and the Current inconsistency
+section lists what is known to have drifted since.
+
 ## Source
 
 One navigation carries two distinct run-owned tokens: the query-string
@@ -48,13 +53,14 @@ not reported.
 Generic `storage.setItem.*` hits (a Storage object that is neither the
 local nor the session area) are recorded but reported by no family.
 
-## Runtime guarantees (tested)
+## Recorded checks and evidence (2026-11-23, pins up to 72382c6; not re-executed at the current candidate)
 
 - One browser probe per URL per run; all families read the same result
-  (`dom_families_share_one_probe_and_refresh_on_the_next_run`: 8 issues,
-  2 requests per simple page per run: 1 baseline outside the DOM
-  operation budget and 1 DOM navigation; no stored-token submission; a fresh
-  run re-probes).
+  (`dom_families_share_one_probe_and_refresh_on_the_next_run`: 8 issues
+  from one probe; a fresh run re-probes). Production sends 2 requests per
+  simple page per run (1 baseline outside the DOM operation budget and 1 DOM
+  navigation; no stored-token submission), but this test's pinned counts
+  predate the disable; see Current inconsistency below.
 - Source provenance: `dom_source_provenance_matrix_against_a_live_lab`
   proves hash-only (Firm), search-only (Tentative), mixed (Tentative),
   and the negatives: reflected token without a sink, a pre-existing
@@ -103,7 +109,8 @@ local nor the session area) are recorded but reported by no family.
   page URL (instrumentation), 4 MiB fulfilled body, 32 KiB fulfilled
   response headers (`crawl.rs` constants).
 - Hits kept only on the exact probed origin; one report per sink, variant
-  and source so a stored hit cannot hide a plain hit through the same sink.
+  and source. The stored variant is retained in the reporting code but
+  unreachable while the submission is disabled.
 - Sink-set drift: `dom_sink_sets_match_the_instrumentation` and
   `dom_family_sinks_are_wrapped` pin the JS sink names to the Rust
   family tables, including the runtime-built name prefixes
@@ -137,13 +144,54 @@ interrupt synchronous in-flight transport I/O; no latency bound is claimed.
 additions and rejects reflection and filtered keys. The multi-family lab
 proves query pollution and fragment DOM-XSS keep separate sources/confidence.
 `dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab`
-proves simultaneous query/hash pollution and the fixture's stored DOM-XSS
-classification with separate dedup, stored-only pollution exclusion,
-reflection/unchanged negatives, and one shared operation with the 64-request
-resource cap. Production does not send the stored-token submission.
+is coupled to the disabled stored submission and was observed failing on
+2026-11-24 (historical; exact run provenance unresolved); its pollution-only
+assertions (stored-only pollution exclusion, reflection/unchanged negatives)
+remain the intended contract. Production does not send the stored-token
+submission.
 
 Stored-source classification remains fixture-only; it is not active in the
 production fourteen-family probe. Prototype pollution uses only the base
 issue name and dedicated URL-part token evidence on new own keys. It does not
 use a stored token. This is addition-only coverage, not an overwrite detector
 or stored-pollution detector. Those remain follow-ups.
+
+## Current inconsistency (2026-11-24)
+
+The stored-token submission is disabled in production
+(`app/core/src/scan_checks/dom.rs`: the instrumentation token is empty and
+the submission closure is a no-op; no setting re-enables it). The disable
+landed while the lab tests still described the active submission. Seven test
+definitions in `app/core/src/scan_checks/tests.rs` are coupled to the
+submission:
+
+- `dom_families_share_one_probe_and_refresh_on_the_next_run`: observed
+  failing on 2026-11-24 (historical; exact run provenance unresolved):
+  its per-run request counts include the submission.
+- `dom_xss_stored_variant_against_a_live_lab`: observed failing on
+  2026-11-24 (historical; exact run provenance unresolved): stored
+  findings can no longer be produced.
+- `dom_session_headers_and_mixed_same_sink_against_a_live_lab`: observed
+  failing on 2026-11-24 (historical; exact run provenance unresolved):
+  stored-finding and wire-count assertions.
+- `dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab`:
+  observed failing on 2026-11-24 (historical; exact run provenance
+  unresolved): submission indexing and stored-finding assertions.
+- `dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab`: not
+  executed; source-derived hypothesis: it may pass without exercising its
+  intended effect-then-drop contract, because its lab classifies any
+  request carrying a query string as the submission.
+- `dom_reflection_uses_only_fulfilled_navigation_response_against_a_live_lab`:
+  not executed; source-derived hypothesis: without the submission its
+  adversarial response beginning on the fourth nonempty request is never served, so the reflected-negative
+  assertion loses discriminating power even where its count still holds.
+- `dom_outer_submission_and_resources_share_request_cap_against_a_live_lab`:
+  not executed; source-derived hypothesis: its request-total assertion may
+  still hold because the operation cap is exhausted with or without the
+  submission; only its wording is stale.
+
+The plain and reflected production reporting paths are retained in the
+candidate source; their lab evidence is part of the historical record
+above, not a re-verification at this revision. The stored contract is
+under review; this section is removed when the tests and this
+documentation are re-aligned with the decided contract.
