@@ -1089,7 +1089,7 @@ impl RequestCheck for TlsCertificate {
             problems.push("has expired");
         }
         if flags.contains(&F::ValidityUnknown) {
-            problems.push("is outside its validity period (the leaf could not be parsed to tell expired from not yet valid)");
+            problems.push("is outside its validity period (a certificate in the chain could not be identified as expired or not yet valid)");
         }
         let summary = crate::tls_cert::leaf_summary(&cap);
         let error = cap
