@@ -1,0 +1,16 @@
+{
+  "id": "unk_5565acebb669b9a1",
+  "revision": 1,
+  "question": "Which Burp build is which? /opt/BurpSuite/burpsuite.jar (sha256 510bf1c8.., 6 Aug) and /root/burp-re/in/burpsuite.jar (sha256 6346b73d.., 26 Jul, the one the decompiled sources and every burp.Zxxx citation in WebProbe come from) have different obfuscated class names: burp.Zcot is the 183-type issue enum only in the second. Which of them is 'build 52685', and do behaviour claims taken from one hold for the other?",
+  "severity": "medium",
+  "domain": "reference",
+  "status": "open",
+  "probes": [
+    "Read the version/build resource in each jar",
+    "Evidence for a burp.Zxxx claim must be taken from /root/burp-re/in/burpsuite.jar"
+  ],
+  "evidence_for": [
+    "java_class_show burp.Zcot: extends Object with 18 fields in the /opt jar, extends Enum with 193 fields in the burp-re jar"
+  ],
+  "evidence_against": []
+}

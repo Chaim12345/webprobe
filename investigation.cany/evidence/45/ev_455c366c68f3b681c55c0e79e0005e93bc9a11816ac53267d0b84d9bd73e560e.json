@@ -1,0 +1,172 @@
+{
+  "id": "ev_455c366c68f3b681c55c0e79e0005e93bc9a11816ac53267d0b84d9bd73e560e",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zfhw",
+    "decompile": false,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "burp/Zfhw.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "Zo",
+        "signature": null,
+        "type": "java.lang.String"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "burp.Z_p3"
+    ],
+    "internal": "burp/Zfhw",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "<init>",
+        "signature": "public <init>(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 13,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zdsl;)Lburp/Zgtl;",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "Zt",
+        "signature": "public burp.Zgtl Zt(burp.Zdsl)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zl8o;Lburp/Zgtl;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "ZS",
+        "signature": "public void ZS(burp.Zl8o, burp.Zgtl)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 4,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zt7o;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZM",
+        "signature": "public burp.Zt7o ZM()",
+        "signature_attr": "()Lburp/Zt7o<Lburp/Zgtl;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "bridge",
+          "synthetic"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zl8o;Lburp/Zfg0;)V",
+        "max_locals": 3,
+        "max_stack": 3,
+        "name": "Zi",
+        "signature": "public bridge synthetic void Zi(burp.Zl8o, burp.Zfg0)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "bridge",
+          "synthetic"
+        ],
+        "code_bytes": 6,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zdsl;)Lburp/Zfg0;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "ZB",
+        "signature": "public bridge synthetic burp.Zfg0 ZB(burp.Zdsl)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zfhw",
+    "pseudo_java": null,
+    "signature": "Ljava/lang/Object;Lburp/Z_p3<Lburp/Zgtl;>;",
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zfhw (Java 21) extends Object: 1 fields, 6 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zfhw"
+    }
+  ],
+  "links": []
+}

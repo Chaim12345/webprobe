@@ -1,0 +1,16 @@
+{
+  "id": "unk_3844507af7138196",
+  "revision": 1,
+  "question": "ViewState without MAC: Burp parses the response's __VIEWSTATE only under its setting Zb83.HTML_AND_VIEWSTATE_ANALYSIS. What selects that setting, and does WebProbe (which parses every HTML response) report where Burp would not?",
+  "severity": "low",
+  "domain": "scanner",
+  "status": "open",
+  "probes": [
+    "Trace readers of Zb83.HTML_AND_VIEWSTATE_ANALYSIS in /root/burp-re/out/readable_strict/root",
+    "Compare on a lab page with a MAC-less ViewState at each Burp audit speed"
+  ],
+  "evidence_for": [
+    "PR #218: check ported from burp.Zg3y / Zcnd / Zpqd / Zbdj; parser matched Burp on about 7,700 values"
+  ],
+  "evidence_against": []
+}

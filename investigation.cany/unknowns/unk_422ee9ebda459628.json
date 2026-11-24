@@ -1,0 +1,16 @@
+{
+  "id": "unk_422ee9ebda459628",
+  "revision": 1,
+  "question": "Content type incorrectly stated: does the path Burp tests for a '.html' ending (Zin1.Zh(), through Zsuv.Zr_()) include the query string? WebProbe uses the request path with its query.",
+  "severity": "low",
+  "domain": "scanner",
+  "status": "open",
+  "probes": [
+    "Trace burp.Zsuv.Zr_ and burp.Zin1.Zh",
+    "Lab: /a.html?x=1 serving a PNG as text/plain, compare the browser list with Burp"
+  ],
+  "evidence_for": [
+    "PR #217: stated type, inferred type and browser sets matched Burp on about 45 responses"
+  ],
+  "evidence_against": []
+}
