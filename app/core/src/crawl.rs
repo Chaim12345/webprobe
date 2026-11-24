@@ -321,6 +321,21 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dom_request_size_limits_cover_path_and_headers() {
+        assert!(super::dom_request_prefix_fits("GET", "/", "example.test"));
+        assert!(!super::dom_request_prefix_fits(
+            "GET",
+            &"/".repeat(super::DOM_MAX_REQUEST_BYTES),
+            "example.test"
+        ));
+        assert!(super::dom_request_header_fits(32, "X-Test", "ok"));
+        assert!(!super::dom_request_header_fits(
+            super::DOM_MAX_REQUEST_BYTES - 1,
+            "X",
+            "value"
+        ));
+    }
     use super::*;
 
     /// Second review, finding 1: the crawler stays on its start origin.
@@ -472,6 +487,10 @@ struct Cdp {
 /// Same-origin GET/HEAD requests one DOM probe may forward through the
 /// scanner transport; over budget fails closed.
 pub const DOM_MAX_REQUESTS_PER_PROBE: usize = 64;
+/// Maximum bytes in one forwarded DOM request, including its headers.
+pub const DOM_MAX_REQUEST_BYTES: usize = 64 * 1024;
+/// Maximum request headers accepted from one DevTools interception.
+pub const DOM_MAX_REQUEST_HEADERS: usize = 128;
 /// Response body bytes one DOM probe delivers to Chromium. Larger bodies
 /// are truncated: the page still runs, the CDP exchange stays bounded.
 pub const DOM_MAX_FULFILL_BODY: usize = 4 * 1024 * 1024;
@@ -505,6 +524,27 @@ pub(crate) fn dom_safe_header(name: &str, value: &str, connection: &str) -> bool
         && !connection
             .split(',')
             .any(|n| n.trim().eq_ignore_ascii_case(name))
+}
+
+fn dom_request_prefix_fits(method: &str, path: &str, host: &str) -> bool {
+    method
+        .len()
+        .saturating_add(1)
+        .saturating_add(path.len())
+        .saturating_add(1)
+        .saturating_add("HTTP/1.1\r\nHost: \r\nConnection: close\r\nAccept-Encoding: identity\r\n".len())
+        .saturating_add(host.len())
+        .saturating_add(2)
+        <= DOM_MAX_REQUEST_BYTES
+}
+
+fn dom_request_header_fits(current_len: usize, name: &str, value: &str) -> bool {
+    current_len
+        .saturating_add(name.len())
+        .saturating_add(value.len())
+        .saturating_add(4)
+        .saturating_add(2)
+        <= DOM_MAX_REQUEST_BYTES
 }
 
 struct DomRoute {
@@ -546,38 +586,72 @@ impl DomRoute {
         ) else {
             return blocked();
         };
-        let mut raw = format!("{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n", self.origin.split_once("://").unwrap().1);
+        let host = self.origin.split_once("://").unwrap().1;
+        if !dom_request_prefix_fits(method, &path, host) {
+            return blocked();
+        }
+        let mut raw = format!(
+            "{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nAccept-Encoding: identity\r\n"
+        );
         let mut copied = std::collections::HashSet::new();
         if let Some(headers) = req["headers"].as_object() {
+            if headers.len() > DOM_MAX_REQUEST_HEADERS {
+                return blocked();
+            }
+            let mut connection = String::new();
+            for (name, value) in headers {
+                if name.eq_ignore_ascii_case("connection") {
+                    let value = value.as_str().unwrap_or("");
+                    if connection.len().saturating_add(value.len()).saturating_add(1)
+                        > DOM_MAX_REQUEST_BYTES
+                    {
+                        return blocked();
+                    }
+                    if !connection.is_empty() {
+                        connection.push(',');
+                    }
+                    connection.push_str(value);
+                }
+            }
             for (k, value) in headers {
                 let lower = k.to_ascii_lowercase();
                 let value = value.as_str().unwrap_or("");
-                let connection = headers
-                    .iter()
-                    .filter(|(k, _)| k.eq_ignore_ascii_case("connection"))
-                    .filter_map(|(_, v)| v.as_str())
-                    .collect::<Vec<_>>()
-                    .join(",");
                 if !dom_safe_header(k, value, &connection) {
                     continue;
+                }
+                if !dom_request_header_fits(raw.len(), k, value) {
+                    return blocked();
                 }
                 raw.push_str(&format!("{k}: {value}\r\n"));
                 copied.insert(lower);
             }
         }
         let template = util::parse_http(self.template.as_bytes());
-        let template_connection = template
-            .headers
-            .iter()
-            .filter(|(k, _)| k.eq_ignore_ascii_case("connection"))
-            .map(|(_, v)| v.as_str())
-            .collect::<Vec<_>>()
-            .join(",");
+        let mut template_connection = String::new();
+        for (name, value) in &template.headers {
+            if name.eq_ignore_ascii_case("connection") {
+                if template_connection
+                    .len()
+                    .saturating_add(value.len())
+                    .saturating_add(1)
+                    > DOM_MAX_REQUEST_BYTES
+                {
+                    return blocked();
+                }
+                if !template_connection.is_empty() {
+                    template_connection.push(',');
+                }
+                template_connection.push_str(value);
+            }
+        }
         for name in ["Cookie", "Authorization", "User-Agent", "Accept-Language"] {
             if !copied.contains(&name.to_ascii_lowercase()) {
                 if let Some(value) = util::get_header(&template.headers, name) {
                     if !dom_safe_header(name, &value, &template_connection) {
                         continue;
+                    }
+                    if !dom_request_header_fits(raw.len(), name, &value) {
+                        return blocked();
                     }
                     raw.push_str(&format!("{name}: {value}\r\n"));
                 }
