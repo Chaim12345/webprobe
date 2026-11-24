@@ -1856,7 +1856,10 @@ fn file_param_lab(known_file: bool, seen: std::sync::Arc<std::sync::Mutex<Vec<St
             .split_once('?')
             .map(|(_, q)| q.to_string())
             .unwrap_or_default();
-        let v = q.split('&').find_map(|kv| kv.strip_prefix("file=")).unwrap_or("");
+        let v = q
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("file="))
+            .unwrap_or("");
         let v = util::url_decode(&v.replace('+', " "));
         seen.lock().unwrap().push(v.clone());
         let resolved: Vec<&str> = v
@@ -1867,7 +1870,8 @@ fn file_param_lab(known_file: bool, seen: std::sync::Arc<std::sync::Mutex<Vec<St
             ["img", "logo.png"] => ("200 OK", "PNG image data ".repeat(20)),
             ["img", "Web.config"] if known_file => (
                 "200 OK",
-                "<configuration><system.web><compilation/></system.web></configuration>".to_string(),
+                "<configuration><system.web><compilation/></system.web></configuration>"
+                    .to_string(),
             ),
             _ => ("404 Not Found", "<h1>404 Not Found</h1>".to_string()),
         };
@@ -1891,15 +1895,35 @@ fn r10_file_path_manip_pulls_a_known_file() {
     let Some((n, s, c, detail)) = got.iter().find(|(n, ..)| n == "File path manipulation") else {
         panic!("differential must report: {got:?}");
     };
-    assert_eq!((n.as_str(), s.as_str(), c.as_str()), ("File path manipulation", "high", "Firm"));
+    assert_eq!(
+        (n.as_str(), s.as_str(), c.as_str()),
+        ("File path manipulation", "high", "Firm")
+    );
     assert!(detail.contains("Web.config"), "retrieval named: {detail}");
     assert!(detail.contains("<system.web"), "marker named: {detail}");
     // The follow-up stops at the first retrieved file: exactly one probe
     // and one control, and the later known files are never fetched.
     let seen = seen.lock().unwrap();
-    assert_eq!(seen.iter().filter(|v| v.as_str() == "img/Web.config").count(), 1, "{seen:?}");
-    assert_eq!(seen.iter().filter(|v| v.as_str() == "img/Web.configX").count(), 1, "{seen:?}");
-    assert!(!seen.iter().any(|v| v.contains("web.xml") || v.contains(".htaccess")), "early stop: {seen:?}");
+    assert_eq!(
+        seen.iter()
+            .filter(|v| v.as_str() == "img/Web.config")
+            .count(),
+        1,
+        "{seen:?}"
+    );
+    assert_eq!(
+        seen.iter()
+            .filter(|v| v.as_str() == "img/Web.configX")
+            .count(),
+        1,
+        "{seen:?}"
+    );
+    assert!(
+        !seen
+            .iter()
+            .any(|v| v.contains("web.xml") || v.contains(".htaccess")),
+        "early stop: {seen:?}"
+    );
 
     // Without the known file: the differential still reports, the detail
     // names no retrieval, and the follow-up spends exactly one probe per
@@ -1921,9 +1945,15 @@ fn r10_file_path_manip_pulls_a_known_file() {
     assert!(!detail.contains("known file"), "no retrieval: {detail}");
     let seen = seen.lock().unwrap();
     for f in ["img/Web.config", "img/WEB-INF/web.xml", "img/.htaccess"] {
-        assert_eq!(seen.iter().filter(|v| v.as_str() == f).count(), 1, "{f}: {seen:?}");
         assert_eq!(
-            seen.iter().filter(|v| v.as_str() == format!("{f}X")).count(),
+            seen.iter().filter(|v| v.as_str() == f).count(),
+            1,
+            "{f}: {seen:?}"
+        );
+        assert_eq!(
+            seen.iter()
+                .filter(|v| v.as_str() == format!("{f}X"))
+                .count(),
             0,
             "no marker hit, no control: {f}X: {seen:?}"
         );
@@ -1973,9 +2003,19 @@ fn r10_crossdomain_policy_against_a_live_lab() {
     );
     // The per-host budget: each policy file fetched exactly once.
     let paths = paths.lock().unwrap();
-    assert_eq!(paths.iter().filter(|p| p.as_str() == "/crossdomain.xml").count(), 1, "{paths:?}");
     assert_eq!(
-        paths.iter().filter(|p| p.as_str() == "/clientaccesspolicy.xml").count(),
+        paths
+            .iter()
+            .filter(|p| p.as_str() == "/crossdomain.xml")
+            .count(),
+        1,
+        "{paths:?}"
+    );
+    assert_eq!(
+        paths
+            .iter()
+            .filter(|p| p.as_str() == "/clientaccesspolicy.xml")
+            .count(),
         1,
         "{paths:?}"
     );
@@ -2016,11 +2056,19 @@ fn r10_header_dependent_response_against_a_live_lab() {
     let dependent = |_method: &str, _path: &str, raw: &str| {
         let referer = raw
             .lines()
-            .find_map(|l| l.to_ascii_lowercase().strip_prefix("referer:").map(|v| v.trim().to_string()))
+            .find_map(|l| {
+                l.to_ascii_lowercase()
+                    .strip_prefix("referer:")
+                    .map(|v| v.trim().to_string())
+            })
             .unwrap_or_default();
         let ua = raw
             .lines()
-            .find_map(|l| l.to_ascii_lowercase().strip_prefix("user-agent:").map(|v| v.trim().to_string()))
+            .find_map(|l| {
+                l.to_ascii_lowercase()
+                    .strip_prefix("user-agent:")
+                    .map(|v| v.trim().to_string())
+            })
             .unwrap_or_default();
         // NB: the header values above come from the lower-cased line.
         let mut body = String::from("<html><body>home");
