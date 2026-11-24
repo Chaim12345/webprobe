@@ -81,6 +81,7 @@ pub(crate) static POINT_CHECKS: &[&dyn PointCheck] = &[
     &ClientTemplateInjection,
     &PhpCodeInjection,
     &InputReflected,
+    &SuspiciousInputTransformation,
     &HeaderInjection,
     &OpenRedirect,
     &SqlErrorInjection,
