@@ -429,6 +429,7 @@ fn registry_order_is_pinned() {
             ("active.http-put-enabled", Scope::Host, None),
             ("active.aspnet-tracing", Scope::Host, None),
             ("active.aspnet-debugging", Scope::Host, None),
+            ("active.hidden-http2", Scope::Host, None),
             ("active.jwk-set-disclosed", Scope::Host, None),
             ("active.graphql-introspection", Scope::Request, None),
             ("active.graphql-suggestions", Scope::Request, None),
@@ -855,6 +856,288 @@ fn jwk_set_disclosed_against_a_live_lab() {
             ),
         ]
     );
+}
+
+/// What one connection to [`hidden_h2_lab`] was: whether ALPN selected
+/// `h2`, and how the lab answered.
+type H2LabLog = std::sync::Arc<std::sync::Mutex<Vec<(bool, &'static str)>>>;
+
+/// Replays the bytes the lab already read before the rest of the stream.
+struct Replay<S> {
+    pre: Vec<u8>,
+    io: S,
+}
+
+impl<S: std::io::Read> std::io::Read for Replay<S> {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        if self.pre.is_empty() {
+            return self.io.read(out);
+        }
+        let n = self.pre.len().min(out.len());
+        out[..n].copy_from_slice(&self.pre[..n]);
+        self.pre.drain(..n);
+        Ok(n)
+    }
+}
+
+impl<S: std::io::Write> std::io::Write for Replay<S> {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        self.io.write(b)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.io.flush()
+    }
+}
+
+/// A TLS lab for the hidden HTTP/2 check. ALPN advertises `alpn` (empty:
+/// no ALPN at all). A connection that negotiated `h2` or opens with the
+/// HTTP/2 preface is served HTTP/2 when `speaks_h2`, else answered with
+/// an HTTP/1.1 400 and closed; any other request gets an HTTP/1.1 200.
+fn hidden_h2_lab(alpn: Vec<Vec<u8>>, speaks_h2: bool) -> (u16, H2LabLog) {
+    hidden_h2_lab_answering(
+        alpn,
+        speaks_h2,
+        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello",
+    )
+}
+
+/// [`hidden_h2_lab`] whose HTTP/2 streams get `h2_resp` (HTTP/1.1 bytes).
+fn hidden_h2_lab_answering(
+    alpn: Vec<Vec<u8>>,
+    speaks_h2: bool,
+    h2_resp: &'static [u8],
+) -> (u16, H2LabLog) {
+    use std::io::{Read, Write};
+    let config = crate::net::Shared::new()
+        .mitm
+        .server_config_with_alpn("localhost", alpn)
+        .unwrap();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    let log: H2LabLog = Default::default();
+    let record = log.clone();
+    std::thread::spawn(move || {
+        for s in l.incoming().flatten() {
+            let (config, record) = (config.clone(), record.clone());
+            std::thread::spawn(move || {
+                let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+                let conn = rustls::ServerConnection::new(config).unwrap();
+                let mut tls = rustls::StreamOwned::new(conn, s);
+                if tls.conn.complete_io(&mut tls.sock).is_err() {
+                    record.lock().unwrap().push((false, "handshake failed"));
+                    return;
+                }
+                let alpn_h2 = tls.conn.alpn_protocol() == Some(b"h2".as_slice());
+                let mut head = vec![0u8; crate::h2::PREFACE.len()];
+                if tls.read_exact(&mut head).is_err() {
+                    return;
+                }
+                if head == crate::h2::PREFACE {
+                    if !speaks_h2 {
+                        record.lock().unwrap().push((alpn_h2, "refused h2"));
+                        let _ = tls.write_all(
+                            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        );
+                        let _ = tls.flush();
+                        return;
+                    }
+                    record.lock().unwrap().push((alpn_h2, "h2"));
+                    let _ = tls
+                        .sock
+                        .set_read_timeout(Some(std::time::Duration::from_millis(50)));
+                    let handler: crate::h2_server::Handler =
+                        std::sync::Arc::new(move |_raw, mut out| {
+                            let _ = out.write_all(h2_resp);
+                        });
+                    crate::h2_server::serve(&mut Replay { pre: head, io: tls }, handler);
+                    return;
+                }
+                let mut b = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") {
+                    if tls.read_exact(&mut b).is_err() {
+                        return;
+                    }
+                    head.push(b[0]);
+                }
+                record.lock().unwrap().push((alpn_h2, "http/1.1"));
+                let _ = tls.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello",
+                );
+                let _ = tls.flush();
+            });
+        }
+    });
+    (port, log)
+}
+
+/// Scan `GET /` on 127.0.0.1:`port` with only the hidden HTTP/2 check
+/// on; the (path, severity, confidence, detail) of each Hidden HTTP 2.
+fn hidden_h2_scan(port: u16, https: bool) -> Vec<(String, String, String, String)> {
+    let shared = crate::net::Shared::new();
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if id != "active.hidden-http2" {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    let mut e = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/".into(),
+        https,
+        ..Default::default()
+    };
+    e.req_raw = format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+        .into_bytes()
+        .into();
+    crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+    let t0 = std::time::Instant::now();
+    while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(!shared.scan.is_busy(), "scan did not finish");
+    let issues = shared.issues.lock().unwrap();
+    issues
+        .iter()
+        .filter(|i| i.name == "Hidden HTTP 2")
+        .map(|i| {
+            (
+                i.path.clone(),
+                i.sev.clone(),
+                i.confidence.clone(),
+                i.detail.clone(),
+            )
+        })
+        .collect()
+}
+
+/// burp.Zwfq, verbatim.
+const HIDDEN_H2_DETAIL: &str = "The server did not list <b>h2</b> in the ALPN field during the TLS handshake. However, when a HTTP/2 request was sent over the TLS connection, a HTTP/2 response was received. This indicates that the server does support HTTP/2, despite not advertising it.";
+
+/// burp.Zpfw: a TLS server without ALPN that answers the HTTP/2 preface.
+/// The baseline goes out over HTTP/1.1, the forced probe over HTTP/2 on
+/// a handshake whose ALPN selected nothing: reported, Information,
+/// Certain, at the base request.
+#[test]
+fn hidden_http2_is_reported_when_h2_answers_without_alpn() {
+    let (port, log) = hidden_h2_lab(vec![], true);
+    assert_eq!(
+        hidden_h2_scan(port, true),
+        [(
+            "/".to_string(),
+            "info".to_string(),
+            "Certain".to_string(),
+            HIDDEN_H2_DETAIL.to_string()
+        )]
+    );
+    assert_eq!(*log.lock().unwrap(), [(false, "http/1.1"), (false, "h2")]);
+}
+
+/// A server that advertises h2: the probe's handshake selects h2 (Burp
+/// skips the host it already knows speaks h2, burp.Zhx5.ZS): not reported.
+#[test]
+fn hidden_http2_is_not_reported_when_alpn_advertises_h2() {
+    let (port, log) = hidden_h2_lab(vec![b"h2".to_vec(), b"http/1.1".to_vec()], true);
+    assert_eq!(hidden_h2_scan(port, true), []);
+    let log = log.lock().unwrap();
+    assert!(log.contains(&(true, "h2")), "probe sent: {log:?}");
+}
+
+/// HTTP/1.1 only. Without ALPN the probe's preface gets an HTTP/1 answer,
+/// which is no HTTP/2 response. With `http/1.1` advertised the server
+/// refuses the probe's handshake, which offers only `h2` (burp.Zb0u.Zi
+/// for FORCE_HTTP2_NON_POOLED), while the baseline's h2/http1.1 offer
+/// agrees on HTTP/1.1. Neither is reported.
+#[test]
+fn hidden_http2_is_not_reported_for_http1_only_servers() {
+    let (port, log) = hidden_h2_lab(vec![], false);
+    assert_eq!(hidden_h2_scan(port, true), []);
+    assert_eq!(
+        *log.lock().unwrap(),
+        [(false, "http/1.1"), (false, "refused h2")]
+    );
+    let (port, log) = hidden_h2_lab(vec![b"http/1.1".to_vec()], false);
+    assert_eq!(hidden_h2_scan(port, true), []);
+    assert_eq!(
+        *log.lock().unwrap(),
+        [(false, "http/1.1"), (false, "handshake failed")]
+    );
+}
+
+/// burp.Zpfw.Zw reports only a response whose status is not 0
+/// (Zx9j.ZKz): an HTTP/2 answer with `:status` 000 reaches the check
+/// as a response (the forced send returns it) but is not reported.
+#[test]
+fn hidden_http2_is_not_reported_for_status_zero() {
+    let zero: &[u8] = b"HTTP/1.1 000 Zero\r\nContent-Length: 0\r\n\r\n";
+    let (port, _) = hidden_h2_lab_answering(vec![], true, zero);
+    let shared = crate::net::Shared::new();
+    let req = format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let up = {
+        let _forced = crate::net::http2_scope(crate::net::Http2Choice {
+            want_h2: Some(true),
+            strip_connection: true,
+            force_h2: true,
+        });
+        crate::net::send_tls_raw(&shared, "127.0.0.1", port, req.as_bytes())
+    };
+    let resp = up
+        .resp
+        .unwrap_or_else(|| panic!("forced send: {:?}", up.error));
+    assert_eq!(status_body(&resp).0, 0);
+    let (port, log) = hidden_h2_lab_answering(vec![], true, zero);
+    assert_eq!(hidden_h2_scan(port, true), []);
+    assert_eq!(*log.lock().unwrap(), [(false, "http/1.1"), (false, "h2")]);
+}
+
+/// burp.Zpfw.Zw returns unless the target is HTTPS (Zp42.ZLX): a plain
+/// HTTP target gets the baseline only.
+#[test]
+fn hidden_http2_skips_plain_http() {
+    let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = hits.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, _, _| {
+        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into()
+    });
+    assert_eq!(hidden_h2_scan(port, false), []);
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// The forced send (Zwk0.FORCE_HTTP2_NON_POOLED) is not pooled, even with
+/// keep-alive on, and an ordinary send to the same server still speaks
+/// HTTP/1.1.
+#[test]
+fn forced_http2_send_is_not_pooled() {
+    let (port, _log) = hidden_h2_lab(vec![], true);
+    let shared = crate::net::Shared::new();
+    shared
+        .keep_alive
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let req = format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let up = {
+        let _forced = crate::net::http2_scope(crate::net::Http2Choice {
+            want_h2: Some(true),
+            strip_connection: true,
+            force_h2: true,
+        });
+        let up = crate::net::send_tls_raw(&shared, "127.0.0.1", port, req.as_bytes());
+        assert_eq!(crate::net::last_protocol(), crate::net::HTTP2_WITHOUT_ALPN);
+        up
+    };
+    assert!(
+        up.resp.as_deref().is_some_and(|r| r.ends_with(b"hello")),
+        "forced send: {:?}",
+        up.error
+    );
+    assert!(shared.h2_pool.lock().unwrap().is_empty());
+    assert!(shared.tls_pool.lock().unwrap().is_empty());
+    let plain = crate::net::send_tls_raw(&shared, "127.0.0.1", port, req.as_bytes());
+    assert!(plain.resp.is_some(), "ordinary send: {:?}", plain.error);
+    assert_eq!(crate::net::last_protocol(), "HTTP/1.1");
 }
 
 /// One lab request/response cycle: read a full request (headers plus

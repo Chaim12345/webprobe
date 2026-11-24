@@ -1814,6 +1814,7 @@ fn forced_http1_bypasses_the_pooled_h2_connection() {
         let _scope = crate::net::http2_scope(crate::net::Http2Choice {
             want_h2: want,
             strip_connection: true,
+            force_h2: false,
         });
         let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n");
         send_tls_raw(&shared, "localhost", port, req.as_bytes())

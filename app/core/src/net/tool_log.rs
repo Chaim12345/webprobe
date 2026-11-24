@@ -60,6 +60,26 @@ pub fn tool_sink<'a>(
 pub struct Http2Choice {
     pub want_h2: Option<bool>,
     pub strip_connection: bool,
+    /// Burp's Zwk0.FORCE_HTTP2_NON_POOLED (the scanner's hidden HTTP/2
+    /// probe), used with `want_h2` Some(true) so ALPN offers only `h2`
+    /// (burp.Zb0u.Zi): the request goes out over HTTP/2 whatever ALPN
+    /// selected (Zb0u.Ze, burp.Zpf9.Zq), on a fresh TLS connection that is
+    /// neither taken from nor returned to a pool (Zb0u.ZN false).
+    pub force_h2: bool,
+}
+
+/// [`last_protocol`] after a send with [`Http2Choice::force_h2`] that
+/// spoke HTTP/2 although the TLS handshake's ALPN did not select `h2`.
+pub const HTTP2_WITHOUT_ALPN: &str = "HTTP/2 (not selected by ALPN)";
+
+/// The thread's HTTP/2 choice for the send being made. A forced choice
+/// belongs to its one request (Burp attaches FORCE_HTTP2_NON_POOLED to
+/// the request as a burp.Zil7 modifier): session-handling sends made on
+/// its behalf (macros, validation requests) ignore it.
+pub(crate) fn sender_choice() -> Option<Http2Choice> {
+    H2_CHOICE
+        .with(|c| c.get())
+        .filter(|c| !(c.force_h2 && IN_SESSION.with(|s| s.get())))
 }
 
 /// Restores the thread's previous HTTP/2 choice when dropped.

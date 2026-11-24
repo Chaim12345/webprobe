@@ -842,6 +842,76 @@ impl RequestCheck for JwkSetDisclosed {
     }
 }
 
+/// Hidden HTTP 2, burp.Zpfw.Zw (APH_HiddenHttp2, per host): on an HTTPS
+/// target only (Zp42.ZLX), the base request is sent again with
+/// Zwk0.FORCE_HTTP2_NON_POOLED: ALPN offers only `h2`, and the request
+/// goes out over HTTP/2 on a fresh connection whatever ALPN selected. A
+/// response with a non-zero status raises the issue (Zpfw.Zd) at the base
+/// request. An I/O failure ends the check without an issue. Factory
+/// burp.Zhhg.Zf: Information, Certain, no detail map; text burp.Zwfq.
+///
+/// Burp skips a host that an ordinary connection negotiated `h2` with by
+/// ALPN within the DNS resolution timeout (burp.Zhx5.ZS, recorded by
+/// burp.Zpf9.Zq). WebProbe keeps no such record: the probe's own handshake
+/// stands in for it, and a host whose ALPN selected `h2` is not reported.
+/// Burp also returns, logging Zm8i.H2_DISABLED, when the project option
+/// project_options.http.http2.enable_http2 is off (Zps6.ZUp); WebProbe's
+/// upstream connections always offer HTTP/2, so that gate never closes.
+/// After reporting, Zpfw.Zd marks the host in the scan task (Zggr.Z_o),
+/// which only the request smuggling check reads (burp.Zg3d.Zn, to pick its
+/// HTTP/2 techniques); WebProbe has no such check, so nothing is marked.
+pub(crate) struct HiddenHttp2;
+
+impl RequestCheck for HiddenHttp2 {
+    fn id(&self) -> &'static str {
+        "active.hidden-http2"
+    }
+    fn issue(&self) -> &'static str {
+        "Hidden HTTP 2"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped()
+            || !cx.runs(self.issue())
+            || !cx.entry.https
+            || !cx
+                .state()
+                .openapi_hosts
+                .lock()
+                .unwrap()
+                .insert(format!("hidden-h2|https://{}:{}", cx.host, cx.port))
+        {
+            return;
+        }
+        let resp = {
+            let _forced = crate::net::http2_scope(crate::net::Http2Choice {
+                want_h2: Some(true),
+                strip_connection: true,
+                force_h2: true,
+            });
+            burp_send(cx, cx.req.as_bytes())
+                .filter(|_| crate::net::last_protocol() == crate::net::HTTP2_WITHOUT_ALPN)
+        };
+        let Some(resp) = resp else {
+            return;
+        };
+        if status_body(&resp).0 == 0 {
+            return;
+        }
+        let mut i = mk(
+            "info",
+            self.issue(),
+            &cx.entry,
+            "The server did not list <b>h2</b> in the ALPN field during the TLS handshake. However, when a HTTP/2 request was sent over the TLS connection, a HTTP/2 response was received. This indicates that the server does support HTTP/2, despite not advertising it.",
+        )
+        .with_evidence(vec![ScanEvidence::new(cx.req.as_bytes(), Some(&resp))]);
+        i.confidence = "Certain".into();
+        cx.report(vec![i]);
+    }
+}
+
 /// ASP.NET tracing enabled, burp.Ze3_ (per host): GET /trace.axd; a 200
 /// whose HTML has `<span class="tracecontent">` (Zsqx.Zh). Zr17.Zv case 1:
 /// High, Certain; detail burp.Zwjg ("application" level).

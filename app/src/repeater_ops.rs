@@ -3746,6 +3746,7 @@ pub fn http2_choice(req: &str, alpn_override: bool, strip_connection: bool) -> n
     net::Http2Choice {
         want_h2,
         strip_connection,
+        force_h2: false,
     }
 }
 
