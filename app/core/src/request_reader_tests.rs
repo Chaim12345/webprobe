@@ -943,6 +943,9 @@ fn mixed_line_endings_get_400_and_close_in_one_read_and_split_reads() {
             let shared = Shared::new();
             let (port, pt) = spawn_proxy(Arc::clone(&shared));
             let mut c = client(port);
+            // Full-suite CI load can starve this loop for seconds; the 5 s
+            // default turns that into a spurious WouldBlock on read_to_end.
+            c.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
             let bytes = wire
                 .replace("/x", &format!("http://127.0.0.1:{up_port}/x"))
                 .into_bytes();
