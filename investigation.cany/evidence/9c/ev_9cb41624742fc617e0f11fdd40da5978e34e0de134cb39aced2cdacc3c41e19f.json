@@ -1,0 +1,459 @@
+{
+  "id": "ev_9cb41624742fc617e0f11fdd40da5978e34e0de134cb39aced2cdacc3c41e19f",
+  "subject": {
+    "kind": "jar",
+    "sha256": "6346b73dcc8931b5a99ef62de722a621388f148a759c7f3bc8d25a43876f2cc1",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zg_v",
+    "decompile": false,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "burp/Zg_v.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/time/Duration;",
+        "name": "ZQ",
+        "signature": null,
+        "type": "java.time.Duration"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Ziwr;",
+        "name": "Zv",
+        "signature": null,
+        "type": "burp.Ziwr"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Ziwr;",
+        "name": "Zn",
+        "signature": null,
+        "type": "burp.Ziwr"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Ziwr;",
+        "name": "Zk",
+        "signature": null,
+        "type": "burp.Ziwr"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zehl;",
+        "name": "ZE",
+        "signature": null,
+        "type": "burp.Zehl"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zin1;",
+        "name": "ZK",
+        "signature": null,
+        "type": "burp.Zin1"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zgx0;",
+        "name": "Zj",
+        "signature": null,
+        "type": "burp.Zgx0"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zggx;",
+        "name": "ZV",
+        "signature": null,
+        "type": "burp.Zggx"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lnet/portswigger/Zo1;",
+        "name": "Zz",
+        "signature": null,
+        "type": "net.portswigger.Zo1"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "J",
+        "name": "ZA",
+        "signature": null,
+        "type": "long"
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Lburp/Zrop;",
+        "name": "Zs",
+        "signature": null,
+        "type": "burp.Zrop[]"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "a",
+        "signature": null,
+        "type": "java.lang.String[]"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "b",
+        "signature": null,
+        "type": "java.lang.String[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "burp.Zuit"
+    ],
+    "internal": "burp/Zg_v",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 75,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zehl;Lburp/Zin1;Lburp/Zgx0;Lburp/Zggx;)V",
+        "max_locals": 6,
+        "max_stack": 3,
+        "name": "<init>",
+        "signature": "public <init>(burp.Zehl, burp.Zin1, burp.Zgx0, burp.Zggx)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 4,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zf8g;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZB",
+        "signature": "public burp.Zf8g ZB()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 14,
+        "deprecated": false,
+        "descriptor": "()Z",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "Zh",
+        "signature": "public boolean Zh()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 120,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zc58;Lburp/Zsz4;)V",
+        "max_locals": 8,
+        "max_stack": 4,
+        "name": "Zw",
+        "signature": "public void Zw(burp.Zc58, burp.Zsz4)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 170,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;BB)Lburp/Zeke;",
+        "max_locals": 10,
+        "max_stack": 5,
+        "name": "Zo",
+        "signature": "private burp.Zeke Zo(java.lang.String, byte, byte)",
+        "signature_attr": "(Ljava/lang/String;BB)Lburp/Zeke<Lburp/Zco9;>;",
+        "throws": [],
+        "try_blocks": 3
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 84,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Lburp/Ziwr;B)Lburp/Zp0x;",
+        "max_locals": 6,
+        "max_stack": 9,
+        "name": "Zr",
+        "signature": "private burp.Zp0x Zr(java.lang.String, burp.Ziwr, byte)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Ljava/lang/String;Lburp/Ziwr;)Ljava/lang/String;",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "Zc",
+        "signature": "private java.lang.String Zc(java.lang.String, java.lang.String, burp.Ziwr)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 109,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zrrl;B)Lburp/Zeke;",
+        "max_locals": 4,
+        "max_stack": 11,
+        "name": "Zb",
+        "signature": "private burp.Zeke Zb(burp.Zrrl, byte)",
+        "signature_attr": "(Lburp/Zrrl;B)Lburp/Zeke<Lburp/Zco9;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "toString",
+        "signature": "public java.lang.String toString()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "bridge",
+          "synthetic"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zmzg;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZI",
+        "signature": "public bridge synthetic burp.Zmzg ZI()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 294,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "([Lburp/Zrop;)V",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zh",
+        "signature": "public static void Zh(burp.Zrop[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 4,
+        "deprecated": false,
+        "descriptor": "()[Lburp/Zrop;",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "ZA",
+        "signature": "public static burp.Zrop[] ZA()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/MatchException;)Ljava/lang/MatchException;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "a",
+        "signature": "private static java.lang.MatchException a(java.lang.MatchException)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2620,
+        "deprecated": false,
+        "descriptor": "(II)Ljava/lang/String;",
+        "max_locals": 9,
+        "max_stack": 5,
+        "name": "a",
+        "signature": "private static java.lang.String a(int, int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zg_v",
+    "pseudo_java": null,
+    "signature": null,
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zg_v (Java 21) extends Object: 13 fields, 15 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zg_v"
+    }
+  ],
+  "links": []
+}

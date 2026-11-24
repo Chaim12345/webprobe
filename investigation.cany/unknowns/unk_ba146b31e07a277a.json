@@ -1,0 +1,16 @@
+{
+  "id": "unk_ba146b31e07a277a",
+  "revision": 1,
+  "question": "Stored-stage boolean SQL injection: how does Burp compare true and false conditions through a retrieval page that changes with every stored payload (burp.Zppj in the stored context)? WebProbe ports only the error-based second-order check.",
+  "severity": "medium",
+  "domain": "scanner",
+  "status": "open",
+  "probes": [
+    "Read burp.Zppj and burp.Zcrn for the stored context: what baseline and which response the boolean comparison uses",
+    "Lab with an accumulating page and with a page that shows only the newest record"
+  ],
+  "evidence_for": [
+    "PR #215: error-based second-order SQL injection merged; boolean, time-based and Collaborator variants not ported"
+  ],
+  "evidence_against": []
+}

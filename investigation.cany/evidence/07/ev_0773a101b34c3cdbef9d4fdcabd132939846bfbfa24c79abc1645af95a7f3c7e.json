@@ -1,0 +1,3073 @@
+{
+  "id": "ev_0773a101b34c3cdbef9d4fdcabd132939846bfbfa24c79abc1645af95a7f3c7e",
+  "subject": {
+    "kind": "jar",
+    "sha256": "6346b73dcc8931b5a99ef62de722a621388f148a759c7f3bc8d25a43876f2cc1",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zcot",
+    "decompile": false,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public",
+      "final",
+      "enum"
+    ],
+    "annotations": [],
+    "entry": "burp/Zcot.class",
+    "fields": [
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OS_COMMAND_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SQL_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SQL_INJECTION_2ND_ORDER",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "ASP_NET_TRACING_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "FILE_PATH_TRAVERSAL",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XML_EXTERNAL_ENTITY_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LDAP_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XPATH_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XML_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "ASP_NET_DEBUGGING_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "BROKEN_ACCESS_CONTROL",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTTP_PUT_METHOD_IS_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OUT_OF_BAND_RESOURCE_LOAD_HTTP",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "FILE_PATH_MANIPULATION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PHP_CODE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SERVER_SIDE_JAVASCRIPT_CODE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PERL_CODE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "RUBY_CODE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PYTHON_CODE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "EXPRESSION_LANGUAGE_ENGINE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "UNIDENTIFIED_CODE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SERVER_SIDE_TEMPLATE_ENGINE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SSI_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "NEXTJS_REACT2SHELL_RCE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XSS_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "REQUEST_SMUGGLING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_DESYNC",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "WEB_CACHE_POISONING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTTP_RESPONSE_HEADER_INJECTION_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XSS_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_TEMPLATE_ENGINE_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XSS_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XSS_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XSS_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_PROTOTYPE_POLLUTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JAVASCRIPT_INJECTION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JAVASCRIPT_INJECTION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JAVASCRIPT_INJECTION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PATH_RELATIVE_STYLESHEET_IMPORT",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_SQL_INJECTION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_SQL_INJECTION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_SQL_INJECTION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "WEBSOCKET_URL_POISONING_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "WEBSOCKET_URL_POISONING_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "WEBSOCKET_URL_POISONING_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LOCAL_FILE_PATH_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LOCAL_FILE_PATH_MANIPULATION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LOCAL_FILE_PATH_MANIPULATION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_XPATH_INJECTION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_XPATH_INJECTION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_XPATH_INJECTION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_JSON_INJECTION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_JSON_INJECTION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_JSON_INJECTION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "FLASH_CROSS_DOMAIN_POLICY",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SILVERLIGHT_CROSS_DOMAIN_POLICY",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_SECURITY_POLICY_ALLOWLISTED_SCRIPTS",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_SECURITY_POLICY_UNTRUSTED_SCRIPTS",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_SECURITY_POLICY_UNTRUSTED_STYLES",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_SECURITY_POLICY_MALFORMED_SYNTAX",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_SECURITY_POLICY_ALLOW_CLICKJACKING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_SECURITY_POLICY_ALLOW_FORM_HIGHJACKING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_SECURITY_POLICY_NOT_ENFORCED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "GRAPHQL_ENDPOINT_FOUND",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "GRAPHQL_ENDPOINT_DISCOVERED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "GRAPHQL_INTROSPECTION_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "GRAPHQL_SUGGESTIONS_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "GRAPHQL_CONTENT_TYPE_NOT_VALIDATED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_ORIGIN_RESOURCE_SHARING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_ORIGIN_RESOURCE_SHARING_ARBITRARY_ORIGIN",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_ORIGIN_RESOURCE_SHARING_UNTRUSTED_ORIGIN_TRUSTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_ORIGIN_RESOURCE_SHARING_ALL_SUBDOMAINS_TRUSTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "WEB_CACHE_DECEPTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_SITE_REQUEST_FORGERY",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SMTP_HEADER_INJECTION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWT_SIGNATURE_NOT_VERIFIED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWT_NONE_ALG_SUPPORTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWT_JWK_HEADER_SUPPORTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWT_WEAK_HMAC_SECRET",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWT_JKU_HEADER_SUPPORTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWT_X5U_HEADER_SUPPORTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLEARTEXT_SUBMISSION_OF_PASSWORD",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "EXTERNAL_SERVICE_INTERACTION_DNS",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "EXTERNAL_SERVICE_INTERACTION_HTTP",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "EXTERNAL_SERVICE_INTERACTION_SMTP",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "REFERER_DEPENDENT_RESPONSE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SPOOFABLE_CLIENT_IP",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "USER_AGENT_DEPENDENT_RESPONSE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PASSWORD_RETURNED_IN_LATER_RESPONSE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PASSWORD_SUBMITTED_USING_GET_METHOD",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PASSWORD_RETURNED_IN_URL_QUERY_STRING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SQL_STATEMENT_IN_REQUEST_PARAMETER",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_DOMAIN_POST",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "ASP_NET_VIEWSTATE_WITHOUT_MAC_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "XML_ENTITY_EXPANSION",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LONG_REDIRECTION_RESPONSE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SERIALIZED_OBJECT_IN_HTTP_MESSAGE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DUPLICATE_COOKIES_SET",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "INPUT_RETRIEVAL_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "INPUT_RETRIEVAL_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SUSPICIOUS_INPUT_TRANSFORMATION_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SUSPICIOUS_INPUT_TRANSFORMATION_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "REQUEST_URL_OVERRIDE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "VULNERABLE_JAVASCRIPT_DEPENDENCY",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OPEN_REDIRECTION_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OPEN_REDIRECTION_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OPEN_REDIRECTION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OPEN_REDIRECTION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OPEN_REDIRECTION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "TLS_COOKIE_WITHOUT_SECURE_FLAG_SET",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "COOKIE_SCOPED_TO_PARENT_DOMAIN",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_DOMAIN_REFERER_LEAKAGE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CROSS_DOMAIN_SCRIPT_INCLUDE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "COOKIE_WITHOUT_HTTPONLY_FLAG",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SESSION_TOKEN_IN_URL",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PASSWORD_FIELD_WITH_AUTOCOMPLETE_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PASSWORD_VALUE_SET_IN_COOKIE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "FILE_UPLOAD_FUNCTIONALITY",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "FRAMEABLE_RESPONSE_POTENTIAL_CLICKJACKING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "BROWSER_XSS_FILTER_DISABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTTP_TRACE_METHOD_IS_ENABLED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "COOKIE_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "COOKIE_MANIPULATION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "COOKIE_MANIPULATION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "AJAX_REQUEST_HEADER_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "AJAX_REQUEST_HEADER_REFLECTED_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "AJAX_REQUEST_HEADER_STORED_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DENIAL_OF_SERVICE_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DENIAL_OF_SERVICE_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DENIAL_OF_SERVICE_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML5_WEB_MESSAGE_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML5_WEB_MESSAGE_MANIPULATION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML5_WEB_MESSAGE_MANIPULATION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML5_STORAGE_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML5_STORAGE_MANIPULATION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML5_STORAGE_MANIPULATION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LINK_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LINK_MANIPULATION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LINK_MANIPULATION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LINK_MANIPULATION_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "LINK_MANIPULATION_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DOCUMENT_DOMAIN_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DOCUMENT_DOMAIN_MANIPULATION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DOCUMENT_DOMAIN_MANIPULATION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DOM_DATA_MANIPULATION_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DOM_DATA_MANIPULATION_REFLECTED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DOM_DATA_MANIPULATION_STORED_DOM_BASED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CSS_INJECTION_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CSS_INJECTION_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_HTTP_PARAMETER_POLLUTION_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CLIENT_SIDE_HTTP_PARAMETER_POLLUTION_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "FORM_ACTION_HIJACKING_REFLECTED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "FORM_ACTION_HIJACKING_STORED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DATABASE_CONNECTION_STRING_DISCLOSED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SOURCE_CODE_DISCLOSURE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "BACKUP_FILE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "DIRECTORY_LISTING",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "EMAIL_ADDRESSES_DISCLOSED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PRIVATE_IP_ADDRESSES_DISCLOSED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "SOCIAL_SECURITY_NUMBERS_DISCLOSED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CREDIT_CARD_NUMBERS_DISCLOSED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "PRIVATE_KEY_DISCLOSED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "ROBOTS_TXT_FILE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWK_DISCLOSED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "JWT_PRIVATE_KEY_DISCLOSURE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OPENAPI_DEFINITION_FOUND_ACTIVE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "OPENAPI_DEFINITION_FOUND_PASSIVE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CACHEABLE_HTTPS_RESPONSE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "BASE_64_ENCODED_DATA_IN_PARAMETER",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "MULTIPLE_CONTENT_TYPES_SPECIFIED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML_DOES_NOT_SPECIFY_CHARSET",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HTML_USES_UNRECOGNIZED_CHARSET",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_TYPE_INCORRECTLY_STATED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "CONTENT_TYPE_NOT_SPECIFIED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "TLS_CERTIFICATE",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "UNENCRYPTED_COMMUNICATIONS",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "STRICT_TRANSPORT_SECURITY_NOT_ENFORCED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "MIXED_CONTENT",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "HIDDEN_HTTP2",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "EXTENSION_GENERATED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "MANUALLY_GENERATED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "BCHECK_GENERATED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcot;",
+        "name": "BAMBDA_GENERATED",
+        "signature": null,
+        "type": "burp.Zcot"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "Zc",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zwjf;",
+        "name": "ZF",
+        "signature": null,
+        "type": "burp.Zwjf"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zxsc;",
+        "name": "ZI",
+        "signature": null,
+        "type": "burp.Zxsc"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Set;",
+        "name": "ZB",
+        "signature": "Ljava/util/Set<Lburp/Zglb;>;",
+        "type": "java.util.Set"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Set;",
+        "name": "Zl",
+        "signature": "Ljava/util/Set<Lburp/Zwx_;>;",
+        "type": "java.util.Set"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "Zz",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "ZL",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "Ze",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Lburp/Zcot;",
+        "name": "ZO",
+        "signature": null,
+        "type": "burp.Zcot[]"
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[I",
+        "name": "ZC",
+        "signature": null,
+        "type": "int[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "burp.Zp9h"
+    ],
+    "internal": "burp/Zcot",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "()[Lburp/Zcot;",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "values",
+        "signature": "public static burp.Zcot[] values()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Lburp/Zcot;",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "valueOf",
+        "signature": "public static burp.Zcot valueOf(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 23,
+        "deprecated": false,
+        "descriptor": "(I)Lburp/Zp9h;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "Zq",
+        "signature": "public static burp.Zp9h Zq(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 19,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set;Ljava/util/Set;)V",
+        "max_locals": 8,
+        "max_stack": 11,
+        "name": "<init>",
+        "signature": "private <init>(java.lang.String, int, int, burp.Zwjf, burp.Zxsc, java.util.Set, java.util.Set)",
+        "signature_attr": "(ILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set<Lburp/Zglb;>;Ljava/util/Set<Lburp/Zwx_;>;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 20,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set;Ljava/util/Set;Z)V",
+        "max_locals": 9,
+        "max_stack": 11,
+        "name": "<init>",
+        "signature": "private <init>(java.lang.String, int, int, burp.Zwjf, burp.Zxsc, java.util.Set, java.util.Set, boolean)",
+        "signature_attr": "(ILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set<Lburp/Zglb;>;Ljava/util/Set<Lburp/Zwx_;>;Z)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 21,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set;Ljava/util/Set;ZZ)V",
+        "max_locals": 10,
+        "max_stack": 11,
+        "name": "<init>",
+        "signature": "private <init>(java.lang.String, int, int, burp.Zwjf, burp.Zxsc, java.util.Set, java.util.Set, boolean, boolean)",
+        "signature_attr": "(ILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set<Lburp/Zglb;>;Ljava/util/Set<Lburp/Zwx_;>;ZZ)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 136,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set;Ljava/util/Set;ZZZ)V",
+        "max_locals": 11,
+        "max_stack": 3,
+        "name": "<init>",
+        "signature": "private <init>(java.lang.String, int, int, burp.Zwjf, burp.Zxsc, java.util.Set, java.util.Set, boolean, boolean, boolean)",
+        "signature_attr": "(ILburp/Zwjf;Lburp/Zxsc;Ljava/util/Set<Lburp/Zglb;>;Ljava/util/Set<Lburp/Zwx_;>;ZZZ)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()I",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZR",
+        "signature": "public int ZR()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zwjf;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZB",
+        "signature": "public burp.Zwjf ZB()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zxsc;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zd",
+        "signature": "public burp.Zxsc Zd()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/Set;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZF",
+        "signature": "public java.util.Set ZF()",
+        "signature_attr": "()Ljava/util/Set<Lburp/Zglb;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/Set;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Ze",
+        "signature": "public java.util.Set Ze()",
+        "signature_attr": "()Ljava/util/Set<Lburp/Zwx_;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Z",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZY",
+        "signature": "public boolean ZY()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Z",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zt",
+        "signature": "public boolean Zt()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Z",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zn",
+        "signature": "public boolean Zn()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 20,
+        "deprecated": false,
+        "descriptor": "()Z",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "Z_",
+        "signature": "public boolean Z_()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 7,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/stream/Stream;",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "ZP",
+        "signature": "public static java.util.stream.Stream ZP()",
+        "signature_attr": "()Ljava/util/stream/Stream<Lburp/Zcot;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 1337,
+        "deprecated": false,
+        "descriptor": "()[Lburp/Zcot;",
+        "max_locals": 0,
+        "max_stack": 4,
+        "name": "ZE",
+        "signature": "private static burp.Zcot[] ZE()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 8096,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 13,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "([I)V",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZL",
+        "signature": "public static void ZL(int[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 4,
+        "deprecated": false,
+        "descriptor": "()[I",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "ZV",
+        "signature": "public static int[] ZV()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zcot",
+    "pseudo_java": null,
+    "signature": "Ljava/lang/Enum<Lburp/Zcot;>;Lburp/Zp9h;",
+    "source_file": null,
+    "superclass": "java.lang.Enum",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zcot (Java 21) extends java.lang.Enum: 193 fields, 21 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zcot"
+    }
+  ],
+  "links": []
+}

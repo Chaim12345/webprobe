@@ -34,15 +34,15 @@
       "status": "todo"
     },
     "Local file path manipulation (DOM-based)": {
-      "note": "No sink-to-issue mapping for this family was found in burp.Zcwh (docs/specs/R-13-dom-analysis.research.md:145); the sink list has to be established before a port",
+      "note": "No dynamic sink leads to this family: burp.Zcwh's sink names and burp.Zw7w's follow-up contexts have none for it, so in Burp it can only come from static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-analysis.research.md:145)",
       "status": "todo"
     },
     "Local file path manipulation (reflected DOM-based)": {
-      "note": "No sink-to-issue mapping for this family was found in burp.Zcwh (docs/specs/R-13-dom-analysis.research.md:145); the sink list has to be established before a port",
+      "note": "No dynamic sink leads to this family: burp.Zcwh's sink names and burp.Zw7w's follow-up contexts have none for it, so in Burp it can only come from static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-analysis.research.md:145)",
       "status": "todo"
     },
     "Local file path manipulation (stored DOM-based)": {
-      "note": "No sink-to-issue mapping for this family was found in burp.Zcwh (docs/specs/R-13-dom-analysis.research.md:145); the sink list has to be established before a port",
+      "note": "No dynamic sink leads to this family: burp.Zcwh's sink names and burp.Zw7w's follow-up contexts have none for it, so in Burp it can only come from static JavaScript analysis, which WebProbe does not have (docs/specs/R-13-dom-analysis.research.md:145)",
       "status": "todo"
     },
     "Manually generated issue": {
@@ -50,20 +50,20 @@
       "status": "todo"
     },
     "Perl code injection": {
-      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
-      "status": "decision"
+      "note": "Timing only in build 52685: the only payloads for these types are the sleep() entries of burp.Zfhw (sleep(lc(%%)) for Perl, time.sleep(%%) for Python, sleep(%%.to_i) for Ruby, sleep(%%) for the unidentified type), driven by the timing engine burp.Zwj_. Excluded by the owner's no-timing rule",
+      "status": "excluded"
     },
     "Python code injection": {
-      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
-      "status": "decision"
+      "note": "Timing only in build 52685: the only payloads for these types are the sleep() entries of burp.Zfhw (sleep(lc(%%)) for Perl, time.sleep(%%) for Python, sleep(%%.to_i) for Ruby, sleep(%%) for the unidentified type), driven by the timing engine burp.Zwj_. Excluded by the owner's no-timing rule",
+      "status": "excluded"
     },
     "Ruby code injection": {
-      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
-      "status": "decision"
+      "note": "Timing only in build 52685: the only payloads for these types are the sleep() entries of burp.Zfhw (sleep(lc(%%)) for Perl, time.sleep(%%) for Python, sleep(%%.to_i) for Ruby, sleep(%%) for the unidentified type), driven by the timing engine burp.Zwj_. Excluded by the owner's no-timing rule",
+      "status": "excluded"
     },
     "Server-side JavaScript code injection": {
-      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
-      "status": "decision"
+      "note": "Timing only in build 52685: burp.Zg_v measures response delays (a Duration threshold, a stopwatch, 1, 3 or 6 rounds by accuracy). Excluded by the owner's no-timing rule",
+      "status": "excluded"
     },
     "Suspicious input transformation (reflected)": {
       "note": "burp.Zppb / Zc6w on the reflection framework (burp.Zi97), text burp.Zwvh with one variant per transformation (overlong and invalid UTF-8 and more)",
@@ -74,8 +74,8 @@
       "status": "todo"
     },
     "Unidentified code injection": {
-      "note": "Burp measures timing (Zsn3 -> Zwj_ -> Zplm); whether a non-timing path exists is Craft unknown unk_d22481ee7064d871, roadmap F-01",
-      "status": "decision"
+      "note": "Timing only in build 52685: the only payloads for these types are the sleep() entries of burp.Zfhw (sleep(lc(%%)) for Perl, time.sleep(%%) for Python, sleep(%%.to_i) for Ruby, sleep(%%) for the unidentified type), driven by the timing engine burp.Zwj_. Excluded by the owner's no-timing rule",
+      "status": "excluded"
     }
   },
   "total": 183

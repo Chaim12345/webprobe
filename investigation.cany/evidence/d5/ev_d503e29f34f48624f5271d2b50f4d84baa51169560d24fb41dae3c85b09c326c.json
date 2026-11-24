@@ -1,0 +1,456 @@
+{
+  "id": "ev_d503e29f34f48624f5271d2b50f4d84baa51169560d24fb41dae3c85b09c326c",
+  "subject": {
+    "kind": "jar",
+    "sha256": "6346b73dcc8931b5a99ef62de722a621388f148a759c7f3bc8d25a43876f2cc1",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zfhw",
+    "decompile": false,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "burp/Zfhw.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZS",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Zn",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Zs",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZF",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Ze",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZH",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Zj",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZX",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZN",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZU",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZC",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZG",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZI",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Zg",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZJ",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Zb",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Zm",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "Za",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zuwv;",
+        "name": "ZY",
+        "signature": null,
+        "type": "burp.Zuwv"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/List;",
+        "name": "ZE",
+        "signature": "Ljava/util/List<Lburp/Zuwv;>;",
+        "type": "java.util.List"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zsv7;",
+        "name": "ZW",
+        "signature": null,
+        "type": "burp.Zsv7"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/Zfhw",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zsv7;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "<init>",
+        "signature": "public <init>(burp.Zsv7)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 26,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 1,
+        "max_stack": 6,
+        "name": "ZK",
+        "signature": "public java.util.List ZK()",
+        "signature_attr": "()Ljava/util/List<Lburp/Zuwu;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 20,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 1,
+        "max_stack": 4,
+        "name": "Zd",
+        "signature": "public java.util.List Zd()",
+        "signature_attr": "()Ljava/util/List<Lburp/Zuwu;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 23,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 1,
+        "max_stack": 5,
+        "name": "ZA",
+        "signature": "public java.util.List ZA()",
+        "signature_attr": "()Ljava/util/List<Lburp/Zuwu;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 142,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "Zz",
+        "signature": "public java.util.List Zz(java.lang.String)",
+        "signature_attr": "(Ljava/lang/String;)Ljava/util/List<Lburp/Zuwu;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 1,
+        "max_stack": 5,
+        "name": "ZY",
+        "signature": "public java.util.List ZY()",
+        "signature_attr": "()Ljava/util/List<Lburp/Zuwu;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 104,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/EnumSet;Ljava/util/EnumSet;)Ljava/util/List;",
+        "max_locals": 7,
+        "max_stack": 2,
+        "name": "ZO",
+        "signature": "private java.util.List ZO(java.util.EnumSet, java.util.EnumSet)",
+        "signature_attr": "(Ljava/util/EnumSet<+Lburp/Zp9h;>;Ljava/util/EnumSet<Lburp/Zu35;>;)Ljava/util/List<Lburp/Zuwu;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 1252,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zfhw",
+    "pseudo_java": null,
+    "signature": null,
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zfhw (Java 21) extends Object: 21 fields, 8 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.1",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zfhw"
+    }
+  ],
+  "links": []
+}
