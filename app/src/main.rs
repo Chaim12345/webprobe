@@ -1460,16 +1460,43 @@ fn main() {
             reps.clear();
             for (n, path) in [(1, "/login"), (2, "/login/step2"), (3, "/account")] {
                 let id = app.shared.rep.new_tab_id();
-                let mut tab = repeater_ops::new_tab(id, "example.com", 443, true, format!("POST {path} HTTP/1.1\r\nHost: example.com\r\nContent-Length: 0\r\n\r\n"));
+                let mut tab = repeater_ops::new_tab(
+                    id,
+                    "example.com",
+                    443,
+                    true,
+                    format!(
+                        "POST {path} HTTP/1.1\r\nHost: example.com\r\nContent-Length: 0\r\n\r\n"
+                    ),
+                );
                 tab.name = format!("Rep {n}");
                 reps.push(tab);
             }
         }
-        let mut order: Vec<u64> = app.shared.repeaters.lock().unwrap().iter().map(|r| r.id).collect();
+        let mut order: Vec<u64> = app
+            .shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.id)
+            .collect();
         let gid = app.shared.rep.new_tab_id();
         let members = order[..2].to_vec();
-        webprobe_core::send_group::create_group(&mut app.rep_groups, &mut order, gid, "login", 5, &members);
-        app.rep_group_dialog = Some(repeater_groups::GroupDialog { group: Some(gid), tab: members[0], name: "login".into(), colour: 5 });
+        webprobe_core::send_group::create_group(
+            &mut app.rep_groups,
+            &mut order,
+            gid,
+            "login",
+            5,
+            &members,
+        );
+        app.rep_group_dialog = Some(repeater_groups::GroupDialog {
+            group: Some(gid),
+            tab: members[0],
+            name: "login".into(),
+            colour: 5,
+        });
     }
 
     let marker = app.eng.marker.clone();

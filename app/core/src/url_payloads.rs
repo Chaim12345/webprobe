@@ -30,7 +30,13 @@ impl UrlParts {
     /// Zbvs.Zb: the query, with "?" put in front unless it starts with
     /// "?" or ";".
     pub(crate) fn query(&self) -> Option<String> {
-        self.query_raw.as_ref().map(|q| if q.starts_with('?') || q.starts_with(';') { q.clone() } else { format!("?{q}") })
+        self.query_raw.as_ref().map(|q| {
+            if q.starts_with('?') || q.starts_with(';') {
+                q.clone()
+            } else {
+                format!("?{q}")
+            }
+        })
     }
 }
 
@@ -85,7 +91,12 @@ fn non_empty(s: &str) -> Option<String> {
 /// Zpgu.Zx: the scheme separators in the order Burp tries them, with the
 /// most characters a repeating one may run to (Zua8; None = Zuap, taken as
 /// written).
-const SCHEME_SEPS: [(&str, Option<usize>); 4] = [("://", Some(7)), ("//", Some(6)), ("\\\\", Some(6)), (":", None)];
+const SCHEME_SEPS: [(&str, Option<usize>); 4] = [
+    ("://", Some(7)),
+    ("//", Some(6)),
+    ("\\\\", Some(6)),
+    (":", None),
+];
 
 /// Zpgu.ZL: (scheme, separator, rest) at the first separator of the list
 /// found anywhere (list order, not position); `Ok(None)`: no separator;
@@ -110,7 +121,11 @@ fn split_scheme(v: &str) -> Result<Option<(String, String, String)>, ()> {
                 }
             }
         }
-        return Ok(Some((prefix.to_string(), v[idx..end].to_string(), v[end..].to_string())));
+        return Ok(Some((
+            prefix.to_string(),
+            v[idx..end].to_string(),
+            v[end..].to_string(),
+        )));
     }
     Ok(None)
 }
@@ -128,12 +143,28 @@ fn split_userinfo(v: &str) -> Result<Option<(String, String)>, ()> {
 /// Zpgu.Zp: (host, rest) at the first of "/", "\", "./", "?", ";" found
 /// (list order); the rest keeps its separator.
 fn split_host(v: &str) -> Option<(&str, &str)> {
-    ["/", "\\", "./", "?", ";"].iter().find_map(|sep| v.find(sep)).map(|i| (&v[..i], &v[i..]))
+    ["/", "\\", "./", "?", ";"]
+        .iter()
+        .find_map(|sep| v.find(sep))
+        .map(|i| (&v[..i], &v[i..]))
 }
 
 /// Zpgu.Zv: path and query out of what follows the host.
-fn finish(scheme: Option<String>, sep: Option<String>, userinfo: Option<String>, host: Option<String>, rest: Option<String>) -> UrlParts {
-    let mut p = UrlParts { scheme, sep, userinfo, host, path: None, query_raw: None };
+fn finish(
+    scheme: Option<String>,
+    sep: Option<String>,
+    userinfo: Option<String>,
+    host: Option<String>,
+    rest: Option<String>,
+) -> UrlParts {
+    let mut p = UrlParts {
+        scheme,
+        sep,
+        userinfo,
+        host,
+        path: None,
+        query_raw: None,
+    };
     let Some(rest) = rest else { return p };
     // Zpgu.Zh: the first '?', else the first ';'.
     match rest.find('?').or_else(|| rest.find(';')) {
@@ -141,7 +172,9 @@ fn finish(scheme: Option<String>, sep: Option<String>, userinfo: Option<String>,
             p.path = non_empty(&rest[..i]);
             p.query_raw = Some(rest[i..].to_string());
         }
-        None if !rest.starts_with('/') && !rest.starts_with("./") && !rest.starts_with('\\') => p.query_raw = Some(rest),
+        None if !rest.starts_with('/') && !rest.starts_with("./") && !rest.starts_with('\\') => {
+            p.query_raw = Some(rest)
+        }
         None => p.path = Some(rest),
     }
     p
@@ -168,7 +201,11 @@ pub(crate) fn parse(v: &str) -> UrlParts {
             // Zpgu.Zm: "user:pass@host" read as scheme "user" + ":" is
             // userinfo after all.
             if sep.as_deref() == Some(":") && scheme.is_some() && !u.contains(':') {
-                userinfo = Some(format!("{}{}{u}", scheme.take().unwrap_or_default(), sep.take().unwrap_or_default()));
+                userinfo = Some(format!(
+                    "{}{}{u}",
+                    scheme.take().unwrap_or_default(),
+                    sep.take().unwrap_or_default()
+                ));
             } else {
                 userinfo = Some(u);
             }
@@ -215,7 +252,11 @@ pub(crate) fn variants(value: &str, thorough: bool) -> Vec<UrlVariant> {
     if p.sep.is_some() {
         out.push(UrlVariant::OwnSchema);
     }
-    let is = |s: &str| p.scheme.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(s));
+    let is = |s: &str| {
+        p.scheme
+            .as_deref()
+            .is_some_and(|x| x.eq_ignore_ascii_case(s))
+    };
     if !is("http") {
         out.push(UrlVariant::Http);
     }
@@ -239,7 +280,11 @@ pub(crate) fn payload(value: &str, variant: UrlVariant, domain: &str) -> String 
     // Zbxl.Zn: the scheme with the value's separator, "://" when it has none.
     let with = |scheme: &str| format!("{scheme}{}", p.sep.as_deref().unwrap_or("://"));
     let prefix = match variant {
-        UrlVariant::OwnSchema => Some(format!("{}{}", p.scheme.as_deref().unwrap_or(""), p.sep.as_deref().unwrap_or(""))),
+        UrlVariant::OwnSchema => Some(format!(
+            "{}{}",
+            p.scheme.as_deref().unwrap_or(""),
+            p.sep.as_deref().unwrap_or("")
+        )),
         UrlVariant::Http => Some(with("http")),
         UrlVariant::HttpMixedCase => Some("Http://".to_string()),
         UrlVariant::Https => Some(with("https")),
@@ -272,9 +317,17 @@ pub(crate) fn payload(value: &str, variant: UrlVariant, domain: &str) -> String 
 /// burp.Zc4x.Z_: `v` reads as an e-mail address.
 pub(crate) fn is_email(v: &str) -> bool {
     let c: Vec<char> = v.chars().collect();
-    let Some(at) = c.iter().position(|&x| x == '@') else { return false };
+    let Some(at) = c.iter().position(|&x| x == '@') else {
+        return false;
+    };
     let ascii_an = |x: char| x.is_ascii_alphanumeric();
-    if at < 1 || c.len() < 5 || c[0] == '.' || c[c.len() - 1] == '.' || c[at - 1] == '.' || v.contains("..") {
+    if at < 1
+        || c.len() < 5
+        || c[0] == '.'
+        || c[c.len() - 1] == '.'
+        || c[at - 1] == '.'
+        || v.contains("..")
+    {
         return false;
     }
     c.iter().enumerate().all(|(i, &x)| {
@@ -296,7 +349,11 @@ pub(crate) fn looks_like_url(v: &str) -> bool {
     let res = RES.get_or_init(|| {
         let host = r"([A-Za-z0-9-]+\.[A-Za-z0-9-]+)+\.?(/.*)*";
         std::iter::once(r"^[A-z0-9]+:.*$".to_string())
-            .chain(["", "/", "//", r"\\\\", r"\\"].iter().map(|pre| format!("^(?:{pre}{host})$")))
+            .chain(
+                ["", "/", "//", r"\\\\", r"\\"]
+                    .iter()
+                    .map(|pre| format!("^(?:{pre}{host})$")),
+            )
             .map(|r| regex::Regex::new(&r).expect("static regex"))
             .collect()
     });
@@ -307,35 +364,115 @@ pub(crate) fn looks_like_url(v: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn parts(v: &str) -> (Option<&str>, Option<&str>, Option<&str>, Option<&str>, Option<&str>, Option<String>) {
+    fn parts(
+        v: &str,
+    ) -> (
+        Option<&str>,
+        Option<&str>,
+        Option<&str>,
+        Option<&str>,
+        Option<&str>,
+        Option<String>,
+    ) {
         // Leaked for terse assertions in tests only.
         let p: &'static UrlParts = Box::leak(Box::new(parse(v)));
-        (p.scheme.as_deref(), p.sep.as_deref(), p.userinfo.as_deref(), p.host.as_deref(), p.path.as_deref(), p.query())
+        (
+            p.scheme.as_deref(),
+            p.sep.as_deref(),
+            p.userinfo.as_deref(),
+            p.host.as_deref(),
+            p.path.as_deref(),
+            p.query(),
+        )
     }
 
     #[test]
     fn zpgu_splits_values_like_burp() {
         let q = |s: &str| Some(s.to_string());
-        assert_eq!(parts("https://user:pw@shop.test:8443/a/b?x=1"), (Some("https"), Some("://"), Some("user:pw@"), Some("shop.test:8443"), Some("/a/b"), q("?x=1")));
-        assert_eq!(parts("shop.test"), (None, None, None, Some("shop.test"), None, None));
-        assert_eq!(parts("//cdn.test/x.js"), (None, Some("//"), None, Some("cdn.test"), Some("/x.js"), None));
-        assert_eq!(parts("\\\\files\\share"), (None, Some("\\\\"), None, Some("files"), Some("\\share"), None));
+        assert_eq!(
+            parts("https://user:pw@shop.test:8443/a/b?x=1"),
+            (
+                Some("https"),
+                Some("://"),
+                Some("user:pw@"),
+                Some("shop.test:8443"),
+                Some("/a/b"),
+                q("?x=1")
+            )
+        );
+        assert_eq!(
+            parts("shop.test"),
+            (None, None, None, Some("shop.test"), None, None)
+        );
+        assert_eq!(
+            parts("//cdn.test/x.js"),
+            (
+                None,
+                Some("//"),
+                None,
+                Some("cdn.test"),
+                Some("/x.js"),
+                None
+            )
+        );
+        assert_eq!(
+            parts("\\\\files\\share"),
+            (
+                None,
+                Some("\\\\"),
+                None,
+                Some("files"),
+                Some("\\share"),
+                None
+            )
+        );
         // Zua8: the separator's last character repeats.
-        assert_eq!(parts("http:///x.test"), (Some("http"), Some(":///"), None, Some("x.test"), None, None));
+        assert_eq!(
+            parts("http:///x.test"),
+            (Some("http"), Some(":///"), None, Some("x.test"), None, None)
+        );
         // ... but not past its limit: then the whole value is a query.
-        assert_eq!(parts("a:////////b"), (None, None, None, None, None, q("?a:////////b")));
+        assert_eq!(
+            parts("a:////////b"),
+            (None, None, None, None, None, q("?a:////////b"))
+        );
         // Zpgu.Zm: "user:pw@host" is userinfo, not scheme "user" (so is
         // "mailto:me@" for the same reason).
-        assert_eq!(parts("user:pw@host.test"), (None, None, Some("user:pw@"), Some("host.test"), None, None));
-        assert_eq!(parts("user@host.test/p"), (None, None, Some("user@"), Some("host.test"), Some("/p"), None));
-        assert_eq!(parts("mailto:me@x.test"), (None, None, Some("mailto:me@"), Some("x.test"), None, None));
+        assert_eq!(
+            parts("user:pw@host.test"),
+            (None, None, Some("user:pw@"), Some("host.test"), None, None)
+        );
+        assert_eq!(
+            parts("user@host.test/p"),
+            (
+                None,
+                None,
+                Some("user@"),
+                Some("host.test"),
+                Some("/p"),
+                None
+            )
+        );
+        assert_eq!(
+            parts("mailto:me@x.test"),
+            (None, None, Some("mailto:me@"), Some("x.test"), None, None)
+        );
         // A non-host value lands in the query slot (Zpgu.Zv), a path stays a path.
-        assert_eq!(parts("hello world"), (None, None, None, None, None, q("?hello world")));
-        assert_eq!(parts("/a/b?c"), (None, None, None, None, Some("/a/b"), q("?c")));
+        assert_eq!(
+            parts("hello world"),
+            (None, None, None, None, None, q("?hello world"))
+        );
+        assert_eq!(
+            parts("/a/b?c"),
+            (None, None, None, None, Some("/a/b"), q("?c"))
+        );
         assert_eq!(parts("12"), (None, None, None, Some("12"), None, None));
         assert_eq!(parts(""), (None, None, None, None, None, None));
         // Separator list order, not position: "://" is tried before ":".
-        assert_eq!(parts("a:b://c.test"), (None, None, None, None, None, q("?a:b://c.test")));
+        assert_eq!(
+            parts("a:b://c.test"),
+            (None, None, None, None, None, q("?a:b://c.test"))
+        );
     }
 
     #[test]
@@ -351,21 +488,39 @@ mod tests {
         assert_eq!(variants(u, false), vec![OwnSchema]);
         assert_eq!(variants(u, true), vec![OwnSchema, HttpMixedCase, Https]);
         assert_eq!(payload(u, OwnSchema, d), "http://abc.oast.test/img?id=4");
-        assert_eq!(payload(u, HttpMixedCase, d), "Http://abc.oast.test/img?id=4");
+        assert_eq!(
+            payload(u, HttpMixedCase, d),
+            "Http://abc.oast.test/img?id=4"
+        );
         assert_eq!(payload(u, Https, d), "https://abc.oast.test/img?id=4");
         // Another scheme: own scheme, then http with the value's separator.
         let f = "ftp://user@files.test/a";
-        assert_eq!(variants(f, true), vec![OwnSchema, Http, HttpMixedCase, Https]);
+        assert_eq!(
+            variants(f, true),
+            vec![OwnSchema, Http, HttpMixedCase, Https]
+        );
         assert_eq!(payload(f, OwnSchema, d), "ftp://user@abc.oast.test/a");
         assert_eq!(payload(f, Http, d), "http://user@abc.oast.test/a");
         // An HTTPS URL at Thorough: no https:// variant.
-        assert_eq!(variants("HTTPS://x.test/", true), vec![OwnSchema, Http, HttpMixedCase]);
+        assert_eq!(
+            variants("HTTPS://x.test/", true),
+            vec![OwnSchema, Http, HttpMixedCase]
+        );
         // An e-mail address gets no bare-domain variant.
         assert_eq!(variants("me@mail.test", false), vec![Http]);
-        assert_eq!(payload("me@mail.test", Http, d), "http://me@abc.oast.test/?mail.test");
+        assert_eq!(
+            payload("me@mail.test", Http, d),
+            "http://me@abc.oast.test/?mail.test"
+        );
         // A protocol-relative URL: own "scheme" is the separator alone.
-        assert_eq!(payload("//cdn.test/x.js", OwnSchema, d), "//abc.oast.test/x.js");
-        assert_eq!(payload("//cdn.test/x.js", Http, d), "http//abc.oast.test/x.js");
+        assert_eq!(
+            payload("//cdn.test/x.js", OwnSchema, d),
+            "//abc.oast.test/x.js"
+        );
+        assert_eq!(
+            payload("//cdn.test/x.js", Http, d),
+            "http//abc.oast.test/x.js"
+        );
         // Free text: the query slot follows the domain.
         assert_eq!(payload("hello", Http, d), "http://abc.oast.test/?hello");
         // Java's append(null): an empty value.
@@ -375,10 +530,28 @@ mod tests {
     #[test]
     fn email_and_url_shapes() {
         assert!(is_email("me@mail.test") && is_email("a.b+c@x-y.test"));
-        for v in ["@a.test", "me@x", ".me@x.test", "me.@x.test", "me@x.test.", "me@x..test", "me@x_y.test", "nope"] {
+        for v in [
+            "@a.test",
+            "me@x",
+            ".me@x.test",
+            "me.@x.test",
+            "me@x.test.",
+            "me@x..test",
+            "me@x_y.test",
+            "nope",
+        ] {
             assert!(!is_email(v), "{v}");
         }
-        for v in ["http://x", "x.test", "/x.test/a", "//cdn.test", "\\\\srv.test", "\\srv.test", "a1:b", "x.test."] {
+        for v in [
+            "http://x",
+            "x.test",
+            "/x.test/a",
+            "//cdn.test",
+            "\\\\srv.test",
+            "\\srv.test",
+            "a1:b",
+            "x.test.",
+        ] {
             assert!(looks_like_url(v), "{v}");
         }
         for v in ["hello", "12", "/path", "x .test", ":x"] {

@@ -2943,7 +2943,14 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .collect();
     // R-12: the Repeater groups, members as positions in the saved tab list.
     let locked_rep_groups = {
-        let order: Vec<u64> = app.shared.repeaters.lock().unwrap().iter().map(|r| r.id).collect();
+        let order: Vec<u64> = app
+            .shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.id)
+            .collect();
         webprobe_core::send_group::to_project(&app.rep_groups, &order)
     };
     let locked_issues = app
@@ -3266,10 +3273,18 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             })
             .collect();
         // R-12: the project's groups over the tabs' fresh ids.
-        let fresh: Vec<u64> = app.shared.repeaters.lock().unwrap().iter().map(|r| r.id).collect();
-        app.rep_groups = webprobe_core::send_group::from_project(&data.repeater_groups, &fresh, || {
-            app.shared.rep.new_tab_id()
-        });
+        let fresh: Vec<u64> = app
+            .shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        app.rep_groups =
+            webprobe_core::send_group::from_project(&data.repeater_groups, &fresh, || {
+                app.shared.rep.new_tab_id()
+            });
         *app.shared.issues.lock().unwrap() = data
             .issues
             .iter()

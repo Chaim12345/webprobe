@@ -3160,7 +3160,11 @@ fn collaborator_pending_issues_carry_their_probe() {
     let needle = |t: &str| format!("{t}.oob.invalid");
     for (token, kind, needle) in [
         (ext.as_str(), None, needle(&ext)),
-        (ext1.as_str(), None, format!("http://{}/?hello", needle(&ext1))),
+        (
+            ext1.as_str(),
+            None,
+            format!("http://{}/?hello", needle(&ext1)),
+        ),
         (xsd.as_str(), Some("DNS"), needle(&xsd)),
         (xi.as_str(), Some("DNS"), needle(&xi)),
         ("smtpa", Some("SMTP"), "smtpa.oob.invalid".to_string()),
@@ -3461,7 +3465,11 @@ fn oob_slots_cover_every_point_and_xml_oob_where_it_applies() {
         .chain(cmd(0))
         // The synthesised Referer value is a URL, so its check runs
         // Thorough (burp.Zxfo, Zibp.ZN): own scheme, http://, Http://.
-        .chain(["#2:ext".to_string(), "#2:ext1".to_string(), "#2:ext2".to_string()])
+        .chain([
+            "#2:ext".to_string(),
+            "#2:ext1".to_string(),
+            "#2:ext2".to_string(),
+        ])
         .chain(cmd(2))
         .chain(
             ["#3:ext", "#3:ext1", "#3:xsd", "#3:xi"]
@@ -3499,7 +3507,10 @@ fn oob_slots_cover_every_point_and_xml_oob_where_it_applies() {
         ["#0:ext", "#0:ext1", "#0:ext2", "#0:ext3"]
     );
     assert_eq!(
-        ext(b"GET /p?u=http://x.test/ HTTP/1.1\r\nHost: h\r\n\r\n", ScanSpeed::Normal),
+        ext(
+            b"GET /p?u=http://x.test/ HTTP/1.1\r\nHost: h\r\n\r\n",
+            ScanSpeed::Normal
+        ),
         ["#0:ext", "#0:ext1", "#0:ext2"],
         "own scheme, Http://, https://"
     );

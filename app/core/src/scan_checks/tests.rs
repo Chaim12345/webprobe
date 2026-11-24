@@ -1991,7 +1991,9 @@ fn collaborator_everywhere_sni_probe_for_https_targets() {
         let probes = everywhere_probes("shop.test", "shop.test", 443, direct, true, &collab);
         let slots: Vec<&str> = probes.iter().map(|p| p.ids[0].0).collect();
         let want: &[&str] = if direct {
-            &["host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "connect"]
+            &[
+                "host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "connect",
+            ]
         } else {
             &["host", "xfh", "hostauth", "sni", "xff"]
         };
@@ -2004,7 +2006,11 @@ fn collaborator_everywhere_sni_probe_for_https_targets() {
         );
         assert_eq!(
             sni.ids,
-            vec![("sni", "sni.oast.test".to_string(), "SSL SNI value and the HTTP Host header")]
+            vec![(
+                "sni",
+                "sni.oast.test".to_string(),
+                "SSL SNI value and the HTTP Host header"
+            )]
         );
         assert_eq!(probes.iter().filter(|p| p.sni.is_some()).count(), 1);
     }
@@ -2038,7 +2044,13 @@ fn collaborator_everywhere_sends_the_sni_probe_to_a_tls_lab() {
         .into();
     let oob: Vec<(String, String, String)> = ["host", "sni"]
         .iter()
-        .map(|s| (format!("#host:ce:{s}"), format!("tok{s}"), format!("tok{s}.oast.test")))
+        .map(|s| {
+            (
+                format!("#host:ce:{s}"),
+                format!("tok{s}"),
+                format!("tok{s}.oast.test"),
+            )
+        })
         .collect();
     crate::scan::start_active_scan(shared.clone(), e, &oob, &[]);
     let t0 = std::time::Instant::now();

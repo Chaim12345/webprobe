@@ -16,8 +16,8 @@ pub(crate) struct EverywhereProbe {
 /// (auth fragment, absolute URL, CONNECT) are only built when no upstream
 /// proxy serves the host; the SNI variant only for an HTTPS target.
 pub(crate) const EVERYWHERE_SLOTS: [&str; 13] = [
-    "host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "tci", "xrip", "referer",
-    "wap", "scraped", "connect",
+    "host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "tci", "xrip", "referer", "wap",
+    "scraped", "connect",
 ];
 
 /// burp.Zcg4's requests for the target `host_hdr` (`host`:`port`), each
@@ -200,7 +200,14 @@ impl RequestCheck for CollaboratorEverywhere {
                 .cloned()
         };
         let collab = |slot: &str| find(slot).map(|(_, _, d)| d);
-        for probe in everywhere_probes(&cx.host_hdr, &cx.host, cx.port, direct, cx.entry.https, &collab) {
+        for probe in everywhere_probes(
+            &cx.host_hdr,
+            &cx.host,
+            cx.port,
+            direct,
+            cx.entry.https,
+            &collab,
+        ) {
             if cx.stopped() {
                 break;
             }
