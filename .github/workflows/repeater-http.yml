@@ -15,7 +15,29 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  changes:
+    name: CI change scope
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run_ci: ${{ steps.scope.outputs.run_ci }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Test change classifier
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/test-ci-change-scope.py
+      - name: Classify changed paths (uncertainty runs full CI)
+        id: scope
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/ci-change-scope.py
+
   repeater-http:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false') }}
     runs-on: ubuntu-latest
     defaults:
       run:

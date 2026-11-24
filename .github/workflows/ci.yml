@@ -21,7 +21,30 @@ defaults:
     working-directory: app
 
 jobs:
+  changes:
+    name: CI change scope
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run_ci: ${{ steps.scope.outputs.run_ci }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Test change classifier
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/test-ci-change-scope.py
+      - name: Classify changed paths (uncertainty runs full CI)
+        id: scope
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/ci-change-scope.py
+
   core:
+    needs: changes
+    # Expand both toolchains even for docs-only changes, preserving check names.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     strategy:
       # Each toolchain reports on its own: a failure on one does not cancel
@@ -39,8 +62,11 @@ jobs:
             clippy_extra: ""
     steps:
       - uses: actions/checkout@v4
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       - run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal --component clippy && rustup default ${{ matrix.toolchain }}
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       - uses: actions/cache@v4
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
         with:
           path: |
             ~/.cargo/registry
@@ -50,26 +76,36 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-${{ matrix.toolchain }}-
       # webprobe-core has no UI dependency, so no system libraries are needed.
       - run: cargo check --workspace --all-targets --all-features --locked
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings ${{ matrix.clippy_extra }}
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       - run: cargo check -p webprobe-core --locked
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       - run: cargo test -p webprobe-core --locked --no-run
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       # Zero-warning policy (issue #33): clippy is blocking.
       - run: cargo clippy -p webprobe-core --locked --all-targets -- -D warnings ${{ matrix.clippy_extra }}
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       # These tests must run in a real JVM, not pass by skipping prerequisites.
       - uses: actions/setup-java@v4
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
         with:
           distribution: temurin
           java-version: '21'
       - name: Fetch the pinned Montoya test API (not redistributed)
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
         run: |
           curl --fail --location --retry 3 https://repo.maven.apache.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar -o "$RUNNER_TEMP/montoya-api.jar"
           echo "cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94  $RUNNER_TEMP/montoya-api.jar" | sha256sum --check
       - name: Montoya public API regressions (required)
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
         env:
           WEBPROBE_REQUIRE_JAVA: '1'
           WEBPROBE_BURP_JAR: ${{ runner.temp }}/montoya-api.jar
         run: cargo test -p webprobe-core --locked ext_host::tests::montoya_ -- --test-threads=1
   bambda:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
