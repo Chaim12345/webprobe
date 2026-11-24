@@ -90,11 +90,7 @@ pub(crate) fn tls_sni_lab(shared: &super::Shared) -> (u16, SniLog) {
                     let _ = tls.write_all(
                         format!(
                             "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n{}\r\nok",
-                            if close {
-                                "Connection: close\r\n"
-                            } else {
-                                ""
-                            }
+                            if close { "Connection: close\r\n" } else { "" }
                         )
                         .as_bytes(),
                     );
@@ -126,14 +122,29 @@ mod tests {
         shared.keep_alive.store(true, Ordering::SeqCst);
         let (port, log) = tls_sni_lab(&shared);
         let get = |path: &str, host: &str| format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n");
-        let a = send_tls_raw(&shared, "localhost", port, get("/a", &format!("localhost:{port}")).as_bytes());
+        let a = send_tls_raw(
+            &shared,
+            "localhost",
+            port,
+            get("/a", &format!("localhost:{port}")).as_bytes(),
+        );
         assert!(a.resp.is_some(), "{:?}", a.error);
         {
             let _sni = sni_scope("sni.oast.test");
-            let b = send_tls_raw(&shared, "localhost", port, get("/b", "sni.oast.test").as_bytes());
+            let b = send_tls_raw(
+                &shared,
+                "localhost",
+                port,
+                get("/b", "sni.oast.test").as_bytes(),
+            );
             assert!(b.resp.is_some(), "{:?}", b.error);
         }
-        let c = send_tls_raw(&shared, "localhost", port, get("/c", &format!("localhost:{port}")).as_bytes());
+        let c = send_tls_raw(
+            &shared,
+            "localhost",
+            port,
+            get("/c", &format!("localhost:{port}")).as_bytes(),
+        );
         assert!(c.resp.is_some(), "{:?}", c.error);
         let seen: Vec<(usize, Option<String>, String)> = log
             .lock()
@@ -146,7 +157,11 @@ mod tests {
             seen,
             vec![
                 (0, lh.clone(), "GET /a HTTP/1.1".to_string()),
-                (1, Some("sni.oast.test".to_string()), "GET /b HTTP/1.1".to_string()),
+                (
+                    1,
+                    Some("sni.oast.test".to_string()),
+                    "GET /b HTTP/1.1".to_string()
+                ),
                 (0, lh, "GET /c HTTP/1.1".to_string()),
             ],
             "the SNI send opened connection 1; /c reused connection 0"
