@@ -807,7 +807,11 @@ fn repeater_sends_with_the_protocol_the_request_asks_for() {
     let (port, t) = lab(&shared, both());
     let (up, proto) = send(port, "GET /x HTTP/2", Some(true));
     assert_eq!((t.join().unwrap().as_str(), proto), ("h2", "HTTP/2"));
-    assert!(up.resp.unwrap().ends_with(b"h2"));
+    assert!(
+        up.resp.as_deref().is_some_and(|r| r.ends_with(b"h2")),
+        "upstream error: {:?}",
+        up.error
+    );
     // HTTP/1 asked for, though the server offers h2: HTTP/1.1 on the wire.
     let (port, t) = lab(&shared, both());
     let (up, proto) = send(port, "GET /x HTTP/1.1", Some(false));
