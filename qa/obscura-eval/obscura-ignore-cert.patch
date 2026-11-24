@@ -1,0 +1,45 @@
+diff --git a/crates/obscura-js/src/ops.rs b/crates/obscura-js/src/ops.rs
+index 8010c61..5d8eba0 100644
+--- a/crates/obscura-js/src/ops.rs
++++ b/crates/obscura-js/src/ops.rs
+@@ -3875,7 +3875,8 @@ fn build_request_client(proxy_url: Option<&str>) -> Result<reqwest::Client, Stri
+         // workloads where the same origin is hit dozens of times across
+         // a navigation. Keep connections warm longer.
+         .pool_idle_timeout(std::time::Duration::from_secs(300))
+-        .tcp_keepalive(std::time::Duration::from_secs(60));
++        .tcp_keepalive(std::time::Duration::from_secs(60))
++        .danger_accept_invalid_certs(obscura_net::ignore_certificate_errors());
+     if let Some(proxy) = proxy_url {
+         let p = reqwest::Proxy::all(proxy)
+             .map_err(|e| format!("Invalid op_fetch_url proxy '{}': {}", proxy, e))?;
+diff --git a/crates/obscura-net/src/client.rs b/crates/obscura-net/src/client.rs
+index 9f9a8f8..ba0934b 100644
+--- a/crates/obscura-net/src/client.rs
++++ b/crates/obscura-net/src/client.rs
+@@ -1173,7 +1173,10 @@ impl ObscuraHttpClient {
+             let mut builder = Client::builder()
+                 .redirect(Policy::none())
+                 .timeout(self.timeout)
+-                .danger_accept_invalid_certs(false)
++                // WebProbe fork: security-testing targets routinely present
++                // self-signed or internal-CA certificates. Off unless the
++                // operator opts in per process.
++                .danger_accept_invalid_certs(crate::ignore_certificate_errors())
+                 // Read a folded header line (obs-fold) as browsers do instead of
+                 // failing the response.
+                 .http1_allow_obsolete_multiline_headers_in_responses(true)
+diff --git a/crates/obscura-net/src/lib.rs b/crates/obscura-net/src/lib.rs
+index 75661e5..526f725 100644
+--- a/crates/obscura-net/src/lib.rs
++++ b/crates/obscura-net/src/lib.rs
+@@ -29,3 +29,10 @@ pub use wreq_client::{
+ 
+ mod operator_hint;
+ pub use operator_hint::private_network_error_hint;
++
++/// WebProbe fork: `OBSCURA_IGNORE_CERT_ERRORS=1` accepts invalid upstream
++/// certificates on every transport of this process (the equivalent of
++/// Chromium's `--ignore-certificate-errors`). Default is strict.
++pub fn ignore_certificate_errors() -> bool {
++    std::env::var("OBSCURA_IGNORE_CERT_ERRORS").is_ok_and(|v| v == "1")
++}

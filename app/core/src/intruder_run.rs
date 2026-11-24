@@ -2012,16 +2012,44 @@ mod tests {
         let port = origin.local_addr().unwrap().port();
         let in_flight = Arc::new(AtomicUsize::new(0));
         let max_seen = Arc::new(AtomicUsize::new(0));
-        let (i2, m2) = (in_flight.clone(), max_seen.clone());
+        // Issue #173: the bound is measured on this attack's own probes
+        // only. In the full suite another test can still be dialling a port
+        // number it used to own after the kernel hands that number to this
+        // listener; such a connection is not pool work. Strays are recorded
+        // and reported, never counted.
+        let marker = format!("wp-probe-{:016x}", rand_seed());
+        let strays = Arc::new(Mutex::new(Vec::<String>::new()));
+        let (i2, m2, marker2, strays2) = (
+            in_flight.clone(),
+            max_seen.clone(),
+            marker.clone(),
+            strays.clone(),
+        );
         std::thread::spawn(move || {
             for conn in origin.incoming() {
                 let Ok(mut s) = conn else { break };
-                let (i3, m3) = (i2.clone(), m2.clone());
+                let (i3, m3, marker3, strays3) =
+                    (i2.clone(), m2.clone(), marker2.clone(), strays2.clone());
                 std::thread::spawn(move || {
+                    let _ = s.set_read_timeout(Some(Duration::from_secs(5)));
+                    let mut seen = Vec::new();
+                    let mut buf = [0u8; 2048];
+                    while !seen.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match s.read(&mut buf) {
+                            Ok(n) if n > 0 => seen.extend_from_slice(&buf[..n]),
+                            _ => break,
+                        }
+                    }
+                    let head = String::from_utf8_lossy(&seen);
+                    if !head.contains(marker3.as_str()) {
+                        strays3
+                            .lock()
+                            .unwrap()
+                            .push(head.lines().next().unwrap_or("<no bytes>").to_string());
+                        return;
+                    }
                     let n = i3.fetch_add(1, Ordering::SeqCst) + 1;
                     m3.fetch_max(n, Ordering::SeqCst);
-                    let mut buf = [0u8; 2048];
-                    let _ = s.read(&mut buf);
                     std::thread::sleep(Duration::from_millis(50));
                     // Stop counting server work before making the complete response
                     // visible to the client. Once write_all succeeds, the client can
@@ -2034,7 +2062,8 @@ mod tests {
                 });
             }
         });
-        let template = format!("GET /?n=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let template =
+            format!("GET /?n=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Probe: {marker}\r\n\r\n");
         let parsed = Template::parse(&template).unwrap();
         let items: Vec<String> = (0..60).map(|i| i.to_string()).collect();
         let specs = intruder::resolve_specs(
@@ -2067,12 +2096,20 @@ mod tests {
         assert!(!run.is_running(), "attack finished");
         let (done, total) = run.progress();
         assert_eq!((done, total), (61, Some(61)));
+        let strays = strays.lock().unwrap().clone();
+        if !strays.is_empty() {
+            eprintln!("issue #173: foreign connections reached the lab: {strays:?}");
+        }
         assert!(
             max_seen.load(Ordering::SeqCst) <= 3,
-            "probe pool bound held: max in-flight {}",
+            "probe pool bound held: max in-flight {} (foreign connections: {strays:?})",
             max_seen.load(Ordering::SeqCst)
         );
         let rows = run.snapshot_rows();
+        assert!(
+            rows.iter().all(|r| !r.error),
+            "every probe got its response (foreign connections: {strays:?})"
+        );
         assert_eq!(rows.len(), 61, "every row drained through the channel");
         let mut numbers: Vec<usize> = rows.iter().map(|r| r.number).collect();
         numbers.sort_unstable();

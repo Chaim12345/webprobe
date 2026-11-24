@@ -1,0 +1,171 @@
+{
+ "label": "obscura-0.2.7",
+ "json_list_page_target": true,
+ "mode": "session",
+ "Page.enable": true,
+ "Network.enable": true,
+ "Network.setBypassServiceWorker": "Unknown Network method: setBypassServiceWorker",
+ "Page.addScriptToEvaluateOnNewDocument": true,
+ "Page.navigate": true,
+ "events_seen": {
+  "Network.requestWillBeSent": 12,
+  "Page.lifecycleEvent": 5,
+  "Page.frameNavigated": 1,
+  "Network.responseReceived": 12,
+  "Network.loadingFinished": 12,
+  "Page.domContentEventFired": 1,
+  "Page.loadEventFired": 1,
+  "Page.frameStoppedLoading": 1,
+  "Target.targetInfoChanged": 1
+ },
+ "lab_hits_plain_nav": [
+  [
+   "GET",
+   "/?q=1"
+  ],
+  [
+   "GET",
+   "/s.css"
+  ],
+  [
+   "GET",
+   "/app.js"
+  ],
+  [
+   "GET",
+   "/api?x=1"
+  ],
+  [
+   "POST",
+   "/xhr"
+  ],
+  [
+   "GET",
+   "/x"
+  ]
+ ],
+ "requestWillBeSent_urls": [
+  [
+   "GET",
+   "/?q=1#%3Cimg%20src=x%20onerror=1%3E&__proto__[tokh]=tokh",
+   false
+  ],
+  [
+   "GET",
+   "/s.css",
+   false
+  ],
+  [
+   "GET",
+   "/app.js",
+   false
+  ],
+  [
+   "GET",
+   "/x",
+   false
+  ],
+  [
+   "GET",
+   "/?q=1#%3Cimg%20src=x%20onerror=1%3E&__proto__[tokh]=tokh",
+   false
+  ],
+  [
+   "GET",
+   "/s.css",
+   false
+  ],
+  [
+   "GET",
+   "/app.js",
+   false
+  ],
+  [
+   "GET",
+   "/x",
+   false
+  ],
+  [
+   "GET",
+   "/api?x=1",
+   false
+  ],
+  [
+   "POST",
+   "/xhr",
+   false
+  ],
+  [
+   "GET",
+   "/api?x=1",
+   false
+  ],
+  [
+   "POST",
+   "/xhr",
+   false
+  ]
+ ],
+ "Network.getResponseBody(document)": true,
+ "Runtime.evaluate(page state)": {
+  "hook": 1,
+  "sinks": [
+   "<img src=x onerror=1>&__proto__[tokh]=tokh"
+  ],
+  "polluted": "tokh",
+  "app": 1,
+  "api": "{\"ok\":true}",
+  "links": [
+   "http://127.0.0.1:46441/next?a=1"
+  ],
+  "forms": [
+   "http://127.0.0.1:46441/login post"
+  ]
+ },
+ "Fetch.enable": true,
+ "Network.setBlockedURLs": true,
+ "Fetch.requestPaused": [
+  [
+   "Document",
+   "GET",
+   "/?probe=2#x&__proto__[tok2]=tok2"
+  ],
+  [
+   "Fetch",
+   "GET",
+   "/api?x=1"
+  ],
+  [
+   "Stylesheet",
+   "GET",
+   "/s.css"
+  ],
+  [
+   "Script",
+   "GET",
+   "/app.js"
+  ],
+  [
+   "XHR",
+   "POST",
+   "/xhr"
+  ]
+ ],
+ "lab_hits_during_interception (must be empty for fail-closed)": [
+  [
+   "GET",
+   "/s.css"
+  ],
+  [
+   "GET",
+   "/app.js"
+  ]
+ ],
+ "Runtime.evaluate(after interception)": {
+  "a": "FULFILLED",
+  "app": 1,
+  "polluted": "tok2",
+  "hook": 1,
+  "sinks": 1
+ }
+}
