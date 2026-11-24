@@ -1023,7 +1023,6 @@ fn startup_settings_pane(value: &str) -> ui::SettingsPane {
         "hotkeys" => ui::SettingsPane::Hotkeys,
         "library" => ui::SettingsPane::ConfigurationLibrary,
         "suite" => ui::SettingsPane::Suite,
-        "library" => ui::SettingsPane::ConfigurationLibrary,
         _ => ui::SettingsPane::Appearance,
     }
 }
