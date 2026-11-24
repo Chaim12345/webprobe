@@ -625,7 +625,12 @@ fn status_2xx(resp: &[u8]) -> bool {
 }
 
 fn status_code_of(resp: &[u8]) -> Option<u16> {
-    util::parse_http(resp).first.split_whitespace().nth(1)?.parse().ok()
+    util::parse_http(resp)
+        .first
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
 }
 
 /// Which cross-domain policy file is being analysed: Flash's
@@ -976,7 +981,10 @@ Content-Type: text/xml
 Content-Type: text/x-cross-domain-policy
 
 <cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#;
-        assert_eq!(crossdomain_findings(policy, "a.b.co", CrossDomainKind::Flash), ["*"]);
+        assert_eq!(
+            crossdomain_findings(policy, "a.b.co", CrossDomainKind::Flash),
+            ["*"]
+        );
         let policy = br#"HTTP/1.1 200 OK
 
 <cross-domain-policy><allow-access-from domain='www.example.com'/></cross-domain-policy>"#;
@@ -986,18 +994,33 @@ Content-Type: text/x-cross-domain-policy
         );
 
         // Not 200, or not XML: nothing. An unrelated-only policy: nothing.
-        assert!(crossdomain_findings(br#"HTTP/1.1 404 Not Found
+        assert!(crossdomain_findings(
+            br#"HTTP/1.1 404 Not Found
 Content-Type: text/xml
 
-<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#, "h", CrossDomainKind::Flash).is_empty());
-        assert!(crossdomain_findings(br#"HTTP/1.1 200 OK
+<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#,
+            "h",
+            CrossDomainKind::Flash
+        )
+        .is_empty());
+        assert!(crossdomain_findings(
+            br#"HTTP/1.1 200 OK
 Content-Type: text/html
 
-<html>login</html>"#, "h", CrossDomainKind::Flash).is_empty());
-        assert!(crossdomain_findings(br#"HTTP/1.1 200 OK
+<html>login</html>"#,
+            "h",
+            CrossDomainKind::Flash
+        )
+        .is_empty());
+        assert!(crossdomain_findings(
+            br#"HTTP/1.1 200 OK
 Content-Type: text/xml
 
-<cross-domain-policy><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#, "www.example.com", CrossDomainKind::Flash).is_empty());
+<cross-domain-policy><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#,
+            "www.example.com",
+            CrossDomainKind::Flash
+        )
+        .is_empty());
 
         // Silverlight: domain uri, with an http:// prefix stripped before the
         // comparison (Zebv.java:69-83).
