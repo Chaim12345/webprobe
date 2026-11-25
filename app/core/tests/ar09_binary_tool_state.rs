@@ -154,14 +154,11 @@ impl Isolation {
 
 impl Drop for Isolation {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            match child.try_wait() {
-                Ok(Some(_)) => {}
-                _ => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
-            }
+        if let Some(mut child) = self.child.take()
+            && !matches!(child.try_wait(), Ok(Some(_)))
+        {
+            let _ = child.kill();
+            let _ = child.wait();
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
@@ -256,7 +253,9 @@ struct Capture {
 }
 
 impl Capture {
-    fn start() -> Capture {
+    /// `body_len` is the number of body bytes the case expects on the wire,
+    /// not the declared Content-Length (the lossy case sends more).
+    fn start(body_len: usize) -> Capture {
         let listener = TcpListener::bind("127.0.0.1:0").expect("capture bind");
         listener.set_nonblocking(true).expect("capture nonblocking");
         let port = listener.local_addr().unwrap().port();
@@ -276,10 +275,32 @@ impl Capture {
                         let _ = stream.set_read_timeout(Some(IDLE));
                         let mut wire = Vec::new();
                         let mut chunk = [0u8; 2048];
+                        // An idle read ends the capture only once the
+                        // expected body is in (or the overall deadline has
+                        // passed): a sender paused between split writes is
+                        // not a finished request.
+                        let deadline = Instant::now() + Duration::from_secs(5);
                         loop {
                             match stream.read(&mut chunk) {
-                                Ok(0) | Err(_) => break,
+                                Ok(0) => break,
                                 Ok(n) => wire.extend_from_slice(&chunk[..n]),
+                                Err(e)
+                                    if matches!(
+                                        e.kind(),
+                                        std::io::ErrorKind::WouldBlock
+                                            | std::io::ErrorKind::TimedOut
+                                    ) =>
+                                {
+                                    let body = wire
+                                        .windows(4)
+                                        .position(|w| w == b"\r\n\r\n")
+                                        .map_or(0, |h| wire.len() - (h + 4));
+                                    let headed = wire.windows(4).any(|w| w == b"\r\n\r\n");
+                                    if (headed && body >= body_len) || Instant::now() >= deadline {
+                                        break;
+                                    }
+                                }
+                                Err(_) => break,
                             }
                         }
                         r.lock().unwrap().push(wire);
@@ -355,7 +376,7 @@ fn hex(bytes: &[u8]) -> String {
 // ---------- child bodies ----------
 
 fn control_body() {
-    let mut capture = Capture::start();
+    let mut capture = Capture::start(BODY.len());
     let shared = Shared::new();
     let raw = raw_request();
     let up = send_raw_with(&shared, "127.0.0.1", capture.port, &raw, None);
@@ -390,7 +411,7 @@ fn control_body() {
 /// evidence: the production expression stores lossy text, Repeater sends
 /// `text.as_bytes()`, and the declared length no longer matches the body.
 fn lossy_body() {
-    let mut capture = Capture::start();
+    let mut capture = Capture::start(12);
     let shared = Shared::new();
     let raw = raw_request();
     let stored: String = String::from_utf8_lossy(&raw).into_owned();

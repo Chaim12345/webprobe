@@ -2193,12 +2193,14 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
     if (h && q) { return "location.hash+location.search"; }
     return h ? "location.hash" : "location.search";
   }
-  // > 0 while a wrapped jQuery parse static runs: the native sink it
-  // delegates to (jQuery 3's parseJSON is JSON.parse itself) must not add a
-  // second, Firm hit for the same jQuery-dependent call.
-  var jqNested = 0;
+  // The native sink a running jQuery parse static delegates to (jQuery 3's
+  // parseJSON is JSON.parse itself): that one sink must not add a second,
+  // Firm hit for the same jQuery-dependent call. Every other sink reached
+  // during the call (a reviver writing innerHTML, say) is still recorded.
+  var jqDelegate = null;
+  var jqDelegates = { parseJSON: "JSON.parse" };
   function record(sink, value) {
-    if (jqNested > 0 && sink.indexOf("jQuery.") !== 0) { return; }
+    if (jqDelegate !== null && sink === jqDelegate) { return; }
     try {
       var s = String(value);
       var src = provenance(s);
@@ -2445,8 +2447,9 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       if (jqWrapped(orig)) { return orig; }
       return jqTag(function (v) {
         record("jQuery." + name, v);
-        jqNested++;
-        try { return orig.apply(jq, arguments); } finally { jqNested--; }
+        var outer = jqDelegate;
+        jqDelegate = jqDelegates[name] || null;
+        try { return orig.apply(jq, arguments); } finally { jqDelegate = outer; }
       });
     }
     try {

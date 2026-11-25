@@ -1742,6 +1742,15 @@ jQuery.parseXML = function (v) { window.__px = v; return null; };
             // itself, and the call happens in the same task.
             r#"<html><body><script>var j = function () {}; j.fn = j.prototype = {}; j.parseJSON = JSON.parse;
 window.jQuery = j; try { jQuery.parseJSON(location.hash.slice(1)); } catch (e) {}</script></body></html>"#.to_string()
+        } else if path.starts_with("/jq3-json-reviver") {
+            // A reviver runs inside the wrapped parse and writes the
+            // tainted value to innerHTML: that sink is its own finding.
+            r#"<html><body><script>var j = function () {}; j.fn = j.prototype = {}; j.parseJSON = JSON.parse;
+window.jQuery = j;
+jQuery.parseJSON(JSON.stringify({ a: location.hash.slice(1) }), function (k, v) {
+  if (typeof v === "string") { document.body.innerHTML = v; }
+  return v;
+});</script></body></html>"#.to_string()
         } else if path.starts_with("/jq-xml-late") {
             // Constructor published without fn, the static attached
             // afterwards and called before any poll tick.
@@ -1832,6 +1841,28 @@ window.jQuery = j; jQuery.parseXML(location.hash.slice(1)); }}, 100);</script></
             "Tentative".to_string()
         )],
         "jQuery 3 parseJSON, one Tentative finding"
+    );
+    // Only the delegated native sink is suppressed: a sink reached from a
+    // reviver during the same call keeps its own finding.
+    let got = lab_scan(
+        port,
+        &["active.dom-json-injection", "active.dom-xss"],
+        "GET",
+        "/jq3-json-reviver",
+        format!("GET /jq3-json-reviver HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert_eq!(
+        got.iter()
+            .filter(|(n, ..)| n == "Client-side JSON injection (DOM-based)")
+            .map(|(_, _, c)| c.as_str())
+            .collect::<Vec<_>>(),
+        ["Tentative"],
+        "one Tentative parser finding: {got:?}"
+    );
+    assert!(
+        got.iter()
+            .any(|(n, _, c)| n == "Cross-site scripting (DOM-based)" && c == "Firm"),
+        "the reviver's innerHTML write keeps its finding: {got:?}"
     );
     for path in ["/jq-xml-late", "/jq-xml-second"] {
         let got = lab_scan(

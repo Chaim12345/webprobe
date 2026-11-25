@@ -158,14 +158,11 @@ impl Isolation {
 
 impl Drop for Isolation {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            match child.try_wait() {
-                Ok(Some(_)) => {}
-                _ => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
-            }
+        if let Some(mut child) = self.child.take()
+            && !matches!(child.try_wait(), Ok(Some(_)))
+        {
+            let _ = child.kill();
+            let _ = child.wait();
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
@@ -268,7 +265,9 @@ struct Capture {
 }
 
 impl Capture {
-    fn start() -> Capture {
+    /// `body_len` is the number of body bytes the case expects on the wire,
+    /// not the declared Content-Length (the lossy case sends more).
+    fn start(body_len: usize) -> Capture {
         let listener = TcpListener::bind("127.0.0.1:0").expect("capture bind");
         listener.set_nonblocking(true).expect("capture nonblocking");
         let port = listener.local_addr().unwrap().port();
@@ -288,10 +287,32 @@ impl Capture {
                         let _ = stream.set_read_timeout(Some(IDLE));
                         let mut wire = Vec::new();
                         let mut chunk = [0u8; 2048];
+                        // An idle read ends the capture only once the
+                        // expected body is in (or the overall deadline has
+                        // passed): a sender paused between split writes is
+                        // not a finished request.
+                        let deadline = Instant::now() + Duration::from_secs(5);
                         loop {
                             match stream.read(&mut chunk) {
-                                Ok(0) | Err(_) => break,
+                                Ok(0) => break,
                                 Ok(n) => wire.extend_from_slice(&chunk[..n]),
+                                Err(e)
+                                    if matches!(
+                                        e.kind(),
+                                        std::io::ErrorKind::WouldBlock
+                                            | std::io::ErrorKind::TimedOut
+                                    ) =>
+                                {
+                                    let body = wire
+                                        .windows(4)
+                                        .position(|w| w == b"\r\n\r\n")
+                                        .map_or(0, |h| wire.len() - (h + 4));
+                                    let headed = wire.windows(4).any(|w| w == b"\r\n\r\n");
+                                    if (headed && body >= body_len) || Instant::now() >= deadline {
+                                        break;
+                                    }
+                                }
+                                Err(_) => break,
                             }
                         }
                         r.lock().unwrap().push(wire);
@@ -363,7 +384,7 @@ impl Drop for RunGuard {
 /// Real Repeater path: `request_for_tools` -> `send_following` ->
 /// `send_once` -> `req.as_bytes()` -> socket.
 fn repeater_body() {
-    let mut capture = Capture::start();
+    let mut capture = Capture::start(12);
     let shared = net::Shared::new();
     let text = crate::ui::request_for_tools(&raw_request());
     let edited = text.replacen("POST /ar09", "POST /ar09?edited=1", 1);
@@ -407,7 +428,7 @@ fn repeater_body() {
 /// Real Intruder path: `request_for_tools` -> template -> `intruder_run::start`
 /// (dispatcher and `execute_probe`) -> `update_content_length` -> socket.
 fn intruder_body() {
-    let mut capture = Capture::start();
+    let mut capture = Capture::start(12);
     let shared = net::Shared::new();
     let text = crate::ui::request_for_tools(&raw_request());
     let template = text.replacen("POST /ar09", "POST /ar09\u{a7}p\u{a7}", 1);
@@ -467,7 +488,7 @@ fn intruder_body() {
 /// length across a split delivery, independent of the declared length.
 #[test]
 fn capture_fixture_records_a_split_delivery_without_trusting_content_length() {
-    let mut capture = Capture::start();
+    let mut capture = Capture::start(BODY.len());
     let raw = raw_request();
     let head_end = find_head(&raw).expect("head terminator") + 4;
     let mut client =

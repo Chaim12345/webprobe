@@ -155,14 +155,11 @@ impl Isolation {
 
 impl Drop for Isolation {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            match child.try_wait() {
-                Ok(Some(_)) => {}
-                _ => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
-            }
+        if let Some(mut child) = self.child.take()
+            && !matches!(child.try_wait(), Ok(Some(_)))
+        {
+            let _ = child.kill();
+            let _ = child.wait();
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
@@ -370,6 +367,34 @@ impl Proxy {
     }
 }
 
+impl Proxy {
+    /// Every connection worker has exited, checked until `deadline` passes.
+    fn workers_finished(&self, deadline: Duration) -> bool {
+        let end = Instant::now() + deadline;
+        loop {
+            if self
+                .conns
+                .lock()
+                .unwrap()
+                .iter()
+                .all(JoinHandle::is_finished)
+            {
+                return true;
+            }
+            if Instant::now() >= end {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+}
+
+/// A full close of the client connection: both directions shut down, then
+/// the socket is closed as the stream goes out of scope.
+fn disconnect(client: TcpStream) {
+    let _ = client.shutdown(Shutdown::Both);
+}
+
 impl Drop for Proxy {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
@@ -465,8 +490,7 @@ fn held_body() {
     let accepts_before = origin.accepts.load(Ordering::SeqCst);
     let parsed_before = origin.parsed.load(Ordering::SeqCst);
 
-    let _ = client.shutdown(Shutdown::Both);
-    drop(client);
+    disconnect(client);
 
     let started = Instant::now();
     let released = wait_queue(&shared, 0, WAIT);
@@ -488,6 +512,16 @@ fn held_body() {
     }
     let parsed_after_forward = origin.parsed.load(Ordering::SeqCst);
 
+    // A released entry must also mean the proxy worker is done and stayed
+    // silent: wait for it to exit, give a late forward time to land, then
+    // sample the origin again.
+    let workers_done = released && proxy.workers_finished(WAIT);
+    if workers_done {
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    let accepts_final = origin.accepts.load(Ordering::SeqCst);
+    let parsed_final = origin.parsed.load(Ordering::SeqCst);
+
     // Teardown always drops held entries; it never forwards.
     let dropped_at_teardown = intercept_release_all(&shared, true);
 
@@ -499,9 +533,20 @@ fn held_body() {
     println!("F9-EVIDENCE retained_at_cancel={retained_at_cancel}");
     println!("F9-EVIDENCE parsed_after_forward={parsed_after_forward}");
     println!("F9-EVIDENCE dropped_at_teardown={dropped_at_teardown}");
+    println!("F9-EVIDENCE workers_done={workers_done}");
+    println!("F9-EVIDENCE accepts_final={accepts_final} parsed_final={parsed_final}");
     assert!(
         released && parsed_at_cancel == 0,
         "F9-EVIDENCE held request outlived its client: released={released}",
+    );
+    assert!(
+        workers_done,
+        "F9-EVIDENCE the proxy worker was still running after the release",
+    );
+    assert_eq!(
+        (accepts_final, parsed_final),
+        (accepts_before, 0),
+        "F9-EVIDENCE the origin was contacted after the client left",
     );
     println!("CASE-COMPLETE: {HELD}");
 }
