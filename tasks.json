@@ -8,9 +8,9 @@
     "p1": 44,
     "p2": 29,
     "by_status": {
-      "done": 121,
+      "done": 122,
       "rejected": 2,
-      "todo": 19
+      "todo": 18
     }
   },
   "tasks": [
@@ -1562,8 +1562,9 @@
       "title": "Manually raised issues (Create issue, Add to issue)",
       "acceptance": "The user can create an issue by hand from a message and add further messages to it, as Burp's \"Create an issue\" and \"Add to an issue\" (burp.Zgwg, Zgwd, Zr7e, factory Zcxr); the issue carries type 0x08008000 and shows in the issue list; verified on the QA display.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "In progress 2026-11-24: branch feat/manual-issue-20261124."
+      "status": "done",
+      "evidence": "core/src/scan/issue_types.rs: mk_manual_issue (burp.Zp_6 / Zcxr.ZD, type 0x08008000), add_manual_evidence (burp.Zchl) and the dialog form with its validation (burp.Zr7j, Zsl_, Zxrb, Zudh), tested against 57 service and path inputs first run through Burp's own validators. Desktop: src/manual_issue_ui.rs, a \"Record an issue\" submenu with \"Create an issue\" and \"Add to manually created issue\" in the Proxy history message panes and the Repeater request editor (burp.Zgmp), state held in an existing App field. Seen on the QA display: qa/manual-issue-proof/ (8 screenshots). Not ported: the submenu in the other editors where Burp shows it (Repeater response, site map, Logger, Intruder results, Organizer, issue evidence), selection markers on the evidence, the picker's search field; remediation is stored inside the issue detail.",
+      "completed": "2026-11-25"
     },
     {
       "id": "S-03",

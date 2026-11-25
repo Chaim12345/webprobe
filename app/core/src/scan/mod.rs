@@ -96,4 +96,6 @@ mod passive_helpers_tests;
 mod tests;
 
 #[cfg(test)]
+mod manual_issue_tests;
+#[cfg(test)]
 mod passive_library_tests;

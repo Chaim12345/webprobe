@@ -31,6 +31,11 @@ DYNAMIC = {
     # Not scanner checks: the type every issue from that source is filed under.
     "BCheck generated issue": [("bcheck/scan.rs", 'issue_type_id("BCheck generated issue")')],
     "Extension generated issue": [("ext_host.rs", 'issue_type_id("Extension generated issue")')],
+    # Raised by hand from the editors' "Record an issue" menu (burp.Zp_6 / Zcxr.ZD).
+    "Manually generated issue": [
+        ("scan/issue_types.rs", 'pub const MANUAL_ISSUE_TYPE: &str = "Manually generated issue";'),
+        ("scan/issue_types.rs", "type_id: issue_type_id(MANUAL_ISSUE_TYPE)"),
+    ],
     "External service interaction (HTTP)": [
         ("oob.rs", 'format!("External service interaction ({kind})")'),
         ("collaborator.rs", 'Self::Http => "HTTP"'),

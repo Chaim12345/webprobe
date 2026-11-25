@@ -28,6 +28,7 @@ mod issue_view;
 use webprobe_core::intruder_run;
 mod intruder_ui;
 use webprobe_core::logger;
+mod manual_issue_ui;
 mod mcp_hook;
 mod menus;
 use webprobe_core::macros;

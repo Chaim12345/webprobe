@@ -1,87 +1,79 @@
 # AR-09 — bytes vs lossy text in Repeater/Intruder tool state
 
-Pin: `692f09728039884c59a676ff314879c06dcb1cf5`. New test only:
-`app/core/tests/ar09_binary_tool_state.rs`. No production code edited.
+Source pin: `692f09728039884c59a676ff314879c06dcb1cf5` (parity/2026-11-17).
+Branch: `goal/ar09-binary-tool-state-20261125`.
 
-## Trace: history bytes → socket write
+## Status: source-only revision, nothing executed
 
-| Step | Site |
-|---|---|
-| raw capture | `HistEntry.req_raw: Vec<u8>` |
-| lossy conversion | `app/src/ui/actions.rs:204` — `String::from_utf8_lossy(&util::origin_form(raw))` inside `request_for_tools` (203-214) |
-| Repeater tab | `app/src/ui/actions.rs:234` — `request: request_for_tools(&e.req_raw)`; `RepTab.request: String` (`core/src/net/types.rs:318`) |
-| Repeater send | `app/src/repeater_ops.rs:502` `send_once(..., req: &mut String, ...)` → `:514` `let mut bytes = req.as_bytes().to_vec()` → `:532/534` `send_tls_raw_with`/`send_raw_with` → socket (`core/src/net/send.rs:10,17`) |
-| Intruder template | `app/src/ui/actions.rs:298` and `app/src/tools.rs:2818` — `request_for_tools(...)`; `Attack.request: String` (`core/src/intruder.rs:187`), payloads `&str` |
-| Intruder send | `core/src/intruder_run.rs:1054` — `update_content_length(request.as_bytes())` (CL recomputed from the lossy text) |
+This revision touches the test files and this note only. No build, test run or test binary was
+executed for it. The coverage and byte figures below are the earlier run's records.
 
-The extension branch of `send_once` (`repeater_ops.rs:514-523`) keeps the exact bytes for
-transport but still stores the lossy text in `*req` — the comment there says so.
+## Coverage at the earlier run (a3345a2)
 
-## Executed evidence (loopback only)
+- `app/core/tests/ar09_binary_tool_state.rs`: 2 cases passed (transport control and the lossy
+  characterisation).
+- `app/src/ar09_binary_tool_state_tests.rs`: 2 cases passed, driving the real app code
+  (`request_for_tools` -> `send_following`/`send_once`; `request_for_tools` -> template ->
+  `intruder_run::start` -> `execute_probe`). The Repeater case was named
+  `repeater_send_once_sends_the_lossy_body_with_a_stale_content_length` then; this revision
+  shortens it to `repeater_send_once_sends_the_lossy_body` and adds a third, non-isolated
+  split-delivery fixture self-check, so the next run reports 3 app cases + 2 core cases.
+- Total: 4 passing cases; 0 failing; 0 ignored. These are characterisations of the current code
+  and a transport control — **not** a fix, not GUI evidence, and not proof of correct binary
+  handling.
 
-```
-cargo test -p webprobe-core --test ar09_binary_tool_state --locked -- --nocapture
-  test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
-```
+Observed then: body `00 ff fe 00 c3 28` (6 bytes) arrived as `00 ef bf bd ef bf bd 00 ef bf bd
+28` (12 bytes) under `Content-Length: 6` in the Repeater chain; the Intruder chain sent the same
+12 bytes with Content-Length restamped to 12.
 
-Control (transport is byte-clean):
-```
-sent     : ... 43 6f 6e 74 65 6e 74 2d 4c 65 6e 67 74 68 3a 20 36 0d 0a 0d 0a 00 ff fe 00 c3 28
-received : ... Content-Length: 6 \r\n Connection: close \r\n \r\n 00 ff fe 00 c3 28
-```
-Only `Connection: close` is added; the 6 body bytes are intact.
+## Corrections in this revision (fixtures and this note only)
 
-Characterisation of the tool-state conversion (exact production expression):
-```
-original body    : 00 ff fe 00 c3 28                     (6 bytes)
-stored text body : 00 ef bf bd ef bf bd 00 ef bf bd 28   (12 bytes)
-Content-Length header: 6   actual body: 12
-```
-NUL survives (valid UTF-8). Every invalid byte becomes U+FFFD (`ef bf bd`).
+- Each case that constructs `Shared` is now a parent wrapper that never constructs it. The
+  parent creates a unique tempdir with a fake HOME, a fake XDG_CONFIG_HOME and an explicit CA
+  dir, writes non-secret sentinels at `fakeHOME/.config/webprobe/ca.json` and
+  `fakeXDG/webprobe/ca.json`, and spawns this binary with `--exact <case> --nocapture
+  --test-threads=1`. Isolated paths go to the CHILD environment only; no `set_var`, no chdir,
+  no inherited-HOME reliance, no shell prefixes.
+- The child validates that the three paths are absolute and inside the owned tempdir, and runs
+  exactly one case.
+- The parent requires: child finished inside a 120 s budget (`try_wait` with a deadline, kill
+  and reap on timeout), exactly one reported case, an explicit `CASE-COMPLETE:` record,
+  unchanged sentinels, and no new files under the fake HOME or XDG.
+- The capture fixture records every byte under a bounded idle deadline and never stops early on
+  the declared Content-Length, so header length, body length and trailing bytes are reported
+  separately.
+- A split-delivery self-check (head, 50 ms gap, body) asserts the fixture captures the known
+  byte length; it constructs neither `Shared` nor `App`, so it needs no child-process isolation.
+- The Intruder case asserts the run finishes inside 15 s and carries a guard that stops the run
+  and waits for it to settle during failure cleanup.
+- No subsequent-request desync and no connection-reuse claim is made; the observed facts are a
+  converted body and a declared-length mismatch on one connection. The risk is described as
+  malformed framing and data loss only.
 
-## Consequence
+## Hand-formatting in this revision (rustfmt not run)
 
-- **Repeater**: Content-Length is not recomputed, so the wire request declares 6 and carries 12
-  bytes. A server reads 6 bytes of body; the remaining 6 desync the next request on a reused
-  connection. The captured request is no longer the request sent.
-- **Intruder**: CL is recomputed (`intruder_run.rs:1054`), so it stays consistent, but the bytes
-  still differ from the capture, and binary payloads cannot be expressed at all (`&str`).
-- NUL bytes are fine; only invalid UTF-8 is lossy.
+Formatting was applied by hand because this goal forbids running any binary, including the
+formatter: import order inside brace groups (`{Shared, send_raw_with}`), the long `INTRUDER`
+constant broken after `=`, one-line calls for split evidence lines, trailing commas in vertical
+macro arguments, short struct literals collapsed to one line, and short method chains joined.
+These hunks are hand-formatting only; the reviewer should validate them with
+`cargo fmt --check` before any rerun.
 
-## Minimal fix proposal (for review; not applied)
+## CA isolation status
 
-1. Keep the captured bytes: add `raw: Option<Vec<u8>>` to `RepTab`, set by
-   `send_entry_to_repeater` (`actions.rs:234`). In `send_once`, send `raw` when the editor text
-   still equals `String::from_utf8_lossy(raw)` (unedited), else send the edited text bytes.
-2. Clear `raw` on any edit (`ui/repeater.rs` text change) so an edited tab behaves as today.
-3. Intruder needs its own change (bytes template or a hex payload mode); that is a larger
-   redesign and is out of this scope.
-4. No parser rewrite and no text-loss removal: the text editor stays; the bytes are preserved
-   beside it.
+Earlier run: unknown and uncontrolled — the fixtures constructed `Shared::new()` directly, so a
+test binary could resolve the real user CA through `WEBPROBE_CA_DIR`, `XDG_CONFIG_HOME` or
+`HOME`. The wrapper above is designed to prevent that, but it has not been executed; isolation
+remains unproven until an independent reviewer runs it.
 
-Limitations: the app crate has no library target, so the app-layer conversion cannot be driven
-from a core integration test; the characterisation test applies the exact production expression
-(`String::from_utf8_lossy(...).into_owned().into_bytes()`) over the real socket path instead.
-Intruder's send path was audited, not executed.
+## Proposed production change (unapproved, proposal only)
 
-## App-layer regression on the real send paths (added after review)
+The raw-bytes fallback sketch in the earlier revision is withdrawn. Binary body handling needs a
+byte-backed tool-state design of its own (capture bytes beside the text, transport from the
+bytes, an explicit hex/binary editor decision) and must be reviewed before any edit. No
+production file is touched here.
 
-`app/src/ar09_binary_tool_state_tests.rs` (wired with one `#[cfg(test)] mod` line in
-`app/src/main.rs`; no production behaviour changed):
+## CA inspection scope
 
-- `repeater_send_once_sends_the_lossy_body_with_a_stale_content_length` calls
-  `ui::request_for_tools` -> `repeater_ops::send_following` -> `send_once` -> socket, with an edit
-  to the request line first. Observed wire body:
-  `00 ef bf bd ef bf bd 00 ef bf bd 28`, `Content-Length: 6`, body 12 bytes.
-- `intruder_attack_sends_the_lossy_template_body` calls `ui::request_for_tools` -> template ->
-  `intruder_run::start` (real dispatcher and `execute_probe`) -> socket. Observed wire body is the
-  same 12 lossy bytes, with Content-Length restamped to 12.
-
-```
-cargo test -p webprobe --bin webprobe ar09 -- --nocapture --test-threads=1
-  test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 164 filtered out
-```
-
-So the defect is reproduced through the actual tool code, not only through the conversion
-expression: Repeater desyncs (6 declared, 12 sent), Intruder sends the converted bytes with a
-consistent length.
+If CA state is ever inspected: path, existence, mtime, size/hash and permissions only. Never
+certificate or private-key contents. No deletion or repair. No inspection was performed here.
