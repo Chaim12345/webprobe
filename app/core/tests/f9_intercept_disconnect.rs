@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 use webprobe_core::net::{Shared, handle_conn, intercept_release_all};
 
 const WAIT: Duration = Duration::from_secs(3);
+const PROXY_SETTLE: Duration = Duration::from_secs(3);
 const CASE_BUDGET: Duration = Duration::from_secs(90);
 const CONNECTION_BUDGET: Duration = Duration::from_secs(10);
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
@@ -458,9 +459,11 @@ impl Drop for Origin {
 
 struct Proxy {
     port: u16,
+    shared: Arc<Shared>,
     stop: Arc<AtomicBool>,
     join: Option<JoinHandle<()>>,
     conns: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    clients: Arc<Mutex<Vec<TcpStream>>>,
 }
 
 impl Proxy {
@@ -470,12 +473,19 @@ impl Proxy {
         let port = listener.local_addr().unwrap().port();
         let stop = Arc::new(AtomicBool::new(false));
         let conns = Arc::new(Mutex::new(Vec::new()));
-        let (s, c) = (Arc::clone(&stop), Arc::clone(&conns));
+        let clients = Arc::new(Mutex::new(Vec::new()));
+        let (s, c, k) = (Arc::clone(&stop), Arc::clone(&conns), Arc::clone(&clients));
+        let acceptor_shared = Arc::clone(&shared);
         let join = std::thread::spawn(move || {
             while !s.load(Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((stream, _)) => {
-                        let shared = Arc::clone(&shared);
+                        // A cloned handle lets teardown close the client side
+                        // so the worker can finish inside the settle window.
+                        if let Ok(handle) = stream.try_clone() {
+                            k.lock().unwrap().push(handle);
+                        }
+                        let shared = Arc::clone(&acceptor_shared);
                         let handle = std::thread::spawn(move || handle_conn(shared, stream));
                         c.lock().unwrap().push(handle);
                     }
@@ -488,33 +498,86 @@ impl Proxy {
         });
         Proxy {
             port,
+            shared,
             stop,
             join: Some(join),
             conns,
+            clients,
         }
     }
 }
 
 impl Drop for Proxy {
     fn drop(&mut self) {
+        // Order matters: close owned clients, stop the acceptor, drop held
+        // entries, then give finished workers a bounded window to be joined.
+        for client in self.clients.lock().unwrap().drain(..) {
+            let _ = client.shutdown(Shutdown::Both);
+        }
         self.stop.store(true, Ordering::SeqCst);
         if let Some(handle) = self.join.take() {
             let _ = handle.join();
         }
-        let handles = std::mem::take(&mut *self.conns.lock().unwrap());
-        let mut detached = 0usize;
-        for handle in handles {
-            if handle.is_finished() {
-                let _ = handle.join();
-            } else {
-                detached += 1;
+        let dropped = intercept_release_all(&self.shared, true);
+        if dropped > 0 {
+            println!("F9-PROXY-SETTLE: dropped {dropped} held entries");
+        }
+        let mut pending = std::mem::take(&mut *self.conns.lock().unwrap());
+        let end = Instant::now() + PROXY_SETTLE;
+        while !pending.is_empty() && Instant::now() < end {
+            let mut still = Vec::new();
+            for handle in pending {
+                if handle.is_finished() {
+                    let _ = handle.join();
+                } else {
+                    still.push(handle);
+                }
+            }
+            pending = still;
+            if !pending.is_empty() {
+                std::thread::sleep(Duration::from_millis(10));
             }
         }
-        if detached > 0 {
+        if !pending.is_empty() {
             // No safe time-bound join exists for a production worker thread:
             // the parent's child kill is containment, and the parent treats
             // this record as a non-success cleanup outcome.
-            println!("{DETACHED}: {detached}");
+            println!("{DETACHED}: {}", pending.len());
+        }
+    }
+}
+
+/// Drops held entries on any exit path, including a panic. Teardown never
+/// forwards. Declared after the proxy so it runs before the proxy settle.
+struct HeldQueueGuard {
+    shared: Arc<Shared>,
+    torn_down: bool,
+}
+
+impl HeldQueueGuard {
+    fn new(shared: Arc<Shared>) -> HeldQueueGuard {
+        HeldQueueGuard {
+            shared,
+            torn_down: false,
+        }
+    }
+
+    fn release(&mut self, drop_held: bool) -> usize {
+        let released = intercept_release_all(&self.shared, drop_held);
+        if drop_held {
+            self.torn_down = true;
+        }
+        released
+    }
+}
+
+impl Drop for HeldQueueGuard {
+    fn drop(&mut self) {
+        if !self.torn_down {
+            let dropped = intercept_release_all(&self.shared, true);
+            if dropped > 0 {
+                println!("F9-RAII-TEARDOWN: dropped {dropped} held entries");
+            }
         }
     }
 }
@@ -575,6 +638,9 @@ fn held_body() {
     shared.intercept_on.store(true, Ordering::SeqCst);
     shared.intercept_rules.lock().unwrap().clear();
     let proxy = Proxy::start(Arc::clone(&shared));
+    // Declared after the proxy so it drops first: a panic anywhere below tears
+    // the held queue down before the proxy settle window runs.
+    let mut guard = HeldQueueGuard::new(Arc::clone(&shared));
     let mut client = TcpStream::connect(("127.0.0.1", proxy.port)).expect("client connect");
 
     // Fully sent request, then a full close: not a write-half shutdown.
@@ -600,32 +666,65 @@ fn held_body() {
     let parsed_at_cancel = origin.parsed.load(Ordering::SeqCst);
     let retained_at_cancel = origin.bytes.lock().unwrap().len();
 
-    // Explicit characterisation step, never teardown: forward the held item
-    // and record what the origin then sees.
-    let mut forwarded = 0usize;
-    if held_after > 0 {
-        forwarded = intercept_release_all(&shared, false);
-        let end = Instant::now() + WAIT;
-        while Instant::now() < end && origin.parsed.load(Ordering::SeqCst) <= parsed_at_cancel {
-            std::thread::sleep(Duration::from_millis(5));
-        }
-    }
-    let parsed_after_forward = origin.parsed.load(Ordering::SeqCst);
-
-    // Teardown always drops held entries; it never forwards.
-    let dropped_at_teardown = intercept_release_all(&shared, true);
-
     println!("F9-EVIDENCE released={released} released_after={released_after:?}");
-    println!("F9-EVIDENCE held_after_3s={held_after} forwards={forwarded}");
+    println!("F9-EVIDENCE held_after_3s={held_after}");
     println!("F9-EVIDENCE accepts_before={accepts_before} parsed_before={parsed_before}");
     println!("F9-EVIDENCE accepts_at_cancel={accepts_at_cancel}");
     println!("F9-EVIDENCE parsed_at_cancel={parsed_at_cancel}");
     println!("F9-EVIDENCE retained_at_cancel={retained_at_cancel}");
-    println!("F9-EVIDENCE parsed_after_forward={parsed_after_forward}");
+
+    // Characterisation facts, asserted before the expected target failure so
+    // an unrelated assertion cannot satisfy the parent's failure match.
+    assert!(
+        !released,
+        "the held entry was released on cancel; the defect did not reproduce",
+    );
+    assert_eq!(
+        held_after, 1,
+        "the interrupt queue must still hold the entry"
+    );
+    assert_eq!(
+        accepts_before, 0,
+        "nothing may reach the origin before the manual forward",
+    );
+    assert_eq!(
+        parsed_before, 0,
+        "nothing may be parsed upstream before the manual forward",
+    );
+    assert_eq!(
+        accepts_at_cancel, 0,
+        "cancelling the client must not open an upstream connection",
+    );
+    assert_eq!(
+        parsed_at_cancel, 0,
+        "cancelling the client must not deliver upstream",
+    );
+
+    // Explicit characterisation step, never teardown: forward the held item
+    // and record what the origin then sees.
+    let forwarded = guard.release(false);
+    let end = Instant::now() + WAIT;
+    while Instant::now() < end && origin.parsed.load(Ordering::SeqCst) <= parsed_at_cancel {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let parsed_after_forward = origin.parsed.load(Ordering::SeqCst);
+    println!("F9-EVIDENCE forwards={forwarded} parsed_after_forward={parsed_after_forward}");
+    assert_eq!(forwarded, 1, "the manual forward must release one entry");
+    assert_eq!(
+        parsed_after_forward,
+        parsed_at_cancel + 1,
+        "the forwarded request must arrive complete",
+    );
+
+    // Teardown always drops held entries; it never forwards.
+    let dropped_at_teardown = guard.release(true);
     println!("F9-EVIDENCE dropped_at_teardown={dropped_at_teardown}");
+
+    println!("F9-CASE-EVIDENCE-COMPLETE");
+    println!("F9-TARGET-CHECK: does a cancel release the held request?");
     assert!(
         released && parsed_at_cancel == 0,
-        "F9-EVIDENCE held request outlived its client: released={released}",
+        "F9-TARGET-FAILURE: held request outlived its client: released={released}",
     );
     println!("CASE-COMPLETE: {HELD}");
 }
@@ -659,6 +758,11 @@ fn control_normal_request_reaches_the_origin_and_returns() {
         "a production worker could not be joined; child termination is containment, not acceptance",
     );
     assert_single_case(&run.stdout, true);
+    assert!(
+        run.stdout.contains("F9-ISOLATION-OK"),
+        "the case never ran in the child; check the case constant against the test fn name\nstdout:\n{}",
+        run.stdout,
+    );
     assert!(
         run.stdout.contains("F9-CONTROL-EVIDENCE"),
         "no per-case completion record\nstdout:\n{}",
@@ -703,8 +807,40 @@ fn characterisation_held_request_is_retained_after_the_client_cancels() {
     );
     assert_single_case(&run.stdout, false);
     assert!(
-        run.stderr.contains("F9-EVIDENCE") && run.stderr.contains("released=false"),
-        "child failed for an unexpected reason\nstderr:\n{}",
+        run.stdout.contains("F9-ISOLATION-OK"),
+        "the case never ran in the child; check the case constant against the test fn name\nstdout:\n{}",
+        run.stdout,
+    );
+    assert!(
+        run.stdout.contains("F9-EVIDENCE") && run.stdout.contains("released=false"),
+        "the characterisation record is missing\nstdout:\n{}",
+        run.stdout,
+    );
+    // The child must reach its own evidence record and its distinct target
+    // check before failing, so an unrelated assertion cannot satisfy this.
+    let evidence = run
+        .stdout
+        .find("F9-CASE-EVIDENCE-COMPLETE")
+        .unwrap_or_else(|| {
+            panic!(
+                "the characterisation facts never completed; an unexpected assertion failed first\nstdout:\n{}",
+                run.stdout,
+            )
+        });
+    let target = run.stdout.find("F9-TARGET-CHECK").unwrap_or_else(|| {
+        panic!(
+            "the case did not reach its target check\nstdout:\n{}",
+            run.stdout,
+        )
+    });
+    assert!(
+        evidence < target,
+        "the evidence record must precede the target check\nstdout:\n{}",
+        run.stdout,
+    );
+    assert!(
+        run.stderr.contains("F9-TARGET-FAILURE"),
+        "the child failed short of the target check\nstderr:\n{}",
         run.stderr,
     );
     assert!(
