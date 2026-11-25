@@ -27,20 +27,23 @@ execution claim.
 
 | Candidate | Actual Rust 1.95 constraint | License and project fit | Source offsets | Malformed input / valid sibling | Cancellation and bounds | Feasibility decision |
 |---|---|---|---|---|---|---|
-| **Oxc `oxc_parser 0.146.0`** | Registry declares **1.95.0**; latest 0.147–0.148 require 1.96, 0.149–0.155 require 1.97, 0.159–0.160 require 1.98. Pin exactly; do not use an open semver requirement. **MSRV build NOT_RUN.** | Registry/docs: **MIT**. WebProbe itself has no root license; its existing policy accepts permissive dependencies and requires separate review before distribution. No AGPL parser code used. | `oxc_span::Span` has `u32 start/end`, indexes Rust text, and `size()` is bytes. Suitable for UTF-8 response-byte mapping; cap input well below 4 GiB. Multibyte fixture **NOT_RUN**. | `Parser::parse` documents recoverable errors in `errors` and an empty `Program` on unrecoverable error. It does not promise that one malformed fragment preserves a sibling; test that explicitly. | No cancellation callback found in the inspected parse API. Enforce input bytes, per-unit memory, nesting/time limits at the adapter boundary; use process isolation if hard interruption is required. | **Provisional first choice** at `=0.146.0`; upgrade is blocked until WebProbe MSRV changes. |
-| **Boa `boa_parser 0.22.0`** | Registry declares **1.91.0**, below project MSRV. Full transitive MSRV build **NOT_RUN**. | **Unlicense OR MIT**; permissive option fits current third-party policy, subject to normal review. | `boa_ast::Span` exposes line/column `Position`, not a direct byte range in the inspected API. Byte-exact response highlights require an independently verified mapping. | `parse_script`/`parse_module` documents `Err` on any parse error. A bad fragment must be isolated per script unit; no sibling-preserving partial AST is claimed. | No cancellation parameter in inspected parse methods. Bound reads and memory externally; hard cancellation requires an execution/process boundary. | **Fallback**, weaker direct offset/recovery fit than Oxc. |
-| **SWC `swc_ecma_parser 48.1.0`** | Registry `rust_version` is **null**; this is not proof of 1.95 support. Exact crate plus transitive versions need a 1.95 build. **NOT_RUN.** | **Apache-2.0**, compatible with the existing permissive dependency family. | `swc_common::Span` uses source-map-global `BytePos`; map back through `SourceMap`, never treat `hi-lo` as a universal byte length across files. | Official docs demonstrate recovery from **some** errors while emitting diagnostics; fatal errors remain possible. Sibling preservation **NOT_RUN**. | No cancellation callback established. Input and process/adapter bounds required. | **Second-line alternative**, not the smallest evidence-preserving choice. |
+| **Oxc `oxc_parser 0.146.0`** | Registry declares **1.95.0**; latest 0.147–0.148 require 1.96, 0.149–0.155 require 1.97, 0.159–0.160 require 1.98. Pin exactly; do not use an open semver requirement. **MSRV build NOT_RUN.** | Registry/docs: **MIT**, compatible with the audited dependency license family, subject to review. WebProbe itself has no root license. Registry declarations are evidence, not clearance or standing distribution permission. No AGPL parser code used. | `oxc_span::Span` has `u32 start/end`, indexes Rust text, and `size()` is bytes. Suitable for UTF-8 response-byte mapping; cap input well below 4 GiB. Multibyte fixture **NOT_RUN**. | `Parser::parse` documents recoverable errors in `errors` and an empty `Program` on unrecoverable error. It does not promise that one malformed fragment preserves a sibling; test that explicitly. | No cancellation callback found in the inspected parse API. Enforce input bytes, per-unit memory, nesting/time limits at the adapter boundary; use process isolation if hard interruption is required. | **Provisional first choice** at `=0.146.0`; upgrade is blocked until WebProbe MSRV changes. |
+| **Boa `boa_parser 0.22.0`** | Registry declares **1.91.0**, below project MSRV. Full transitive MSRV build **NOT_RUN**. | **Unlicense OR MIT**, compatible with the audited dependency license family, subject to review. Registry declarations are evidence, not clearance or standing distribution permission. | `boa_ast::Span` exposes line/column `Position`, not a direct byte range in the inspected API. Byte-exact response highlights require an independently verified mapping. | `parse_script`/`parse_module` documents `Err` on any parse error. A bad fragment must be isolated per script unit; no sibling-preserving partial AST is claimed. | No cancellation parameter in inspected parse methods. Bound reads and memory externally; hard cancellation requires an execution/process boundary. | **Fallback**, weaker direct offset/recovery fit than Oxc. |
+| **SWC `swc_ecma_parser 48.1.0`** | Registry `rust_version` is **null**; this is not proof of 1.95 support. Exact crate plus transitive versions need a 1.95 build. **NOT_RUN.** | **Apache-2.0**, compatible with the audited dependency license family, subject to review. Registry declarations are evidence, not clearance or standing distribution permission. | `swc_common::Span` uses source-map-global `BytePos`; map back through `SourceMap`, never treat `hi-lo` as a universal byte length across files. | Official docs demonstrate recovery from **some** errors while emitting diagnostics; fatal errors remain possible. Sibling preservation **NOT_RUN**. | No cancellation callback established. Input and process/adapter bounds required. | **Second-line alternative**, not the smallest evidence-preserving choice. |
 | **RSLint `rslint_parser 0.3.1`** | Registry `rust_version` null; release dated 2021-10-06. Compilation on 1.95 and maintenance/transitive risk **NOT_RUN**. | **MIT**, permissive. | Parser token `range` is explicitly byte indices; lossless syntax nodes preserve original text. Strong offset model. | Documentation explicitly supports error-tolerant trees with `ERROR` nodes from arbitrary input. Actual valid-sibling AST behavior **NOT_RUN**. | No cancellation API established; age/maintenance and bounds need review. | **Do not select initially** despite strong recovery/offset properties; revisit only if maintained-status and 1.95 build are cleared. |
 | **Ress `ress 0.11.7`** | Registry `rust_version` null; no 1.95 build run. | **MIT**, permissive. | Token items carry spans and source locations, with source slicing helpers. | Lexer/scanner, not the JavaScript AST parser needed by R-13 §5.2. It cannot establish the required scopes/CFG on its own. | Scanner state can support bounded adapter logic, but this does not solve parser cancellation. | **Reject as the parser**; possible lexer utility only. |
 
 ### License boundary
 
 The pinned tree has no root `LICENSE`; its own crates declare no license.
-`docs/management/SECURITY-COMPLIANCE-2026-11-22.md:12-17` describes the current
-third-party permissive-license policy and the separate ARTEX AGPL boundary.
-The matrix says only that the parser license declarations do not introduce an
-AGPL-only dependency. It does **not** grant distribution, relicensing, or legal
-clearance. No reference implementation source was copied into this artifact.
+`docs/management/SECURITY-COMPLIANCE-2026-11-22.md:12-17` is an earlier audit of
+the dependency license family and the separate ARTEX AGPL boundary, not an
+authenticated owner grant. Registry license declarations are evidence of
+compatibility with that audited family, subject to review; they are not
+clearance or standing distribution permission. The matrix says only that the
+parser declarations do not introduce an AGPL-only dependency. It does **not**
+grant distribution, relicensing, or legal clearance. No reference implementation
+source was copied into this artifact.
 
 ## Required fixture artifact
 
@@ -60,8 +63,9 @@ All JavaScript parser outcomes below are **NOT_RUN**, not passes:
    A unit error must not abort the page or erase the valid unit's span. An empty
    partial program or loss of the sibling is a fixture failure, not a pass.
 3. **Escape decoding:** literal source `"line\\n\\u0041\\x42"` must expose the
-   decoded value `line\nAB` (six bytes: newline plus `AB`) while retaining its
-   raw source span. Do not confuse raw bytes with decoded value bytes.
+   decoded value `line\nAB` (seven UTF-8 bytes: `"line"` + newline + `"AB"`,
+   hex `6c696e650a4142`) while retaining its raw source span. Do not confuse
+   raw bytes with decoded value bytes.
 4. **Bounded large input:** exactly 1,048,576 bytes, generated as a block comment
    plus `\n;`, with a one-second fixture deadline and a 256 MiB harness RSS
    ceiling. Reject input above the fixture cap before parsing. Time/RSS and
