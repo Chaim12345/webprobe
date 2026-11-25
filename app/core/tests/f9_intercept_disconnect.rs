@@ -1,19 +1,25 @@
-//! F9: a held intercepted HTTP request must not outlive its client, and no
-//! request may reach the origin after the client cancels.
+//! F9: what happens to a held intercepted HTTP request when its client goes
+//! away. Source-only artifact for review: nothing here has been built or run.
 //!
-//! Source-only revision under review: every case is a parent wrapper that
-//! never constructs `Shared`. The parent creates a unique tempdir with a fake
-//! HOME, a fake XDG_CONFIG_HOME and an explicit CA dir, writes non-secret
-//! sentinels, then spawns this test binary with `--exact <case>` and those
-//! paths in the CHILD environment only. See `notes/f9-intercept-disconnect.md`.
+//! `characterisation_held_request_is_retained_after_the_client_cancels` records
+//! the CURRENT behaviour (a request stays held and is still forwardable after
+//! the client closed). It is a characterisation, not a fix guard: it passes
+//! precisely because the defect exists. A future target-behaviour regression
+//! (held request released, nothing sent) is planned once a fix is approved.
+//!
+//! Every case is a parent wrapper that never constructs `Shared`. The parent
+//! creates a unique tempdir with a fake HOME, a fake XDG_CONFIG_HOME and an
+//! explicit CA dir, writes non-secret sentinels, and spawns this test binary
+//! with `--exact <case>` and those paths in the CHILD environment only. Child
+//! output goes to files, never to an undrained pipe.
 //!
 //! Loopback only: a real `handle_conn` proxy path, a fake origin listener and
 //! a raw client socket. No remote traffic.
 
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -22,13 +28,16 @@ use std::time::{Duration, Instant};
 use webprobe_core::net::{Shared, handle_conn, intercept_release_all};
 
 const WAIT: Duration = Duration::from_secs(3);
-const CASE_BUDGET: Duration = Duration::from_secs(60);
+const CASE_BUDGET: Duration = Duration::from_secs(90);
+const CONNECTION_BUDGET: Duration = Duration::from_secs(10);
+const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const CHILD_MARKER: &str = "WEBPROBE_F9_CHILD_CASE";
 const CHILD_ROOT: &str = "WEBPROBE_F9_CHILD_ROOT";
 const SENTINEL_HOME: &[u8] = b"f9-sentinel-home: not a CA\n";
 const SENTINEL_XDG: &[u8] = b"f9-sentinel-xdg: not a CA\n";
 const CONTROL: &str = "control_normal_request_reaches_the_origin_and_returns";
-const HELD: &str = "held_request_is_released_when_the_client_disconnects";
+const HELD: &str = "characterisation_held_request_is_retained_after_the_client_cancels";
+const DETACHED: &str = "F9-PROXY-WORKERS-DETACHED";
 
 // ---------- child-process CA isolation ----------
 
@@ -38,7 +47,6 @@ struct Isolation {
     xdg: PathBuf,
     ca: PathBuf,
     child: Option<Child>,
-    timed_out: bool,
 }
 
 impl Isolation {
@@ -47,8 +55,10 @@ impl Isolation {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let name = format!("webprobe-f9-{tag}-{}-{nanos}", std::process::id());
-        let root = std::env::temp_dir().join(name);
+        let raw =
+            std::env::temp_dir().join(format!("webprobe-f9-{tag}-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&raw).expect("create isolation root");
+        let root = raw.canonicalize().expect("canonical isolation root");
         let home = root.join("home");
         let xdg = root.join("xdg");
         let ca = root.join("ca");
@@ -66,22 +76,33 @@ impl Isolation {
         .expect("write HOME sentinel");
         std::fs::write(xdg.join("webprobe").join("ca.json"), SENTINEL_XDG)
             .expect("write XDG sentinel");
-        Isolation { root, home, xdg, ca, child: None, timed_out: false }
+        Isolation {
+            root,
+            home,
+            xdg,
+            ca,
+            child: None,
+        }
     }
 
     /// Spawns this test binary on exactly `case` with isolated paths in the
-    /// child environment only (no process-wide env mutation).
-    fn spawn(&mut self, case: &str, ignored: bool) {
-        assert!(
-            std::env::var_os(CHILD_MARKER).is_none(),
-            "refusing to spawn a child from inside a child",
-        );
-        let exe = std::env::current_exe().expect("current test binary");
-        let mut cmd = Command::new(exe);
-        cmd.arg("--exact").arg(case).arg("--nocapture").arg("--test-threads=1");
-        if ignored {
-            cmd.arg("--ignored");
+    /// child environment only. Refuses to run with inherited marker vars: a
+    /// validation runner must clear them before spawning.
+    fn spawn(&mut self, case: &str) {
+        for var in [CHILD_MARKER, CHILD_ROOT] {
+            assert!(
+                std::env::var_os(var).is_none(),
+                "{var} is inherited; a validation runner must clear child marker/root vars",
+            );
         }
+        let exe = std::env::current_exe().expect("current test binary");
+        let stdout = std::fs::File::create(self.root.join("child.stdout")).expect("stdout file");
+        let stderr = std::fs::File::create(self.root.join("child.stderr")).expect("stderr file");
+        let mut cmd = Command::new(exe);
+        cmd.arg("--exact")
+            .arg(case)
+            .arg("--nocapture")
+            .arg("--test-threads=1");
         cmd.env(CHILD_MARKER, case)
             .env(CHILD_ROOT, &self.root)
             .env("HOME", &self.home)
@@ -89,57 +110,78 @@ impl Isolation {
             .env("WEBPROBE_CA_DIR", &self.ca)
             .env_remove("RUST_BACKTRACE")
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr));
         self.child = Some(cmd.spawn().expect("spawn isolated child"));
     }
 
-    /// Bounded wait: kill and reap on timeout, then collect the output.
-    fn finish(&mut self) -> std::process::Output {
-        let mut child = self.child.take().expect("child was spawned");
-        let end = Instant::now() + CASE_BUDGET;
-        loop {
-            match child.try_wait().expect("try_wait") {
-                Some(_) => break,
-                None if Instant::now() >= end => {
-                    self.timed_out = true;
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break;
-                }
-                None => std::thread::sleep(Duration::from_millis(25)),
-            }
+    /// Bounded wait. The child is owned by a kill-on-drop guard for the whole
+    /// call, so a panic here cannot orphan it.
+    fn finish(&mut self) -> ChildRun {
+        let child = self.child.take().expect("child was spawned");
+        let mut guard = ChildGuard { child: Some(child) };
+        let exited = guard.wait_bounded(CASE_BUDGET);
+        let status = guard.status();
+        if !exited {
+            println!("F9-CLEANUP-TIMEOUT: child exceeded {CASE_BUDGET:?} and was killed");
         }
-        child.wait_with_output().expect("child output")
+        let stdout = std::fs::read_to_string(self.root.join("child.stdout")).unwrap_or_default();
+        let stderr = std::fs::read_to_string(self.root.join("child.stderr")).unwrap_or_default();
+        ChildRun {
+            status,
+            timed_out: !exited,
+            stdout,
+            stderr,
+        }
     }
 
-    fn assert_sentinels(&self) {
+    /// Exact-shape layout check, run before any status assertion so it is
+    /// reported even when the child fails unexpectedly. Fails closed on
+    /// inspection errors.
+    fn verify_layout(&self, expect_ca: bool) {
+        let home_sentinel = self.home.join(".config").join("webprobe").join("ca.json");
+        let xdg_sentinel = self.xdg.join("webprobe").join("ca.json");
+        let home_files = list_files(&self.home).expect("inspect the fake HOME");
+        let xdg_files = list_files(&self.xdg).expect("inspect the fake XDG dir");
         assert_eq!(
-            std::fs::read(self.home.join(".config").join("webprobe").join("ca.json"))
-                .expect("HOME sentinel readable"),
+            home_files,
+            vec![home_sentinel.clone()],
+            "the fake HOME may contain only its sentinel",
+        );
+        assert_eq!(
+            xdg_files,
+            vec![xdg_sentinel.clone()],
+            "the fake XDG dir may contain only its sentinel",
+        );
+        assert_eq!(
+            std::fs::read(&home_sentinel).expect("read the HOME sentinel"),
             SENTINEL_HOME,
             "the child changed the fake HOME CA file",
         );
         assert_eq!(
-            std::fs::read(self.xdg.join("webprobe").join("ca.json"))
-                .expect("XDG sentinel readable"),
+            std::fs::read(&xdg_sentinel).expect("read the XDG sentinel"),
             SENTINEL_XDG,
             "the child changed the fake XDG CA file",
         );
-    }
-
-    /// No new files under the fake HOME or XDG; any CA write must have gone to
-    /// the explicit CA dir.
-    fn assert_no_ca_outside_owned_ca(&self) {
-        let mut files = Vec::new();
-        collect_files(&self.home, &mut files);
-        collect_files(&self.xdg, &mut files);
-        files.retain(|p| !p.ends_with("webprobe/ca.json"));
-        assert!(
-            files.is_empty(),
-            "files created outside the owned CA dir: {files:?}",
-        );
-        println!("F9-CA-DIR: {:?}", self.ca);
+        let ca_files = list_files(&self.ca).expect("inspect the owned CA dir");
+        for file in &ca_files {
+            assert!(
+                file.starts_with(&self.ca),
+                "CA artifact outside the owned CA dir: {file:?}",
+            );
+            let name = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            assert!(
+                name == "ca.json" || name.starts_with("ca.json.retired-"),
+                "unexpected CA artifact: {file:?}",
+            );
+        }
+        if expect_ca {
+            assert!(
+                self.ca.join("ca.json").is_file(),
+                "no CA artifact inside the owned CA dir; an empty dir is not proof",
+            );
+        }
+        println!("F9-CA-FILES: {ca_files:?}");
     }
 }
 
@@ -158,35 +200,98 @@ impl Drop for Isolation {
     }
 }
 
-fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_files(&path, out);
-        } else {
-            out.push(path);
+struct ChildGuard {
+    child: Option<Child>,
+}
+
+impl ChildGuard {
+    fn child_mut(&mut self) -> &mut Child {
+        self.child.as_mut().expect("live child")
+    }
+
+    /// Waits for exit inside the budget; kills and reaps on timeout.
+    fn wait_bounded(&mut self, budget: Duration) -> bool {
+        let end = Instant::now() + budget;
+        loop {
+            match self.child_mut().try_wait() {
+                Ok(Some(_)) => return true,
+                Ok(None) if Instant::now() >= end => {
+                    let _ = self.child_mut().kill();
+                    let _ = self.child_mut().wait();
+                    return false;
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+                Err(_) => return false,
+            }
+        }
+    }
+
+    fn status(&mut self) -> Option<ExitStatus> {
+        self.child_mut().try_wait().ok().flatten()
+    }
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            match child.try_wait() {
+                Ok(Some(_)) => {}
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
         }
     }
 }
 
-/// True only inside the spawned child for `case`; validates that every
-/// isolated path is absolute and inside the owned tempdir.
+struct ChildRun {
+    status: Option<ExitStatus>,
+    timed_out: bool,
+    stdout: String,
+    stderr: String,
+}
+
+fn list_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        for entry in std::fs::read_dir(&current)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// True only inside the spawned child for `case`. The three paths must be the
+/// exact owned children of the canonical root, not a lexical prefix match.
 fn child_branch(case: &str) -> bool {
     if std::env::var(CHILD_MARKER).ok().as_deref() != Some(case) {
         return false;
     }
     let root = PathBuf::from(std::env::var_os(CHILD_ROOT).expect("child root missing"));
     assert!(root.is_absolute(), "child root must be absolute: {root:?}");
-    for var in ["HOME", "XDG_CONFIG_HOME", "WEBPROBE_CA_DIR"] {
+    let canonical = root.canonicalize().expect("canonical child root");
+    assert_eq!(canonical, root, "child root is not canonical: {root:?}");
+    let expected = [
+        ("HOME", root.join("home")),
+        ("XDG_CONFIG_HOME", root.join("xdg")),
+        ("WEBPROBE_CA_DIR", root.join("ca")),
+    ];
+    for (var, want) in &expected {
         let value = std::env::var_os(var).unwrap_or_else(|| panic!("{var} missing in the child"));
         let path = PathBuf::from(value);
-        assert!(path.is_absolute(), "{var} is not absolute: {path:?}");
-        assert!(
-            path.starts_with(&root),
-            "{var} {path:?} is outside the owned tempdir {root:?}",
+        assert_eq!(&path, want, "{var} is not the owned path {want:?}");
+        let canonical = path.canonicalize().expect("canonical isolated path");
+        assert_eq!(
+            canonical, *want,
+            "{var} resolves through a symlink: {path:?}"
         );
     }
     println!("F9-ISOLATION-OK root={}", root.display());
@@ -212,6 +317,14 @@ fn assert_single_case(stdout: &str, want_pass: bool) {
     }
 }
 
+/// Prints the child output so the case, isolation and byte facts survive.
+fn report(run: &ChildRun) {
+    println!("F9-CHILD-STDOUT-BEGIN");
+    print!("{}", run.stdout);
+    println!("F9-CHILD-STDOUT-END");
+    eprint!("{}", run.stderr);
+}
+
 // ---------- fixtures (child side only) ----------
 
 fn find_head(buf: &[u8]) -> Option<usize> {
@@ -230,6 +343,43 @@ fn declared_len(head: &[u8]) -> usize {
             }
         })
         .unwrap_or(0)
+}
+
+struct OriginRecord {
+    wire: Vec<u8>,
+    complete: bool,
+}
+
+/// Reads one request under an absolute deadline, a size cap and the shared
+/// stop flag. `complete` is true only when the head and every declared
+/// body byte arrived; a head seen at EOF or on error is never complete.
+fn read_request(stream: &mut TcpStream, stop: &AtomicBool) -> OriginRecord {
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(50)));
+    let deadline = Instant::now() + CONNECTION_BUDGET;
+    let mut wire = Vec::new();
+    let mut chunk = [0u8; 2048];
+    let mut complete = false;
+    while Instant::now() < deadline && !stop.load(Ordering::SeqCst) {
+        if wire.len() >= MAX_REQUEST_BYTES {
+            break;
+        }
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                let room = MAX_REQUEST_BYTES - wire.len();
+                wire.extend_from_slice(&chunk[..n.min(room)]);
+                if let Some(head) = find_head(&wire) {
+                    if wire.len() >= head + 4 + declared_len(&wire[..head]) {
+                        complete = true;
+                        break;
+                    }
+                }
+            }
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {}
+            Err(_) => break,
+        }
+    }
+    OriginRecord { wire, complete }
 }
 
 struct Origin {
@@ -261,24 +411,32 @@ impl Origin {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         a.fetch_add(1, Ordering::SeqCst);
-                        let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
-                        if let Some(wire) = read_request(&mut stream) {
+                        let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+                        let record = read_request(&mut stream, &s);
+                        if record.complete {
                             p.fetch_add(1, Ordering::SeqCst);
-                            b.lock().unwrap().push(wire);
+                            b.lock().unwrap().push(record.wire);
                             let _ = stream.write_all(
                                 b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\nupstream-ok",
                             );
                             let _ = stream.flush();
                         }
                     }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(5))
                     }
                     Err(_) => return,
                 }
             }
         });
-        Origin { port, accepts, parsed, bytes, stop, join: Some(join) }
+        Origin {
+            port,
+            accepts,
+            parsed,
+            bytes,
+            stop,
+            join: Some(join),
+        }
     }
 
     fn stop_and_join(&mut self) {
@@ -293,25 +451,6 @@ impl Drop for Origin {
     fn drop(&mut self) {
         self.stop_and_join();
     }
-}
-
-fn read_request(stream: &mut TcpStream) -> Option<Vec<u8>> {
-    let mut buf = Vec::new();
-    let mut chunk = [0u8; 2048];
-    loop {
-        match stream.read(&mut chunk) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => {
-                buf.extend_from_slice(&chunk[..n]);
-                if let Some(head) = find_head(&buf) {
-                    if buf.len() >= head + 4 + declared_len(&buf[..head]) {
-                        return Some(buf);
-                    }
-                }
-            }
-        }
-    }
-    find_head(&buf).map(|_| buf)
 }
 
 struct Proxy {
@@ -337,14 +476,19 @@ impl Proxy {
                         let handle = std::thread::spawn(move || handle_conn(shared, stream));
                         c.lock().unwrap().push(handle);
                     }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(5))
                     }
                     Err(_) => return,
                 }
             }
         });
-        Proxy { port, stop, join: Some(join), conns }
+        Proxy {
+            port,
+            stop,
+            join: Some(join),
+            conns,
+        }
     }
 }
 
@@ -364,9 +508,10 @@ impl Drop for Proxy {
             }
         }
         if detached > 0 {
-            // No safe way to time-bound a join: the parent's child kill is the
-            // containment, and this line is the explicit blocker record.
-            println!("F9-PROXY-WORKERS-DETACHED: {detached}");
+            // No safe time-bound join exists for a production worker thread:
+            // the parent's child kill is containment, and the parent treats
+            // this record as a non-success cleanup outcome.
+            println!("{DETACHED}: {detached}");
         }
     }
 }
@@ -396,8 +541,10 @@ fn control_body() {
     let shared = Shared::new();
     let proxy = Proxy::start(Arc::clone(&shared));
     let mut client = TcpStream::connect(("127.0.0.1", proxy.port)).expect("client connect");
-    client.set_read_timeout(Some(WAIT)).expect("client read timeout");
-    client.write_all(&request(origin.port)).expect("client write");
+    client.set_read_timeout(Some(WAIT)).expect("read timeout");
+    client
+        .write_all(&request(origin.port))
+        .expect("client write");
     let _ = client.flush();
     let mut response = Vec::new();
     let _ = client.read_to_end(&mut response);
@@ -412,7 +559,10 @@ fn control_body() {
         text.contains("200 OK") && text.contains("upstream-ok"),
         "response: {text:?}",
     );
-    assert_eq!(parsed, 1, "origin parsed exactly one request (accepts={accepts})");
+    assert_eq!(
+        parsed, 1,
+        "origin parsed exactly one request (accepts={accepts})"
+    );
     println!("CASE-COMPLETE: {CONTROL}");
 }
 
@@ -425,7 +575,9 @@ fn held_body() {
     let mut client = TcpStream::connect(("127.0.0.1", proxy.port)).expect("client connect");
 
     // Fully sent request, then a full close: not a write-half shutdown.
-    client.write_all(&request(origin.port)).expect("client write");
+    client
+        .write_all(&request(origin.port))
+        .expect("client write");
     let _ = client.flush();
     assert!(
         wait_queue(&shared, 1, WAIT),
@@ -445,7 +597,7 @@ fn held_body() {
     let parsed_at_cancel = origin.parsed.load(Ordering::SeqCst);
     let retained_at_cancel = origin.bytes.lock().unwrap().len();
 
-    // Explicit characterisation action, never teardown: forward the held item
+    // Explicit characterisation step, never teardown: forward the held item
     // and record what the origin then sees.
     let mut forwarded = 0usize;
     if held_after > 0 {
@@ -484,63 +636,76 @@ fn control_normal_request_reaches_the_origin_and_returns() {
         return;
     }
     let mut iso = Isolation::new("control");
-    iso.spawn(CONTROL, false);
-    let out = iso.finish();
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    iso.spawn(CONTROL);
+    let run = iso.finish();
+    iso.verify_layout(true);
+    report(&run);
     assert!(
-        !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        !run.timed_out,
+        "F9-CLEANUP-TIMEOUT: the child had to be killed"
     );
     assert!(
-        out.status.success(),
-        "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status,
-    );
-    assert_single_case(&stdout, true);
-    assert!(
-        stdout.contains("F9-CONTROL-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}",
+        run.status.is_some_and(|s| s.success()),
+        "child failed ({:?})\nstdout:\n{}\nstderr:\n{}",
+        run.status,
+        run.stdout,
+        run.stderr,
     );
     assert!(
-        stdout.contains(&format!("CASE-COMPLETE: {CONTROL}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}",
+        !run.stdout.contains(DETACHED),
+        "a production worker could not be joined; child termination is containment, not acceptance",
     );
-    iso.assert_sentinels();
-    iso.assert_no_ca_outside_owned_ca();
+    assert_single_case(&run.stdout, true);
+    assert!(
+        run.stdout.contains("F9-CONTROL-EVIDENCE"),
+        "no per-case completion record\nstdout:\n{}",
+        run.stdout,
+    );
+    assert!(
+        run.stdout.contains(&format!("CASE-COMPLETE: {CONTROL}")),
+        "no CASE-COMPLETE line\nstdout:\n{}",
+        run.stdout,
+    );
 }
 
+/// CHARACTERISATION of the current defect: the child asserts the target
+/// behaviour, so a child failure here is the expected outcome and this parent
+/// passes because the defect is present. It is not a fix guard; it must be
+/// replaced by a target-behaviour regression when a fix lands.
 #[test]
-#[ignore = "F9 defect: held HTTP request has no client-liveness wait; see notes/f9-intercept-disconnect.md"]
-fn held_request_is_released_when_the_client_disconnects() {
+fn characterisation_held_request_is_retained_after_the_client_cancels() {
     if child_branch(HELD) {
         held_body();
         return;
     }
     let mut iso = Isolation::new("held");
-    iso.spawn(HELD, true);
-    let out = iso.finish();
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    iso.spawn(HELD);
+    let run = iso.finish();
+    iso.verify_layout(true);
+    report(&run);
     assert!(
-        !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        !run.timed_out,
+        "F9-CLEANUP-TIMEOUT: the child had to be killed"
     );
     assert_eq!(
-        out.status.code(),
+        run.status.and_then(|s| s.code()),
         Some(101),
-        "expected the draft regression to fail with the F9 defect\nstdout:\n{stdout}\nstderr:\n{stderr}",
-    );
-    assert_single_case(&stdout, false);
-    assert!(
-        stderr.contains("F9-EVIDENCE") && stderr.contains("released=false"),
-        "child failed for an unexpected reason\nstderr:\n{stderr}",
+        "expected the characterising assertion to fail with the F9 defect\nstdout:\n{}\nstderr:\n{}",
+        run.stdout,
+        run.stderr,
     );
     assert!(
-        !stdout.contains(&format!("CASE-COMPLETE: {HELD}")),
-        "the draft regression unexpectedly passed; promote it out of #[ignore]",
+        !run.stdout.contains(DETACHED),
+        "a production worker could not be joined; child termination is containment, not acceptance",
     );
-    iso.assert_sentinels();
-    iso.assert_no_ca_outside_owned_ca();
+    assert_single_case(&run.stdout, false);
+    assert!(
+        run.stderr.contains("F9-EVIDENCE") && run.stderr.contains("released=false"),
+        "child failed for an unexpected reason\nstderr:\n{}",
+        run.stderr,
+    );
+    assert!(
+        !run.stdout.contains(&format!("CASE-COMPLETE: {HELD}")),
+        "the characterising assertion unexpectedly passed; invert it into a fix guard",
+    );
 }
-
