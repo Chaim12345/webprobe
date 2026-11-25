@@ -4,6 +4,21 @@ use webprobe_core::net::{
 };
 use webprobe_core::util;
 
+/// Every test in this binary gets a throwaway CA directory: a test run must
+/// never read or create the real user CA (`$XDG_CONFIG_HOME` / `~/.config`).
+fn shared() -> std::sync::Arc<Shared> {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let dir = std::env::temp_dir().join(format!("wp-ca-it-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        // SAFETY: set before any thread reads the CA directory.
+        unsafe { std::env::set_var("WEBPROBE_CA_DIR", &dir) };
+    });
+    Shared::new()
+}
+
+
 const REQUEST: &[u8] = b"GET /api HTTP/1.1\r\nHost: app.test\r\n\r\n";
 
 fn cookie(raw: &[u8]) -> String {
@@ -113,7 +128,7 @@ fn cookie_update_ignores_nameless_and_non_pair_fragments() {
 
 #[test]
 fn placeholders_without_a_response_remain_literal() {
-    let shared = Shared::new();
+    let shared = shared();
     assert_eq!(
         expand_placeholders(&shared, "Bearer {token} / {} / {unfinished"),
         "Bearer {token} / {} / {unfinished"
@@ -122,7 +137,7 @@ fn placeholders_without_a_response_remain_literal() {
 
 #[test]
 fn placeholder_free_unicode_is_unchanged() {
-    let shared = Shared::new();
+    let shared = shared();
     assert_eq!(
         expand_placeholders(&shared, "שלום token } literal"),
         "שלום token } literal"
@@ -131,7 +146,7 @@ fn placeholder_free_unicode_is_unchanged() {
 
 #[test]
 fn repeated_adjacent_and_unknown_placeholders_are_independent() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
     assert_eq!(
@@ -142,7 +157,7 @@ fn repeated_adjacent_and_unknown_placeholders_are_independent() {
 
 #[test]
 fn unmatched_opening_brace_does_not_discard_suffix() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
     assert_eq!(
@@ -153,7 +168,7 @@ fn unmatched_opening_brace_does_not_discard_suffix() {
 
 #[test]
 fn placeholder_cookie_value_takes_precedence_over_body_member() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\nSet-Cookie: token=cookie==; HttpOnly\r\n\r\n{\"token\":\"body\"}"
             .to_vec();
@@ -165,7 +180,7 @@ fn placeholder_cookie_value_takes_precedence_over_body_member() {
 
 #[test]
 fn placeholders_extract_form_fields_with_either_attribute_order() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() = b"HTTP/1.1 200 OK\r\n\r\n<input name='csrf' value='form-token'><input value='second' name='nonce'>".to_vec();
     assert_eq!(
         expand_placeholders(&shared, "{csrf}/{nonce}"),
@@ -175,7 +190,7 @@ fn placeholders_extract_form_fields_with_either_attribute_order() {
 
 #[test]
 fn placeholders_extract_json_numbers_booleans_and_empty_strings() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\n\r\n{\"count\":-12,\"ready\":false,\"empty\":\"\"}".to_vec();
     assert_eq!(
@@ -186,7 +201,7 @@ fn placeholders_extract_json_numbers_booleans_and_empty_strings() {
 
 #[test]
 fn placeholder_reads_the_latest_macro_response_not_a_cached_value() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\nSet-Cookie: sid=first\r\n\r\n".to_vec();
     assert_eq!(expand_placeholders(&shared, "{sid}"), "first");
@@ -197,7 +212,7 @@ fn placeholder_reads_the_latest_macro_response_not_a_cached_value() {
 
 #[test]
 fn substituted_values_are_not_recursively_expanded() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"{other}\",\"other\":\"secret\"}".to_vec();
     assert_eq!(expand_placeholders(&shared, "{token}"), "{other}");
@@ -205,7 +220,7 @@ fn substituted_values_are_not_recursively_expanded() {
 
 #[test]
 fn rules_require_enabled_matching_tool_and_matching_host() {
-    let shared = Shared::new();
+    let shared = shared();
     let mut disabled = rule("set header", "X-Disabled: no");
     disabled.enabled = false;
     let mut other_tool = rule("set header", "X-Tool: no");
@@ -218,7 +233,7 @@ fn rules_require_enabled_matching_tool_and_matching_host() {
 
 #[test]
 fn later_cookie_rule_overrides_earlier_rule_for_the_same_name() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.session_rules.lock().unwrap() = vec![
         rule("set cookie", "sid=first"),
         rule("set cookie", "sid=second"),
@@ -228,7 +243,7 @@ fn later_cookie_rule_overrides_earlier_rule_for_the_same_name() {
 
 #[test]
 fn set_header_expands_placeholders_and_preserves_colons_in_value() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
     shared
@@ -245,7 +260,7 @@ fn set_header_expands_placeholders_and_preserves_colons_in_value() {
 
 #[test]
 fn set_cookie_expands_and_trims_while_preserving_equals_in_value() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.macro_last_response.lock().unwrap() =
         b"HTTP/1.1 200 OK\r\nSet-Cookie: token=abc==\r\n\r\n".to_vec();
     shared
@@ -258,7 +273,7 @@ fn set_cookie_expands_and_trims_while_preserving_equals_in_value() {
 
 #[test]
 fn malformed_and_unknown_actions_leave_request_untouched() {
-    let shared = Shared::new();
+    let shared = shared();
     *shared.session_rules.lock().unwrap() = vec![
         rule("set header", "no colon"),
         rule("set cookie", "no equals"),
@@ -269,7 +284,7 @@ fn malformed_and_unknown_actions_leave_request_untouched() {
 
 #[test]
 fn nested_session_suspension_restores_outer_guard_and_then_normal_rules() {
-    let shared = Shared::new();
+    let shared = shared();
     shared
         .session_rules
         .lock()
@@ -286,7 +301,7 @@ fn nested_session_suspension_restores_outer_guard_and_then_normal_rules() {
 
 #[test]
 fn session_suspension_is_restored_when_the_closure_panics() {
-    let shared = Shared::new();
+    let shared = shared();
     shared
         .session_rules
         .lock()
@@ -299,7 +314,7 @@ fn session_suspension_is_restored_when_the_closure_panics() {
 
 #[test]
 fn session_suspension_does_not_leak_to_another_thread() {
-    let shared = Shared::new();
+    let shared = shared();
     shared
         .session_rules
         .lock()

@@ -223,6 +223,13 @@ pub fn wake_clock_ms() -> u64 {
 
 impl Shared {
     pub fn new() -> Arc<Self> {
+        // Unit tests compile this lib with cfg(test); an in-memory CA keeps
+        // them off the real user CA. Integration-test binaries compile the lib
+        // without cfg(test) and isolate themselves with WEBPROBE_CA_DIR.
+        #[cfg(test)]
+        let mitm = crate::tls::MitmAuthority::in_memory()
+            .expect("failed to initialize in-memory test CA");
+        #[cfg(not(test))]
         let mitm = crate::tls::MitmAuthority::new().expect("failed to initialize local HTTPS CA");
         Arc::new(Self {
             mitm,

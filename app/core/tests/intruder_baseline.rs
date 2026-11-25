@@ -6,6 +6,21 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use webprobe_core::{intruder, intruder_run as run, net};
 
+/// Every test in this binary gets a throwaway CA directory: a test run must
+/// never read or create the real user CA (`$XDG_CONFIG_HOME` / `~/.config`).
+fn shared() -> Arc<net::Shared> {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let dir = std::env::temp_dir().join(format!("wp-ca-it-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        // SAFETY: set before any thread reads the CA directory.
+        unsafe { std::env::set_var("WEBPROBE_CA_DIR", &dir) };
+    });
+    net::Shared::new()
+}
+
+
 fn wait_finished(state: &run::RunState) {
     let deadline = Instant::now() + Duration::from_secs(10);
     while state.is_running() {
@@ -120,7 +135,7 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
         ];
         let specs = intruder::resolve_specs(&parsed, kind, &sources).unwrap();
         let state = run::start(
-            net::Shared::new(),
+            shared(),
             &text,
             kind,
             specs,
@@ -224,7 +239,7 @@ fn effectful_methods_skip_the_baseline_and_send_only_attack_rows() {
     )
     .unwrap();
     let state = run::start(
-        net::Shared::new(),
+        shared(),
         &text,
         intruder::AttackType::Sniper,
         specs,
@@ -268,7 +283,7 @@ fn failed_baseline_is_reported_and_payload_still_runs_after_its_send() {
     let mut cfg = settings();
     cfg.retry.retries = 1;
     let state = run::start(
-        net::Shared::new(),
+        shared(),
         &text,
         intruder::AttackType::Sniper,
         specs,
@@ -326,7 +341,7 @@ fn stop_during_baseline_does_not_launch_payloads() {
     )
     .unwrap();
     let state = run::start(
-        net::Shared::new(),
+        shared(),
         &text,
         intruder::AttackType::Sniper,
         specs,
