@@ -41,6 +41,16 @@
 //   -> {"type":"editors","id":N,request,response,host,port,secure,tool}
 //                                                      <= {"id":N,"editors":[{"caption","enabled","request"}]}
 //   -> {"type":"editor-get","id":N}                    <= {"id":N,"request"?}
+//   <= {"type":"call","sid":K,"op":"scan-send"|"scan-build","scan":N,"args":{..}}
+//       (a scan check's request; N is the id of the "scan-active" message
+//       it runs for, which WebProbe routes it by)
+//
+// Lanes: messages of one kind (HTTP and Proxy handlers; active checks;
+// passive checks; menus and editors; Intruder; WebSockets; session actions)
+// run one at a time in arrival order on that kind's thread; kinds run side
+// by side, so a scan check waiting for its requests does not hold up
+// proxied messages. Replies carry the request's id and may come in any
+// order across lanes.
 //
 // Handler order follows Burp: for a request the Proxy's
 // handleRequestReceived, its handleRequestToBeSent, then every HTTP
@@ -73,6 +83,9 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -124,32 +137,10 @@ public class MontoyaBridge {
             String type = Wire.str(msg, "type", "");
             if (type.equals("shutdown")) break;
             if (type.equals("show")) { Ui.show(); continue; }
-            if (type.equals("ws-close")) { Engine.wsClose(msg); continue; }
             if (type.equals("restore")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> data = (Map<String, Object>) msg.get("data");
                 Persist.fromJson(Persist.ROOT, data);
-                continue;
-            }
-            int mid = (int) Wire.num(msg.get("id"));
-            try {
-                switch (type) {
-                    case "menu": Wire.send(Ui.menu(mid, msg)); continue;
-                    case "menu-invoke": Wire.send(Ui.invoke(mid, Wire.str(msg, "item", ""))); continue;
-                    case "editors": Wire.send(Ui.editors(mid, msg)); continue;
-                    case "editor-get": Wire.send(Ui.edited(mid)); continue;
-                    case "scan-active": Wire.send(Engine.scanActive(mid, msg)); continue;
-                    case "scan-passive": Wire.send(Engine.scanPassive(mid, msg)); continue;
-                    case "intruder-generate": Wire.send(Engine.generate(mid, msg)); continue;
-                    case "intruder-process": Wire.send(Engine.process(mid, msg)); continue;
-                    case "ws-open": Wire.send(Engine.wsOpen(mid, msg)); continue;
-                    case "session-action": Wire.send(Engine.sessionAction(mid, msg)); continue;
-                    case "ws-message": Wire.send(Engine.wsMessage(mid, msg)); continue;
-                    default: break;
-                }
-            } catch (Throwable t) {
-                Logs.error("[bridge] " + type + " failed: " + Logs.trace(t));
-                Wire.send("{\"id\":" + mid + ",\"error\":" + Wire.Json.esc(String.valueOf(t)) + "}");
                 continue;
             }
             if (type.equals("ping")) {
@@ -158,12 +149,77 @@ public class MontoyaBridge {
                         + ",\"proxyHandlers\":" + (Bridge.PROXY_REQUEST.size() + Bridge.PROXY_RESPONSE.size()) + "}");
                 continue;
             }
-            if (type.equals("request") || type.equals("response")) Wire.send(exchange(msg, type.equals("request")));
+            String lane = lane(type);
+            if (lane != null) {
+                LANES.computeIfAbsent(lane, MontoyaBridge::newLane).execute(() -> handle(type, msg));
+            }
+        }
+        // Messages already queued finish before the unloading handlers run,
+        // but a hung handler does not keep them from running (WebProbe stops
+        // the JVM 5 s after asking it to shut down).
+        for (ExecutorService e : LANES.values()) e.shutdown();
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        for (ExecutorService e : LANES.values()) {
+            if (!e.awaitTermination(Math.max(0, until - System.nanoTime()), TimeUnit.NANOSECONDS)) break;
         }
         Bridge.unloadHandlers();
         Ui.dispose();
         Wire.out.flush();
         System.exit(0);
+    }
+
+    /** One thread per lane; only the main loop touches this map. */
+    static final Map<String, ExecutorService> LANES = new java.util.HashMap<>();
+
+    /** The lane a message runs on (WebProbe's ext_host Lane mirrors it), or
+     *  null for a message the bridge does not handle. */
+    static String lane(String type) {
+        switch (type) {
+            case "request": case "response": return "http";
+            case "scan-active": return "active";
+            case "scan-passive": return "passive";
+            case "menu": case "menu-invoke": case "editors": case "editor-get": return "ui";
+            case "intruder-generate": case "intruder-process": return "intruder";
+            case "ws-open": case "ws-message": case "ws-close": return "ws";
+            case "session-action": return "session";
+            default: return null;
+        }
+    }
+
+    static ExecutorService newLane(String name) {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "bridge-" + name);
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /** One message on its lane; a failure is reported and answered with
+     *  its error, so WebProbe lets the message through. */
+    static void handle(String type, Map<String, Object> msg) {
+        int mid = (int) Wire.num(msg.get("id"));
+        try {
+            String reply = switch (type) {
+                case "menu" -> Ui.menu(mid, msg);
+                case "menu-invoke" -> Ui.invoke(mid, Wire.str(msg, "item", ""));
+                case "editors" -> Ui.editors(mid, msg);
+                case "editor-get" -> Ui.edited(mid);
+                case "scan-active" -> Engine.scanActive(mid, msg);
+                case "scan-passive" -> Engine.scanPassive(mid, msg);
+                case "intruder-generate" -> Engine.generate(mid, msg);
+                case "intruder-process" -> Engine.process(mid, msg);
+                case "ws-open" -> Engine.wsOpen(mid, msg);
+                case "session-action" -> Engine.sessionAction(mid, msg);
+                case "ws-message" -> Engine.wsMessage(mid, msg);
+                case "request", "response" -> exchange(msg, type.equals("request"));
+                case "ws-close" -> { Engine.wsClose(msg); yield null; }
+                default -> null;
+            };
+            if (reply != null) Wire.send(reply);
+        } catch (Throwable t) {
+            Logs.error("[bridge] " + type + " failed: " + Logs.trace(t));
+            if (!type.equals("ws-close")) Wire.send("{\"id\":" + mid + ",\"error\":" + Wire.Json.esc(String.valueOf(t)) + "}");
+        }
     }
 
     /** The extension classes: those named in META-INF/services, else (as

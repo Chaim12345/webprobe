@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the five existing core stage contracts, rejecting silent prerequisite skips.
+"""Run the core stage contracts, rejecting silent prerequisite skips.
 
 Run from app/. No API jar, JVM, log or compiled vendor artifact is committed.
 """
@@ -16,6 +16,7 @@ EXPECTED_TESTS = {
     "ext_host::tests::stage3_ui_headless_menus_editors_and_utilities",
     "ext_host::tests::stage3_extension_data_round_trips_through_a_project_file",
     "ext_host::tests::stage4_scan_checks_and_engine_calls",
+    "ext_host::tests::stage5_proxy_hook_does_not_wait_for_a_scan_check",
 }
 
 
