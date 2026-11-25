@@ -175,9 +175,61 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-/// How long a Montoya handler may take on one message before the bridge is
-/// stopped (its hooks then pass everything through).
+/// How long a Montoya handler may take on one message; past it the message
+/// passes through unchanged.
 const HOOK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Timeouts in a row on one lane before the bridge is stopped (its hooks
+/// then pass everything through).
+const MAX_TIMEOUTS: usize = 3;
+
+/// The bridge's lanes (`MontoyaBridge.lane`, same mapping): messages of one
+/// lane run one at a time in arrival order, lanes run side by side, so an
+/// active scan check waiting for its requests does not hold up proxied
+/// messages. WebProbe itself does not serialise more than this: Burp calls
+/// HTTP handlers on the caller's thread without a lock (burp.Zbpp.Zc and
+/// Zb; its lock guards only `refresh`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Lane {
+    /// The start-up ping (and anything without a lane of its own).
+    Ping,
+    /// HTTP and Proxy handlers ("request", "response").
+    Http,
+    Active,
+    Passive,
+    /// Context menus and message editors.
+    Ui,
+    Intruder,
+    Ws,
+    Session,
+}
+
+impl Lane {
+    const COUNT: usize = 8;
+
+    fn of(kind: &str) -> Lane {
+        match kind {
+            "request" | "response" => Lane::Http,
+            "scan-active" => Lane::Active,
+            "scan-passive" => Lane::Passive,
+            "menu" | "menu-invoke" | "editors" | "editor-get" => Lane::Ui,
+            "intruder-generate" | "intruder-process" => Lane::Intruder,
+            "ws-open" | "ws-message" | "ws-close" => Lane::Ws,
+            "session-action" => Lane::Session,
+            _ => Lane::Ping,
+        }
+    }
+}
+
+/// Callers waiting for the bridge, by request id (the pong goes to id 0):
+/// the reader thread routes each reply, and each "scan-" call by the
+/// `scan` it names, to its caller, so no lock is held across a round trip.
+#[derive(Default)]
+struct Router {
+    pending: std::collections::HashMap<u64, std::sync::mpsc::Sender<serde_json::Value>>,
+    /// The bridge closed stdout: nothing more will be routed.
+    closed: bool,
+}
 
 /// What a bridged extension may ask of WebProbe: `Http.sendRequest`
 /// (through WebProbe's sender, so upstream proxy and session settings
@@ -209,13 +261,13 @@ pub struct JavaSidecar {
     /// Lines to the bridge, written by a writer thread: a bridge that stops
     /// reading must not block a proxy thread on a full pipe.
     to_bridge: Mutex<Option<std::sync::mpsc::Sender<String>>>,
-    /// Replies from the bridge, read by a reader thread, so a reply can be
-    /// waited for with a deadline. sendRequest calls and events are handled
-    /// by the reader thread itself.
-    from_bridge: Mutex<std::sync::mpsc::Receiver<String>>,
-    io_lock: Mutex<()>,
+    /// Callers waiting for replies, filled by the reader thread (which
+    /// itself serves sendRequest, engine calls and events).
+    router: Arc<Mutex<Router>>,
     next_id: AtomicU64,
     dead: AtomicBool,
+    /// Timeouts in a row, per lane (`Lane as usize`).
+    timeouts: [std::sync::atomic::AtomicUsize; Lane::COUNT],
     /// JVM stderr (the extension's output and errors) and bridge errors,
     /// last 200 lines, for the Errors pane.
     errors: Arc<Mutex<std::collections::VecDeque<String>>>,
@@ -324,7 +376,7 @@ impl JavaSidecar {
                 }
             }
         });
-        let (reader_tx, from_bridge) = std::sync::mpsc::channel::<String>();
+        let router = Arc::new(Mutex::new(Router::default()));
         let ui = Arc::new(Mutex::new(ExtUi {
             headless: opts.headless,
             ..Default::default()
@@ -335,12 +387,13 @@ impl JavaSidecar {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
         {
-            let (errors, back, ui, data, label) = (
+            let (errors, back, ui, data, label, router) = (
                 Arc::clone(&errors),
                 to_bridge.clone(),
                 Arc::clone(&ui),
                 Arc::clone(&data),
                 file_label.clone(),
+                Arc::clone(&router),
             );
             crate::util::spawn_contained("ext_host", move || {
                 for line in crate::util::capped_lines(stdout, MAX_BRIDGE_LINE) {
@@ -352,6 +405,7 @@ impl JavaSidecar {
                         Some("call") if !msg["op"].as_str().unwrap_or("").starts_with("scan-") => {
                             serve_call(&msg, link.clone(), back.clone(), label.clone())
                         }
+                        Some("call") => route_scan_call(&router, msg, &back),
                         Some("ui") => {
                             let names = |k: &str| {
                                 msg[k]
@@ -390,23 +444,23 @@ impl JavaSidecar {
                                 (l.event)(level, text);
                             }
                         }
-                        _ => {
-                            if reader_tx.send(line).is_err() {
-                                break;
-                            }
-                        }
+                        _ => route_reply(&router, &errors, msg, line),
                     }
                 }
+                // EOF: waiting callers see the channel close at once.
+                let mut r = router.lock().unwrap();
+                r.closed = true;
+                r.pending.clear();
             });
         }
         let mut sidecar = JavaSidecar {
             name: format!("Montoya bridge ({file_label})"),
             child: Mutex::new(Some(child)),
             to_bridge: Mutex::new(Some(to_bridge)),
-            from_bridge: Mutex::new(from_bridge),
-            io_lock: Mutex::new(()),
+            router,
             next_id: AtomicU64::new(1),
             dead: AtomicBool::new(false),
+            timeouts: Default::default(),
             errors,
             ui,
             data,
@@ -445,8 +499,7 @@ impl JavaSidecar {
         // extension's initialize(): about 20 s on an idle machine, over 60 s
         // under a build. Generous, but bounded.
         let reply = self.exchange(
-            r#"{"type":"ping"}"#,
-            None,
+            serde_json::json!({"type": "ping"}),
             std::time::Duration::from_secs(180),
         )?;
         match reply.get("type").and_then(|v| v.as_str()) {
@@ -484,99 +537,125 @@ impl JavaSidecar {
         self.kill();
     }
 
-    /// One JSON-lines round trip; any failure marks the sidecar dead so the
-    /// hooks degrade to pass-through without blocking the pipeline. The reply
-    /// must carry `id` (pings have none and answer `{"type":"pong"}`); other
-    /// lines are logged and skipped. No reply within `wait` stops the bridge.
+    /// One JSON-lines round trip: `msg` goes to the bridge and its reply
+    /// (the one carrying its `id`; a ping's pong has none) comes back. A
+    /// failed round trip passes the message through (Err); the sidecar is
+    /// marked dead only when the bridge closed its pipes or `MAX_TIMEOUTS`
+    /// messages of one lane in a row got no reply within `wait`.
     fn exchange(
         &self,
-        line: &str,
-        id: Option<u64>,
+        msg: serde_json::Value,
         wait: std::time::Duration,
     ) -> Result<serde_json::Value, String> {
-        self.exchange_with(line, id, wait, &mut |_, _| Err("no scan is running".into()))
+        self.exchange_with(msg, wait, &mut |_, _| Err("no scan is running".into()))
     }
 
     /// [`JavaSidecar::exchange`] that also answers the bridge's "scan-"
-    /// calls with `on_call` on this thread, each answered call restarting
-    /// the deadline (a check that keeps working is not cut off; one that
-    /// hangs is, after `wait` of silence).
+    /// calls for this message with `on_call` on this thread, each answered
+    /// call restarting the deadline (a check that keeps working is not cut
+    /// off; one that hangs is, after `wait` of silence). No lock is held
+    /// while waiting: the reader thread routes the replies (AR-08).
     fn exchange_with(
         &self,
-        line: &str,
-        id: Option<u64>,
+        msg: serde_json::Value,
         wait: std::time::Duration,
         on_call: &mut dyn FnMut(&str, &serde_json::Value) -> Result<serde_json::Value, String>,
     ) -> Result<serde_json::Value, String> {
-        let _guard = self.io_lock.lock().unwrap();
         if self.dead.load(Ordering::Relaxed) {
             return Err("sidecar is dead".into());
         }
-        let mark_dead = |sc: &Self, why: &str| {
-            sc.dead.store(true, Ordering::Relaxed);
-            push_line(
-                &sc.errors,
-                format!("sidecar stopped ({why}); its hooks now let everything through"),
-            );
-            sc.kill();
+        let kind = msg["type"].as_str().unwrap_or("").to_string();
+        let lane = Lane::of(&kind);
+        let id = msg.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+        // Registered before the line goes out, so a quick reply finds it.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let closed = {
+            let mut r = self.router.lock().unwrap();
+            if !r.closed {
+                r.pending.insert(id, tx);
+            }
+            r.closed
         };
+        if closed {
+            self.mark_dead("stdout closed");
+            return Err("sidecar closed stdout (extension load failure?)".into());
+        }
         let sent = self
             .to_bridge
             .lock()
             .unwrap()
             .as_ref()
-            .is_some_and(|tx| tx.send(line.to_string()).is_ok());
+            .is_some_and(|tx| tx.send(msg.to_string()).is_ok());
         if !sent {
-            mark_dead(self, "stdin closed");
+            self.router.lock().unwrap().pending.remove(&id);
+            self.mark_dead("stdin closed");
             return Err("sidecar stdin closed".into());
         }
         let mut deadline = std::time::Instant::now() + wait;
-        let rx = self.from_bridge.lock().unwrap();
-        loop {
+        let outcome = loop {
             let left = deadline.saturating_duration_since(std::time::Instant::now());
             match rx.recv_timeout(left) {
-                Ok(buf) => {
-                    let Ok(reply) = serde_json::from_str::<serde_json::Value>(&buf) else {
-                        push_line(&self.errors, format!("stdout: {buf}"));
-                        continue;
+                Ok(reply) if reply.get("type").and_then(|t| t.as_str()) == Some("call") => {
+                    let sid = reply["sid"].as_u64().unwrap_or(0);
+                    let answer = match on_call(reply["op"].as_str().unwrap_or(""), &reply["args"]) {
+                        Ok(v) => serde_json::json!({"type": "sent", "sid": sid, "result": v}),
+                        Err(e) => serde_json::json!({"type": "sent", "sid": sid, "error": e}),
                     };
-                    if reply.get("type").and_then(|t| t.as_str()) == Some("call") {
-                        let sid = reply["sid"].as_u64().unwrap_or(0);
-                        let answer =
-                            match on_call(reply["op"].as_str().unwrap_or(""), &reply["args"]) {
-                                Ok(v) => {
-                                    serde_json::json!({"type": "sent", "sid": sid, "result": v})
-                                }
-                                Err(e) => {
-                                    serde_json::json!({"type": "sent", "sid": sid, "error": e})
-                                }
-                            };
-                        if let Some(tx) = self.to_bridge.lock().unwrap().as_ref() {
-                            let _ = tx.send(answer.to_string());
+                    self.tell(answer.to_string());
+                    deadline = std::time::Instant::now() + wait;
+                }
+                other => break other,
+            }
+        };
+        // Gone already when the reply came; a timed-out caller leaves, so a
+        // late reply is logged as unmatched (and a late call refused).
+        self.router.lock().unwrap().pending.remove(&id);
+        let strikes = &self.timeouts[lane as usize];
+        match outcome {
+            Ok(reply) => {
+                strikes.store(0, Ordering::Relaxed);
+                Ok(reply)
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                let n = strikes.fetch_add(1, Ordering::Relaxed) + 1;
+                // The start-up ping has no second chance.
+                if lane == Lane::Ping || n >= MAX_TIMEOUTS {
+                    self.mark_dead(&format!(
+                        "no reply within {} s{}",
+                        wait.as_secs(),
+                        if n > 1 {
+                            format!(", {n} times in a row")
+                        } else {
+                            String::new()
                         }
-                        deadline = std::time::Instant::now() + wait;
-                        continue;
-                    }
-                    let matches = match id {
-                        Some(id) => reply.get("id").and_then(|v| v.as_u64()) == Some(id),
-                        None => reply.get("type").is_some(),
-                    };
-                    if matches {
-                        return Ok(reply);
-                    }
-                    // A late reply to a message that already timed out.
-                    push_line(&self.errors, format!("skipped unmatched reply: {buf}"));
+                    ));
+                } else {
+                    push_line(
+                        &self.errors,
+                        format!(
+                            "no reply within {} s to {kind} message {id}; it passed through unchanged",
+                            wait.as_secs()
+                        ),
+                    );
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    mark_dead(self, &format!("no reply within {} s", wait.as_secs()));
-                    return Err("sidecar did not answer in time".into());
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    mark_dead(self, "stdout closed");
-                    return Err("sidecar closed stdout (extension load failure?)".into());
-                }
+                Err("sidecar did not answer in time".into())
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                self.mark_dead("stdout closed");
+                Err("sidecar closed stdout (extension load failure?)".into())
             }
         }
+    }
+
+    /// Stop the bridge: its hooks let everything through from now on.
+    fn mark_dead(&self, why: &str) {
+        if !self.dead.swap(true, Ordering::Relaxed) {
+            push_line(
+                &self.errors,
+                format!("sidecar stopped ({why}); its hooks now let everything through"),
+            );
+        }
+        self.kill();
     }
 
     fn kill(&self) {
@@ -615,7 +694,7 @@ impl JavaSidecar {
         if let Some(r) = req {
             line["request"] = serde_json::Value::String(crate::util::b64_encode(r));
         }
-        match self.exchange(&line.to_string(), Some(id), HOOK_TIMEOUT) {
+        match self.exchange(line, HOOK_TIMEOUT) {
             Ok(reply) => {
                 if let Some(n) = reply.get("notes").and_then(|n| n.as_str()) {
                     ann.notes = n.to_string();
@@ -653,8 +732,7 @@ impl JavaSidecar {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         line["id"] = id.into();
-        self.exchange(&line.to_string(), Some(id), HOOK_TIMEOUT)
-            .ok()
+        self.exchange(line, HOOK_TIMEOUT).ok()
     }
 }
 
@@ -750,6 +828,51 @@ fn b64_field(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
     v.get(k)
         .and_then(|x| x.as_str())
         .and_then(|x| crate::util::b64_decode(x).ok())
+}
+
+/// A reply from the bridge to the caller waiting for it, by its `id` (a
+/// pong to the ping, id 0). A line that is not JSON, or a late reply to a
+/// message whose caller gave up, is logged.
+fn route_reply(
+    router: &Mutex<Router>,
+    errors: &Mutex<std::collections::VecDeque<String>>,
+    msg: serde_json::Value,
+    line: String,
+) {
+    if !msg.is_object() {
+        push_line(errors, format!("stdout: {line}"));
+        return;
+    }
+    let key = if msg.get("type").and_then(|t| t.as_str()) == Some("pong") {
+        Some(0)
+    } else {
+        msg.get("id").and_then(|v| v.as_u64())
+    };
+    let waiter = key.and_then(|k| router.lock().unwrap().pending.remove(&k));
+    if waiter.is_none_or(|tx| tx.send(msg).is_err()) {
+        push_line(errors, format!("skipped unmatched reply: {line}"));
+    }
+}
+
+/// A "scan-" call to the scan-active message it belongs to (`scan`, that
+/// message's id), answered on that scan's thread; refused at once when that
+/// scan no longer waits, so the check does not wait for nothing.
+fn route_scan_call(
+    router: &Mutex<Router>,
+    msg: serde_json::Value,
+    back: &std::sync::mpsc::Sender<String>,
+) {
+    let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let waiter = msg
+        .get("scan")
+        .and_then(|v| v.as_u64())
+        .and_then(|s| router.lock().unwrap().pending.get(&s).cloned());
+    if waiter.is_none_or(|tx| tx.send(msg).is_err()) {
+        let _ = back.send(
+            serde_json::json!({"type": "sent", "sid": sid, "error": "no scan is running"})
+                .to_string(),
+        );
+    }
 }
 
 /// Answer one engine call from the bridge on its own thread.
@@ -981,7 +1104,7 @@ impl ProxyHooks for JavaSidecar {
                     _ => Err(format!("{op} is not supported by WebProbe")),
                 }
             };
-        match self.exchange_with(&line.to_string(), Some(id), HOOK_TIMEOUT, &mut on_call) {
+        match self.exchange_with(line, HOOK_TIMEOUT, &mut on_call) {
             Ok(reply) => issues_of(&reply, &self.name),
             Err(_) => Vec::new(),
         }
@@ -2316,6 +2439,164 @@ mod tests {
                 .contains("Gone")
         );
         crate::ext_host::with_host(&shared, |h| h.extensions.clear());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// AR-08: the reader hands each reply to the caller waiting for its id
+    /// (the pong to the ping's slot 0) and logs a late one; a scan check's
+    /// call goes to the scan it names, and is refused when that scan no
+    /// longer waits.
+    #[test]
+    fn sidecar_replies_and_scan_calls_are_routed_by_id() {
+        let router = Mutex::new(Router::default());
+        let errors = Mutex::new(std::collections::VecDeque::new());
+        let (back, from_host) = std::sync::mpsc::channel::<String>();
+        let (seven, seven_rx) = std::sync::mpsc::channel();
+        let (ping, ping_rx) = std::sync::mpsc::channel();
+        router.lock().unwrap().pending.insert(7, seven);
+        router.lock().unwrap().pending.insert(0, ping);
+        route_scan_call(
+            &router,
+            serde_json::json!({"type": "call", "sid": 3, "op": "scan-send", "scan": 7}),
+            &back,
+        );
+        route_reply(
+            &router,
+            &errors,
+            serde_json::json!({"id": 7, "issues": []}),
+            String::new(),
+        );
+        route_reply(
+            &router,
+            &errors,
+            serde_json::json!({"type": "pong", "name": "x"}),
+            String::new(),
+        );
+        assert_eq!(seven_rx.recv().unwrap()["sid"], 3, "the call first");
+        assert_eq!(seven_rx.recv().unwrap()["id"], 7, "then the reply");
+        assert_eq!(ping_rx.recv().unwrap()["name"], "x");
+        assert!(router.lock().unwrap().pending.is_empty());
+        // Nobody waits for 7 any more: a late call is refused, a late reply
+        // logged, a line that is not JSON shown as output.
+        route_scan_call(
+            &router,
+            serde_json::json!({"type": "call", "sid": 4, "op": "scan-send", "scan": 7}),
+            &back,
+        );
+        let refused: serde_json::Value = serde_json::from_str(&from_host.recv().unwrap()).unwrap();
+        assert_eq!(
+            refused,
+            serde_json::json!({"type": "sent", "sid": 4, "error": "no scan is running"})
+        );
+        route_reply(
+            &router,
+            &errors,
+            serde_json::json!({"id": 7}),
+            "{\"id\":7}".into(),
+        );
+        route_reply(&router, &errors, serde_json::Value::Null, "hello".into());
+        assert_eq!(
+            errors.lock().unwrap().iter().cloned().collect::<Vec<_>>(),
+            ["skipped unmatched reply: {\"id\":7}", "stdout: hello"]
+        );
+        assert_eq!(Lane::of("request"), Lane::of("response"));
+        assert_ne!(Lane::of("request"), Lane::of("scan-active"));
+        assert_eq!(Lane::of("ws-message"), Lane::of("ws-close"));
+    }
+
+    /// AR-08 (qa/ARCH-REVIEW-2026-11-18.md, F2): while an extension's active
+    /// check waits for its scan request (held here by the scan helper), a
+    /// proxy hook of the same extension answers without waiting for it, and
+    /// the check still completes once its request is released.
+    #[test]
+    fn stage5_proxy_hook_does_not_wait_for_a_scan_check() {
+        let Some(dir) = stage_extension("LaneExtension") else {
+            eprintln!("skipping: no JDK or Montoya API jar");
+            return;
+        };
+        let opts = SidecarOptions {
+            headless: true,
+            startup: true,
+            data: None,
+            prefs_dir: Some(std::env::temp_dir().join("wp-prefs-stage5")),
+        };
+        let sc = JavaSidecar::spawn_opts(dir.to_str().unwrap(), None, opts).expect("lanes loads");
+        eventually(|| sc.ui().filter(|u| u.active_checks == 1));
+        /// Holds the check's request until the test releases it.
+        struct Held {
+            entered: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+            release: Mutex<std::sync::mpsc::Receiver<()>>,
+        }
+        impl ScanHelper for Held {
+            fn send(&self, _: &[u8]) -> Option<Vec<u8>> {
+                if let Some(tx) = self.entered.lock().unwrap().take() {
+                    let _ = tx.send(());
+                }
+                let _ = self
+                    .release
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(std::time::Duration::from_secs(120));
+                Some(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nheld".to_vec())
+            }
+            fn build(&self, _: usize, payload: &[u8]) -> Option<Vec<u8>> {
+                let mut r = b"GET /s?q=".to_vec();
+                r.extend_from_slice(payload);
+                r.extend_from_slice(b" HTTP/1.1\r\nHost: h\r\n\r\n");
+                Some(r)
+            }
+            fn stopped(&self) -> bool {
+                false
+            }
+        }
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let held = Held {
+            entered: Mutex::new(Some(entered_tx)),
+            release: Mutex::new(release_rx),
+        };
+        let msg = ScanMessage {
+            request: b"GET /s?q=a HTTP/1.1\r\nHost: h\r\n\r\n".to_vec(),
+            response: None,
+            service: HttpService::new("h", 80, false),
+            points: vec![("q".into(), "a".into())],
+        };
+        let (hooked, issues) = std::thread::scope(|s| {
+            let scan = s.spawn(|| sc.scan_active(&msg, &held));
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(120))
+                .expect("the check's request reached WebProbe");
+            let (done_tx, done_rx) = std::sync::mpsc::channel();
+            let sc = &sc;
+            s.spawn(move || {
+                let mut req = b"GET /p HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
+                let mut ann = Annotations::default();
+                sc.handle_http_request(
+                    "Proxy",
+                    &HttpService::new("h", 80, false),
+                    &mut req,
+                    &mut ann,
+                );
+                let _ = done_tx.send(req);
+            });
+            // The hook must answer while the check's request is still held.
+            let hooked = done_rx.recv_timeout(std::time::Duration::from_secs(20));
+            let _ = release_tx.send(());
+            (hooked, scan.join().unwrap())
+        });
+        let req = hooked.expect("the proxy hook answered while the scan check's request was held");
+        assert!(
+            String::from_utf8_lossy(&req).contains("\r\nX-Lane: hook\r\n"),
+            "{}",
+            String::from_utf8_lossy(&req)
+        );
+        assert!(
+            issues.iter().any(|i| i.name == "Lane check"),
+            "the check completed after its request was released: {:#?}",
+            sc.errors()
+        );
+        assert!(sc.healthy(), "{:#?}", sc.errors());
+        sc.unload();
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -84,10 +84,18 @@ final class Wire {
     /** Ask WebProbe's engine for something (`op` with JSON `args`); the
      *  result value, or IllegalStateException with WebProbe's message. */
     static Object call(String op, String args) {
+        return call(op, args, -1);
+    }
+
+    /** {@link #call(String, String)} for a scan check: `scan` is the id of
+     *  the scan-active message it runs for (WebProbe answers the call on
+     *  that scan's thread), -1 for none. */
+    static Object call(String op, String args, int scan) {
         int sid = NEXT_SID.getAndIncrement();
         CompletableFuture<Map<String, Object>> f = new CompletableFuture<>();
         PENDING.put(sid, f);
-        send("{\"type\":\"call\",\"sid\":" + sid + ",\"op\":" + Json.esc(op) + ",\"args\":" + (args == null ? "{}" : args) + "}");
+        send("{\"type\":\"call\",\"sid\":" + sid + (scan >= 0 ? ",\"scan\":" + scan : "") + ",\"op\":" + Json.esc(op)
+                + ",\"args\":" + (args == null ? "{}" : args) + "}");
         Map<String, Object> r;
         try {
             r = f.get(120, TimeUnit.SECONDS);

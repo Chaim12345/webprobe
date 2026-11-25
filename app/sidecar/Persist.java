@@ -33,6 +33,10 @@ final class Persist {
     /** Proxy -> its store (proxies compare by identity). */
     private static final Map<Object, Store> STORES = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 
+    /** Guards every store and persisted list: the bridge's lanes (and the
+     *  main loop restoring a project) may use them at the same time. */
+    static final Object LOCK = new Object();
+
     /** Directory for preferences files (from WebProbe), or null. */
     static Path prefsDir;
 
@@ -52,25 +56,33 @@ final class Persist {
         }
 
         Object get(String kind, String key) {
-            Map<String, Object> m = kinds.get(kind);
-            return m == null ? null : m.get(key);
+            synchronized (LOCK) {
+                Map<String, Object> m = kinds.get(kind);
+                return m == null ? null : m.get(key);
+            }
         }
 
         void put(String kind, String key, Object v) {
             if (v == null) { delete(kind, key); return; }
-            if (v instanceof Store child) child.parent = this;
-            kinds.computeIfAbsent(kind, k -> new LinkedHashMap<>()).put(key, v);
-            changed();
+            synchronized (LOCK) {
+                if (v instanceof Store child) child.parent = this;
+                kinds.computeIfAbsent(kind, k -> new LinkedHashMap<>()).put(key, v);
+                changed();
+            }
         }
 
         void delete(String kind, String key) {
-            Map<String, Object> m = kinds.get(kind);
-            if (m != null && m.remove(key) != null) changed();
+            synchronized (LOCK) {
+                Map<String, Object> m = kinds.get(kind);
+                if (m != null && m.remove(key) != null) changed();
+            }
         }
 
         Set<String> keys(String kind) {
-            Map<String, Object> m = kinds.get(kind);
-            return m == null ? new LinkedHashSet<>() : new LinkedHashSet<>(m.keySet());
+            synchronized (LOCK) {
+                Map<String, Object> m = kinds.get(kind);
+                return m == null ? new LinkedHashSet<>() : new LinkedHashSet<>(m.keySet());
+            }
         }
     }
 
@@ -158,7 +170,7 @@ final class Persist {
             if (m.getName().equals("equals") && args != null && args.length == 1) return proxy == args[0] || backing.equals(args[0]);
             if (m.getName().equals("hashCode") && args == null) return backing.hashCode();
             try {
-                return m.invoke(backing, args);
+                synchronized (LOCK) { return m.invoke(backing, args); }
             } catch (java.lang.reflect.InvocationTargetException e) {
                 throw e.getCause();
             }
@@ -169,6 +181,10 @@ final class Persist {
     // ------------------------------------------------------------ JSON for WebProbe's project file
 
     static String toJson(Store s) {
+        synchronized (LOCK) { return toJsonLocked(s); }
+    }
+
+    private static String toJsonLocked(Store s) {
         StringBuilder b = new StringBuilder("{");
         int k = 0;
         for (Map.Entry<String, Map<String, Object>> kind : s.kinds.entrySet()) {
@@ -210,6 +226,11 @@ final class Persist {
      *  references the extension holds see the restored data). */
     @SuppressWarnings("unchecked")
     static void fromJson(Store s, Map<String, Object> json) {
+        synchronized (LOCK) { fromJsonLocked(s, json); }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void fromJsonLocked(Store s, Map<String, Object> json) {
         s.kinds.clear();
         if (json == null) return;
         for (Map.Entry<String, Object> kind : json.entrySet()) {
