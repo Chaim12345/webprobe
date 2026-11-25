@@ -1017,7 +1017,11 @@ fn fragmented_writes_to_an_accepted_request_never_reset() {
     // write. A reset here means the early-close tolerance would be masking
     // a healthy-path failure.
     for step in [1, 3, 7, 16_384] {
-        let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(400));
+        // The upstream stops accepting when its window ends, and the window
+        // starts before the fragmented send: on a loaded runner ~40 writes
+        // with a 1 ms pause each can outlast 400 ms, and the proxy then gets
+        // a refused connection, not a served request.
+        let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_secs(3));
         let (port, pt) = spawn_proxy(Shared::new());
         let mut c = client(port);
         let bytes = format!(
