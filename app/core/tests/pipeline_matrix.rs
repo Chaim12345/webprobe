@@ -5,6 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 use webprobe_core::net::{Shared, handle_conn, read_response_head, ws_frame};
+
+mod test_support;
+use test_support::shared;
+
 fn proxy(shared: Arc<Shared>) -> (u16, std::thread::JoinHandle<()>) {
     let p = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = p.local_addr().unwrap().port();
@@ -24,7 +28,7 @@ fn client(port: u16) -> TcpStream {
 #[test]
 fn reviewer_live_get_post_chunked_and_single_request_matrix() {
     for mode in ["get", "post", "chunked", "single"] {
-        let shared = Shared::new();
+        let shared = shared();
         shared.intercept_on.store(false, Ordering::SeqCst);
         let up = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = up.local_addr().unwrap().port();
@@ -137,7 +141,7 @@ fn reviewer_live_get_post_chunked_and_single_request_matrix() {
 }
 #[test]
 fn reviewer_upgrade_and_early_binary_frame_in_one_write() {
-    let shared = Shared::new();
+    let shared = shared();
     shared.intercept_on.store(false, Ordering::SeqCst);
     let up = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = up.local_addr().unwrap().port();
@@ -179,7 +183,7 @@ fn reviewer_connect_and_clienthello_same_write() {
         ClientConfig, ClientConnection, RootCertStore, ServerConnection, StreamOwned,
         pki_types::ServerName,
     };
-    let mut shared = Shared::new();
+    let mut shared = shared();
     let mut roots = RootCertStore::empty();
     roots.add(shared.mitm.ca_der()).unwrap();
     let cfg = Arc::new(
@@ -234,7 +238,7 @@ fn reviewer_tls_pipeline_when_first_request_is_exactly_8192_bytes() {
         ClientConfig, ClientConnection, RootCertStore, ServerConnection, StreamOwned,
         pki_types::ServerName,
     };
-    let mut shared = Shared::new();
+    let mut shared = shared();
     let mut roots = RootCertStore::empty();
     roots.add(shared.mitm.ca_der()).unwrap();
     let cfg = Arc::new(
@@ -366,7 +370,7 @@ fn pipelined_gets(port: u16) -> Vec<u8> {
 /// recorded as an exchange, and nothing is invented for it.
 #[test]
 fn buffered_request_after_a_complete_close_response_is_not_served() {
-    let shared = Shared::new();
+    let shared = shared();
     shared.intercept_on.store(false, Ordering::SeqCst);
     let (port, upstream) =
         one_shot_upstream(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none");
@@ -425,7 +429,7 @@ fn buffered_request_after_an_incomplete_response_is_not_served() {
         ("read-until-close", b"HTTP/1.1 200 OK\r\n\r\nbody", None),
     ];
     for (name, reply, expect) in cases {
-        let shared = Shared::new();
+        let shared = shared();
         shared.intercept_on.store(false, Ordering::SeqCst);
         let (port, upstream) = one_shot_upstream(reply);
         let (pp, worker) = proxy(shared.clone());
@@ -497,7 +501,7 @@ fn buffered_request_after_an_incomplete_response_is_not_served() {
 fn response_edits_do_not_rewrite_incomplete_response_evidence() {
     use webprobe_core::rules::{MrRule, MrScope};
     let reply: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc";
-    let shared = Shared::new();
+    let shared = shared();
     shared.intercept_on.store(false, Ordering::SeqCst);
     shared.response_rules.lock().unwrap().enabled = true;
     shared.response_rules.lock().unwrap().content_type_on = false;

@@ -200,6 +200,13 @@ impl MitmAuthority {
         Self::load_or_create(default_ca_dir())
     }
 
+    /// A CA held only in memory. Test harnesses use this so no test can read
+    /// or create the real user CA (`$WEBPROBE_CA_DIR` / `$XDG_CONFIG_HOME` /
+    /// `~/.config`), whatever crate boundary the test binary lives on.
+    pub fn in_memory() -> Result<Self, String> {
+        Self::load_or_create(None)
+    }
+
     /// Load the CA saved in `dir`, or create one and save it there.
     pub fn load_or_create(dir: Option<std::path::PathBuf>) -> Result<Self, String> {
         let file = dir.as_ref().map(|d| d.join("ca.json"));

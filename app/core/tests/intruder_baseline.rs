@@ -4,7 +4,10 @@ use std::net::TcpListener;
 use std::sync::{Arc, Mutex, atomic::Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use webprobe_core::{intruder, intruder_run as run, net};
+use webprobe_core::{intruder, intruder_run as run};
+
+mod test_support;
+use test_support::shared;
 
 fn wait_finished(state: &run::RunState) {
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -120,7 +123,7 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
         ];
         let specs = intruder::resolve_specs(&parsed, kind, &sources).unwrap();
         let state = run::start(
-            net::Shared::new(),
+            shared(),
             &text,
             kind,
             specs,
@@ -224,7 +227,7 @@ fn effectful_methods_skip_the_baseline_and_send_only_attack_rows() {
     )
     .unwrap();
     let state = run::start(
-        net::Shared::new(),
+        shared(),
         &text,
         intruder::AttackType::Sniper,
         specs,
@@ -268,7 +271,7 @@ fn failed_baseline_is_reported_and_payload_still_runs_after_its_send() {
     let mut cfg = settings();
     cfg.retry.retries = 1;
     let state = run::start(
-        net::Shared::new(),
+        shared(),
         &text,
         intruder::AttackType::Sniper,
         specs,
@@ -326,7 +329,7 @@ fn stop_during_baseline_does_not_launch_payloads() {
     )
     .unwrap();
     let state = run::start(
-        net::Shared::new(),
+        shared(),
         &text,
         intruder::AttackType::Sniper,
         specs,

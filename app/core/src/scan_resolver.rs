@@ -319,7 +319,9 @@ mod tests {
     fn bounded_input_results_and_singleton_positive_control() {
         let pool = process_resolver().unwrap();
         assert!(std::ptr::eq(pool, process_resolver().unwrap()));
-        let deadline = Instant::now() + Duration::from_secs(1);
+        // One deadline covers three calls on the process-wide pool, which
+        // other tests share: 1 s expired under full-suite load.
+        let deadline = Instant::now() + Duration::from_secs(30);
         assert_eq!(
             pool.resolve(owner(), "", 80, deadline),
             Err(ResolveError::InvalidInput)

@@ -65,8 +65,8 @@ pub(crate) const DOM_STORAGE_MANIPULATION_SINKS: &[&str] = &[
     "sessionStorage.setItem.name",
     "sessionStorage.setItem.value",
 ];
-pub(crate) const DOM_JSON_INJECTION_SINKS: &[&str] = &["JSON.parse"];
-pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] = &["document.evaluate"];
+pub(crate) const DOM_JSON_INJECTION_SINKS: &[&str] = &["JSON.parse", "jQuery.parseJSON"];
+pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] = &["document.evaluate", "jQuery.parseXML"];
 pub(crate) const DOM_DOCUMENT_DOMAIN_SINKS: &[&str] = &["document.domain"];
 pub(crate) const DOM_COOKIE_MANIPULATION_SINKS: &[&str] = &["document.cookie"];
 pub(crate) const DOM_WEB_MESSAGE_SINKS: &[&str] = &["postMessage"];
@@ -576,7 +576,7 @@ dom_family_check!(
     "Firm",
     "DOM-based client-side JSON injection",
     DOM_JSON_INJECTION_SINKS,
-    "Client-side JSON injection (DOM-based), KB 00200370, Low: JSON.parse, burp.Zcwh's client-side JSON injection sink. Confidence Firm (burp.Zwf8.Zd)."
+    "Client-side JSON injection (DOM-based), KB 00200370, Low: JSON.parse and jQuery.parseJSON, burp.Zcwh's client-side JSON injection sinks. Confidence Firm for hash-only non-jQuery sinks (burp.Zwf8.Zd); jQuery.parseJSON is always Tentative (flag 4)."
 );
 dom_family_check!(
     DomXpathInjection,
@@ -588,7 +588,7 @@ dom_family_check!(
     "Firm",
     "DOM-based client-side XPath injection",
     DOM_XPATH_INJECTION_SINKS,
-    "Client-side XPath injection (DOM-based), KB 00200360, Low: document.evaluate (jQuery.parseXML not yet), burp.Zcwh's XPath family. Confidence Firm (burp.Zwf8.Zd)."
+    "Client-side XPath injection (DOM-based), KB 00200360, Low: document.evaluate and jQuery.parseXML, burp.Zcwh's XPath family. Confidence Firm for hash-only document.evaluate (burp.Zwf8.Zd); jQuery.parseXML is always Tentative (flag 4)."
 );
 dom_family_check!(
     DomDocumentDomain,

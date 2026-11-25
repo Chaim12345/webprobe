@@ -941,4 +941,8 @@ impl webprobe_support::io_traits::ProxyIo for ResponseWriter {
     fn set_nonblocking_io(&self, _: bool) -> std::io::Result<()> {
         Ok(())
     }
+    /// The client reset the stream or the connection closed.
+    fn peer_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
+    }
 }
