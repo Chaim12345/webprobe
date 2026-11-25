@@ -14,7 +14,10 @@ executed for it. The coverage and byte figures below are the earlier run's recor
   characterisation).
 - `app/src/ar09_binary_tool_state_tests.rs`: 2 cases passed, driving the real app code
   (`request_for_tools` -> `send_following`/`send_once`; `request_for_tools` -> template ->
-  `intruder_run::start` -> `execute_probe`).
+  `intruder_run::start` -> `execute_probe`). The Repeater case was named
+  `repeater_send_once_sends_the_lossy_body_with_a_stale_content_length` then; this revision
+  shortens it to `repeater_send_once_sends_the_lossy_body` and adds a third, non-isolated
+  split-delivery fixture self-check, so the next run reports 3 app cases + 2 core cases.
 - Total: 4 passing cases; 0 failing; 0 ignored. These are characterisations of the current code
   and a transport control — **not** a fix, not GUI evidence, and not proof of correct binary
   handling.
