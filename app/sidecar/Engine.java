@@ -633,12 +633,15 @@ final class Engine {
     }
 
     /** The Http a scan check gets: its requests go through the running
-     *  scan's send path (stop, pause, progress, stored-input detection). */
-    static burp.api.montoya.http.Http scanHttp() {
+     *  scan's send path (stop, pause, progress, stored-input detection).
+     *  `scan` is the scan-active message's id, which WebProbe routes the
+     *  call by (held here, not per thread: a check may send from its own
+     *  threads). */
+    static burp.api.montoya.http.Http scanHttp(int scan) {
         return Api.obj()
                 .on("sendRequest", a -> {
                     HttpRequest q = (HttpRequest) a[0];
-                    Object r = Wire.call("scan-send", msg(q, null));
+                    Object r = Wire.call("scan-send", msg(q, null), scan);
                     HttpResponse resp = r instanceof String s && !s.isEmpty() ? (HttpResponse) Messages.response(Wire.unb64(s), null, HttpResponse.class) : null;
                     return Messages.requestResponse(q, resp, Messages.annotations("", HighlightColor.NONE));
                 })
@@ -647,12 +650,12 @@ final class Engine {
 
     /** One of WebProbe's insertion points: payloads are placed (and
      *  encoded) by WebProbe. */
-    static AuditInsertionPoint hostPoint(int index, String name, String base, HttpService svc) {
+    static AuditInsertionPoint hostPoint(int scan, int index, String name, String base, HttpService svc) {
         return Api.obj()
                 .on("name", a -> name)
                 .on("baseValue", a -> base)
                 .on("buildHttpRequestWithPayload", a -> {
-                    Object r = Wire.call("scan-build", "{\"point\":" + index + ",\"payload\":" + Wire.Json.esc(Wire.b64(((ByteArray) a[0]).getBytes())) + "}");
+                    Object r = Wire.call("scan-build", "{\"point\":" + index + ",\"payload\":" + Wire.Json.esc(Wire.b64(((ByteArray) a[0]).getBytes())) + "}", scan);
                     return Messages.request(Wire.unb64(String.valueOf(r)), Messages.svcOf(svc), null, HttpRequest.class);
                 })
                 .on("issueHighlights", a -> List.of())
@@ -696,7 +699,7 @@ final class Engine {
             int k = 0;
             for (Object o : l) {
                 Map<String, Object> p = (Map<String, Object>) o;
-                points.add(hostPoint(k++, Wire.str(p, "name", ""), Wire.str(p, "base", ""), base.request().httpService()));
+                points.add(hostPoint(id, k++, Wire.str(p, "name", ""), Wire.str(p, "base", ""), base.request().httpService()));
             }
         }
         for (AuditInsertionPointProvider p : POINT_PROVIDERS) {
@@ -704,7 +707,7 @@ final class Engine {
             catch (Throwable t) { Logs.error("[bridge] insertion point provider failed: " + Logs.trace(t)); }
         }
         List<String> issues = new ArrayList<>();
-        burp.api.montoya.http.Http http = scanHttp();
+        burp.api.montoya.http.Http http = scanHttp(id);
         AuditInsertionPoint whole = points.isEmpty() ? null : points.get(0);
         for (Active a : ACTIVE) {
             try {
