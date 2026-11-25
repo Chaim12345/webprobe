@@ -320,10 +320,10 @@ fn read_request(stream: &mut TcpStream) -> Option<Vec<u8>> {
             Ok(0) | Err(_) => break,
             Ok(n) => {
                 buf.extend_from_slice(&chunk[..n]);
-                if let Some(head) = find_head(&buf) {
-                    if buf.len() >= head + 4 + declared_len(&buf[..head]) {
-                        return Some(buf);
-                    }
+                if let Some(head) = find_head(&buf)
+                    && buf.len() >= head + 4 + declared_len(&buf[..head])
+                {
+                    return Some(buf);
                 }
             }
         }
@@ -446,7 +446,7 @@ fn control_body() {
 }
 
 fn held_body() {
-    let mut origin = Origin::start();
+    let origin = Origin::start();
     let shared = Shared::new();
     shared.intercept_on.store(true, Ordering::SeqCst);
     shared.intercept_rules.lock().unwrap().clear();
