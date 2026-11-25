@@ -29,6 +29,8 @@ use std::time::{Duration, Instant};
 use webprobe_core::net::{Shared, send_raw_with};
 
 const CONNECTION_BUDGET: Duration = Duration::from_secs(10);
+const QUIET_WINDOW: Duration = Duration::from_millis(150);
+const TRAILING_DRAIN: Duration = Duration::from_millis(400);
 const CASE_BUDGET: Duration = Duration::from_secs(90);
 const WAIT_GRACE: Duration = Duration::from_secs(2);
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
@@ -379,27 +381,42 @@ struct Record {
 }
 
 /// Reads one request under an absolute deadline, a size cap and the shared
-/// stop flag. `complete` is true only when the head and every declared body
-/// byte arrived; a head seen at EOF or on error is never complete.
+/// stop flag. `complete` is set once the head and the declared body arrived,
+/// but reading continues: trailing bytes past the declared length are the
+/// defect under test, so stopping at Content-Length would hide them. The
+/// post-complete drain ends after a quiet window or a hard drain cap.
 fn read_client(stream: &mut std::net::TcpStream, stop: &AtomicBool) -> Record {
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(50)));
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(25)));
     let deadline = Instant::now() + CONNECTION_BUDGET;
     let mut wire = Vec::new();
     let mut chunk = [0u8; 2048];
     let mut complete = false;
-    while Instant::now() < deadline && !stop.load(Ordering::SeqCst) {
-        if wire.len() >= MAX_REQUEST_BYTES {
+    let mut complete_at: Option<Instant> = None;
+    let mut last_byte_at = Instant::now();
+    loop {
+        let now = Instant::now();
+        if now >= deadline || stop.load(Ordering::SeqCst) || wire.len() >= MAX_REQUEST_BYTES {
             break;
+        }
+        if let Some(at) = complete_at {
+            if now.duration_since(at) >= TRAILING_DRAIN
+                || now.duration_since(last_byte_at) >= QUIET_WINDOW
+            {
+                break;
+            }
         }
         match stream.read(&mut chunk) {
             Ok(0) => break,
             Ok(n) => {
                 let room = MAX_REQUEST_BYTES - wire.len();
                 wire.extend_from_slice(&chunk[..n.min(room)]);
-                if let Some(head) = find_head(&wire) {
-                    if wire.len() >= head + 4 + declared_len(&wire[..head]) {
-                        complete = true;
-                        break;
+                last_byte_at = Instant::now();
+                if !complete {
+                    if let Some(head) = find_head(&wire) {
+                        if wire.len() >= head + 4 + declared_len(&wire[..head]) {
+                            complete = true;
+                            complete_at = Some(Instant::now());
+                        }
                     }
                 }
             }

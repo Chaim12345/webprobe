@@ -27,6 +27,8 @@ use webprobe_core::intruder_run::{self, AttackSettings, RunState};
 use webprobe_core::net;
 
 const CONNECTION_BUDGET: Duration = Duration::from_secs(10);
+const QUIET_WINDOW: Duration = Duration::from_millis(150);
+const TRAILING_DRAIN: Duration = Duration::from_millis(400);
 const CASE_BUDGET: Duration = Duration::from_secs(120);
 const RUN_BUDGET: Duration = Duration::from_secs(15);
 const SETTLE_BUDGET: Duration = Duration::from_secs(5);
@@ -373,27 +375,42 @@ struct Record {
 }
 
 /// Reads one request under an absolute deadline, a size cap and the shared
-/// stop flag. `complete` is true only when the head and every declared body
-/// byte arrived; a head seen at EOF or on error is never complete.
+/// stop flag. `complete` is set once the head and the declared body arrived,
+/// but reading continues: trailing bytes past the declared length are the
+/// defect under test, so stopping at Content-Length would hide them. The
+/// post-complete drain ends after a quiet window or a hard drain cap.
 fn read_client(stream: &mut std::net::TcpStream, stop: &AtomicBool) -> Record {
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(50)));
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(25)));
     let deadline = Instant::now() + CONNECTION_BUDGET;
     let mut wire = Vec::new();
     let mut chunk = [0u8; 2048];
     let mut complete = false;
-    while Instant::now() < deadline && !stop.load(Ordering::SeqCst) {
-        if wire.len() >= MAX_REQUEST_BYTES {
+    let mut complete_at: Option<Instant> = None;
+    let mut last_byte_at = Instant::now();
+    loop {
+        let now = Instant::now();
+        if now >= deadline || stop.load(Ordering::SeqCst) || wire.len() >= MAX_REQUEST_BYTES {
             break;
+        }
+        if let Some(at) = complete_at {
+            if now.duration_since(at) >= TRAILING_DRAIN
+                || now.duration_since(last_byte_at) >= QUIET_WINDOW
+            {
+                break;
+            }
         }
         match stream.read(&mut chunk) {
             Ok(0) => break,
             Ok(n) => {
                 let room = MAX_REQUEST_BYTES - wire.len();
                 wire.extend_from_slice(&chunk[..n.min(room)]);
-                if let Some(head) = find_head(&wire) {
-                    if wire.len() >= head + 4 + declared_len(&wire[..head]) {
-                        complete = true;
-                        break;
+                last_byte_at = Instant::now();
+                if !complete {
+                    if let Some(head) = find_head(&wire) {
+                        if wire.len() >= head + 4 + declared_len(&wire[..head]) {
+                            complete = true;
+                            complete_at = Some(Instant::now());
+                        }
                     }
                 }
             }
@@ -637,22 +654,29 @@ fn intruder_body() {
 // ---------- top-level cases ----------
 
 /// Fixture self-check: constructs neither `Shared` nor `App`, so it needs no
-/// child-process CA isolation. It proves the capture records a known byte
-/// length across a split delivery, independent of the declared length.
+/// child-process CA isolation. It must discriminate the declared-length
+/// capture bug, so it sends `Content-Length: 6` followed by 6 bytes, a delay,
+/// then 6 more of an actual 12-byte body. A capture that stops at the declared
+/// length would record 6 bytes and no trailing data.
 #[test]
 fn capture_fixture_records_a_split_delivery_without_trusting_content_length() {
     let mut capture = Capture::start();
-    let raw = raw_request();
-    let head_end = find_head(&raw).expect("head terminator") + 4;
+    let head = b"POST /ar09split HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 6\r\n\r\n".to_vec();
+    assert_eq!(LOSSY_BODY.len(), 12, "the fixture body is 12 bytes");
     let mut client =
         std::net::TcpStream::connect(("127.0.0.1", capture.port)).expect("client connect");
     client
         .set_read_timeout(Some(CONNECTION_BUDGET))
         .expect("read timeout");
-    client.write_all(&raw[..head_end]).expect("write head");
+    client.write_all(&head).expect("write head");
+    client
+        .write_all(&LOSSY_BODY[..6])
+        .expect("write first half");
     let _ = client.flush();
     std::thread::sleep(Duration::from_millis(50));
-    client.write_all(&raw[head_end..]).expect("write body");
+    client
+        .write_all(&LOSSY_BODY[6..])
+        .expect("write second half");
     let _ = client.flush();
     let mut response = Vec::new();
     let _ = client.read_to_end(&mut response);
@@ -662,8 +686,8 @@ fn capture_fixture_records_a_split_delivery_without_trusting_content_length() {
     let trailing = body.len().saturating_sub(declared);
     capture.stop_and_join();
     println!(
-        "AR09-FIXTURE-EVIDENCE known_len={} captured_len={}",
-        raw.len(),
+        "AR09-FIXTURE-EVIDENCE expected_wire={} captured_len={}",
+        head.len() + LOSSY_BODY.len(),
         wire.len(),
     );
     println!(
@@ -671,13 +695,17 @@ fn capture_fixture_records_a_split_delivery_without_trusting_content_length() {
         body.len()
     );
     println!("AR09-FIXTURE-EVIDENCE trailing={trailing}");
+    assert_eq!(declared, 6, "the header declares only the first 6 bytes");
+    assert_eq!(
+        body, LOSSY_BODY,
+        "all 12 bytes must be captured across the split delivery",
+    );
+    assert_eq!(trailing, 6, "6 bytes sit past the declared length");
     assert_eq!(
         wire.len(),
-        raw.len(),
-        "the fixture captured the known length"
+        head.len() + LOSSY_BODY.len(),
+        "the fixture captured the complete known wire length",
     );
-    assert_eq!(body, BODY, "the split body is intact");
-    assert_eq!(trailing, 0, "no bytes past the declared length");
 }
 
 #[test]
