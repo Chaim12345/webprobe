@@ -51,6 +51,15 @@ What this does and does not show:
   time-bounded is reported as `F9-PROXY-WORKERS-DETACHED` with the parent's child kill as the
   containment.
 
+## Hand-formatting in this revision (rustfmt not run)
+
+Formatting was applied by hand because this goal forbids running any binary, including the
+formatter: import order inside brace groups (`{Shared, handle_conn, ...}`), one-line calls for
+evidence lines that were split to stay under 100 columns, trailing commas in vertical macro
+arguments, short struct literals collapsed to one line, and short method chains joined. These
+hunks are hand-formatting only; the reviewer should validate them with `cargo fmt --check`
+before any rerun.
+
 ## CA isolation status
 
 Earlier run: unknown and uncontrolled — the fixtures constructed `Shared::new()` directly, so a

@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use webprobe_core::net::{handle_conn, intercept_release_all, Shared};
+use webprobe_core::net::{Shared, handle_conn, intercept_release_all};
 
 const WAIT: Duration = Duration::from_secs(3);
 const CASE_BUDGET: Duration = Duration::from_secs(60);
@@ -47,10 +47,8 @@ impl Isolation {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "webprobe-f9-{tag}-{}-{nanos}",
-            std::process::id()
-        ));
+        let name = format!("webprobe-f9-{tag}-{}-{nanos}", std::process::id());
+        let root = std::env::temp_dir().join(name);
         let home = root.join("home");
         let xdg = root.join("xdg");
         let ca = root.join("ca");
@@ -68,14 +66,7 @@ impl Isolation {
         .expect("write HOME sentinel");
         std::fs::write(xdg.join("webprobe").join("ca.json"), SENTINEL_XDG)
             .expect("write XDG sentinel");
-        Isolation {
-            root,
-            home,
-            xdg,
-            ca,
-            child: None,
-            timed_out: false,
-        }
+        Isolation { root, home, xdg, ca, child: None, timed_out: false }
     }
 
     /// Spawns this test binary on exactly `case` with isolated paths in the
@@ -83,14 +74,11 @@ impl Isolation {
     fn spawn(&mut self, case: &str, ignored: bool) {
         assert!(
             std::env::var_os(CHILD_MARKER).is_none(),
-            "refusing to spawn a child from inside a child"
+            "refusing to spawn a child from inside a child",
         );
         let exe = std::env::current_exe().expect("current test binary");
         let mut cmd = Command::new(exe);
-        cmd.arg("--exact")
-            .arg(case)
-            .arg("--nocapture")
-            .arg("--test-threads=1");
+        cmd.arg("--exact").arg(case).arg("--nocapture").arg("--test-threads=1");
         if ignored {
             cmd.arg("--ignored");
         }
@@ -130,13 +118,13 @@ impl Isolation {
             std::fs::read(self.home.join(".config").join("webprobe").join("ca.json"))
                 .expect("HOME sentinel readable"),
             SENTINEL_HOME,
-            "the child changed the fake HOME CA file"
+            "the child changed the fake HOME CA file",
         );
         assert_eq!(
             std::fs::read(self.xdg.join("webprobe").join("ca.json"))
                 .expect("XDG sentinel readable"),
             SENTINEL_XDG,
-            "the child changed the fake XDG CA file"
+            "the child changed the fake XDG CA file",
         );
     }
 
@@ -149,7 +137,7 @@ impl Isolation {
         files.retain(|p| !p.ends_with("webprobe/ca.json"));
         assert!(
             files.is_empty(),
-            "files created outside the owned CA dir: {files:?}"
+            "files created outside the owned CA dir: {files:?}",
         );
         println!("F9-CA-DIR: {:?}", self.ca);
     }
@@ -198,7 +186,7 @@ fn child_branch(case: &str) -> bool {
         assert!(path.is_absolute(), "{var} is not absolute: {path:?}");
         assert!(
             path.starts_with(&root),
-            "{var} {path:?} is outside the owned tempdir {root:?}"
+            "{var} {path:?} is outside the owned tempdir {root:?}",
         );
     }
     println!("F9-ISOLATION-OK root={}", root.display());
@@ -214,12 +202,12 @@ fn assert_single_case(stdout: &str, want_pass: bool) {
     if want_pass {
         assert!(
             summary.contains("1 passed") && summary.contains("0 failed"),
-            "child did not run exactly one passing case: {summary}"
+            "child did not run exactly one passing case: {summary}",
         );
     } else {
         assert!(
             summary.contains("1 failed") && summary.contains("0 passed"),
-            "child did not run exactly one failing case: {summary}"
+            "child did not run exactly one failing case: {summary}",
         );
     }
 }
@@ -290,14 +278,7 @@ impl Origin {
                 }
             }
         });
-        Origin {
-            port,
-            accepts,
-            parsed,
-            bytes,
-            stop,
-            join: Some(join),
-        }
+        Origin { port, accepts, parsed, bytes, stop, join: Some(join) }
     }
 
     fn stop_and_join(&mut self) {
@@ -363,12 +344,7 @@ impl Proxy {
                 }
             }
         });
-        Proxy {
-            port,
-            stop,
-            join: Some(join),
-            conns,
-        }
+        Proxy { port, stop, join: Some(join), conns }
     }
 }
 
@@ -413,7 +389,6 @@ fn request(origin_port: u16) -> Vec<u8> {
     .into_bytes()
 }
 
-
 // ---------- child bodies ----------
 
 fn control_body() {
@@ -421,9 +396,7 @@ fn control_body() {
     let shared = Shared::new();
     let proxy = Proxy::start(Arc::clone(&shared));
     let mut client = TcpStream::connect(("127.0.0.1", proxy.port)).expect("client connect");
-    client
-        .set_read_timeout(Some(WAIT))
-        .expect("client read timeout");
+    client.set_read_timeout(Some(WAIT)).expect("client read timeout");
     client.write_all(&request(origin.port)).expect("client write");
     let _ = client.flush();
     let mut response = Vec::new();
@@ -433,19 +406,13 @@ fn control_body() {
     let parsed = origin.parsed.load(Ordering::SeqCst);
     let retained = origin.bytes.lock().unwrap().len();
     origin.stop_and_join();
-    println!(
-        "F9-CONTROL-EVIDENCE accepts={accepts} parsed={parsed} retained={retained} response_bytes={} status_200={}",
-        response.len(),
-        text.contains("200 OK")
-    );
+    println!("F9-CONTROL-EVIDENCE accepts={accepts} parsed={parsed} retained={retained}");
+    println!("F9-CONTROL-EVIDENCE response_bytes={}", response.len());
     assert!(
         text.contains("200 OK") && text.contains("upstream-ok"),
-        "response: {text:?}"
+        "response: {text:?}",
     );
-    assert_eq!(
-        parsed, 1,
-        "origin parsed exactly one request (accepts={accepts})"
-    );
+    assert_eq!(parsed, 1, "origin parsed exactly one request (accepts={accepts})");
     println!("CASE-COMPLETE: {CONTROL}");
 }
 
@@ -462,7 +429,7 @@ fn held_body() {
     let _ = client.flush();
     assert!(
         wait_queue(&shared, 1, WAIT),
-        "the held entry was not established before the cancel"
+        "the held entry was not established before the cancel",
     );
     let accepts_before = origin.accepts.load(Ordering::SeqCst);
     let parsed_before = origin.parsed.load(Ordering::SeqCst);
@@ -493,12 +460,17 @@ fn held_body() {
     // Teardown always drops held entries; it never forwards.
     let dropped_at_teardown = intercept_release_all(&shared, true);
 
-    println!(
-        "F9-EVIDENCE released={released} released_after={released_after:?} held_after_3s={held_after} forwards={forwarded} accepts_before={accepts_before} parsed_before={parsed_before} accepts_at_cancel={accepts_at_cancel} parsed_at_cancel={parsed_at_cancel} retained_at_cancel={retained_at_cancel} parsed_after_forward={parsed_after_forward} dropped_at_teardown={dropped_at_teardown}"
-    );
+    println!("F9-EVIDENCE released={released} released_after={released_after:?}");
+    println!("F9-EVIDENCE held_after_3s={held_after} forwards={forwarded}");
+    println!("F9-EVIDENCE accepts_before={accepts_before} parsed_before={parsed_before}");
+    println!("F9-EVIDENCE accepts_at_cancel={accepts_at_cancel}");
+    println!("F9-EVIDENCE parsed_at_cancel={parsed_at_cancel}");
+    println!("F9-EVIDENCE retained_at_cancel={retained_at_cancel}");
+    println!("F9-EVIDENCE parsed_after_forward={parsed_after_forward}");
+    println!("F9-EVIDENCE dropped_at_teardown={dropped_at_teardown}");
     assert!(
         released && parsed_at_cancel == 0,
-        "F9-EVIDENCE held request outlived its client: released={released} after {released_after:?} (held={held_after}); origin accepts/parsed at cancel={accepts_at_cancel}/{parsed_at_cancel}"
+        "F9-EVIDENCE held request outlived its client: released={released}",
     );
     println!("CASE-COMPLETE: {HELD}");
 }
@@ -518,21 +490,21 @@ fn control_normal_request_reaches_the_origin_and_returns() {
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(
         !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
     );
     assert!(
         out.status.success(),
         "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status
+        out.status,
     );
     assert_single_case(&stdout, true);
     assert!(
         stdout.contains("F9-CONTROL-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}"
+        "no per-case completion record\nstdout:\n{stdout}",
     );
     assert!(
         stdout.contains(&format!("CASE-COMPLETE: {CONTROL}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}"
+        "no CASE-COMPLETE line\nstdout:\n{stdout}",
     );
     iso.assert_sentinels();
     iso.assert_no_ca_outside_owned_ca();
@@ -552,21 +524,21 @@ fn held_request_is_released_when_the_client_disconnects() {
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(
         !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
     );
     assert_eq!(
         out.status.code(),
         Some(101),
-        "expected the draft regression to fail with the F9 defect\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "expected the draft regression to fail with the F9 defect\nstdout:\n{stdout}\nstderr:\n{stderr}",
     );
     assert_single_case(&stdout, false);
     assert!(
         stderr.contains("F9-EVIDENCE") && stderr.contains("released=false"),
-        "child failed for an unexpected reason\nstderr:\n{stderr}"
+        "child failed for an unexpected reason\nstderr:\n{stderr}",
     );
     assert!(
         !stdout.contains(&format!("CASE-COMPLETE: {HELD}")),
-        "the draft regression unexpectedly passed; promote it out of #[ignore]"
+        "the draft regression unexpectedly passed; promote it out of #[ignore]",
     );
     iso.assert_sentinels();
     iso.assert_no_ca_outside_owned_ca();
