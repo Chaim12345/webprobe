@@ -6,19 +6,8 @@ use std::{
 };
 use webprobe_core::net::{Shared, handle_conn, read_response_head, ws_frame};
 
-/// Every test in this binary gets a throwaway CA directory: a test run must
-/// never read or create the real user CA (`$XDG_CONFIG_HOME` / `~/.config`).
-fn shared() -> std::sync::Arc<Shared> {
-    use std::sync::Once;
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
-        let dir = std::env::temp_dir().join(format!("wp-ca-it-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        // SAFETY: set before any thread reads the CA directory.
-        unsafe { std::env::set_var("WEBPROBE_CA_DIR", &dir) };
-    });
-    Shared::new()
-}
+mod test_support;
+use test_support::shared;
 
 fn proxy(shared: Arc<Shared>) -> (u16, std::thread::JoinHandle<()>) {
     let p = TcpListener::bind("127.0.0.1:0").unwrap();

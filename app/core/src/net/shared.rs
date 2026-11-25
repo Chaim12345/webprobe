@@ -224,13 +224,28 @@ pub fn wake_clock_ms() -> u64 {
 impl Shared {
     pub fn new() -> Arc<Self> {
         // Unit tests compile this lib with cfg(test); an in-memory CA keeps
-        // them off the real user CA. Integration-test binaries compile the lib
-        // without cfg(test) and isolate themselves with WEBPROBE_CA_DIR.
+        // them off the real user CA. Integration binaries and the app crate
+        // compile it without cfg(test) and must inject a CA with
+        // `with_ca_dir` instead of mutating the process environment.
         #[cfg(test)]
         let mitm = crate::tls::MitmAuthority::in_memory()
             .expect("failed to initialize in-memory test CA");
         #[cfg(not(test))]
         let mitm = crate::tls::MitmAuthority::new().expect("failed to initialize local HTTPS CA");
+        Self::with_authority(mitm)
+    }
+
+    /// Build a `Shared` on an explicitly chosen CA: `Some(dir)` loads or
+    /// creates `dir/ca.json`, `None` keeps the CA in memory. Test harnesses
+    /// inject a private directory here rather than mutating the process
+    /// environment, which every other test thread shares.
+    pub fn with_ca_dir(dir: Option<std::path::PathBuf>) -> Result<Arc<Self>, String> {
+        Ok(Self::with_authority(
+            crate::tls::MitmAuthority::load_or_create(dir)?,
+        ))
+    }
+
+    fn with_authority(mitm: crate::tls::MitmAuthority) -> Arc<Self> {
         Arc::new(Self {
             mitm,
             tls_upstream: crate::tls::upstream_config(),
