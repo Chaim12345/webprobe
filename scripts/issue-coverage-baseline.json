@@ -1,5 +1,5 @@
 {
-  "covered": 167,
+  "covered": 168,
   "not_covered": {
     "Bambda generated issue": {
       "note": "type 0x09008000, for issues raised by a Bambda scan check; WebProbe runs Bambdas as filters and columns only",
