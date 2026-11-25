@@ -9,9 +9,10 @@ permissions:
   contents: read
 
 # A newer push to a pull request supersedes the run in flight. Pushes to a
-# long-lived branch are never cancelled: each merged commit keeps its result.
+# long-lived branch each get a group of their own (the run id), so none is
+# cancelled or dropped while queued: every merged commit keeps its result.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # app/.cargo/config.toml pins a machine-local rustc, sccache and ld.lld-22.
