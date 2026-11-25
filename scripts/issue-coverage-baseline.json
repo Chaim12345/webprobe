@@ -1,5 +1,5 @@
 {
-  "covered": 167,
+  "covered": 168,
   "not_covered": {
     "Bambda generated issue": {
       "note": "type 0x09008000, for issues raised by a Bambda scan check; WebProbe runs Bambdas as filters and columns only",
@@ -39,10 +39,6 @@
     },
     "Local file path manipulation (stored DOM-based)": {
       "note": "Static JavaScript analysis only: seven sinks in burp.Zeys (FileReader.readAsArrayBuffer, readAsBinaryString, readAsDataURL, readAsText, readAsFile, root.getFile, root.getDirectory); the dynamic decoder never returns this type. Needs the static analyser (tasks.json S-04; stages in docs/specs/R-13-static-js-analysis.research.md)",
-      "status": "todo"
-    },
-    "Manually generated issue": {
-      "note": "type 0x08008000, for an issue the user adds by hand; WebProbe has no such action yet",
       "status": "todo"
     },
     "Perl code injection": {

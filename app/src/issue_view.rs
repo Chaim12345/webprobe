@@ -459,8 +459,26 @@ pub fn issue_detail(
                             ui.label(RichText::new(&issue.path).size(12.5).color(theme::ink()));
                             ui.end_row();
                         });
+                    // burp.Ziiz.ZN marks an issue the user raised by hand.
+                    let manual = crate::scan::is_manual_issue(issue);
+                    if manual {
+                        ui.add_space(6.0);
+                        ui.label(
+                            RichText::new("Note: This issue was generated manually.")
+                                .size(12.5)
+                                .color(theme::ink_dim()),
+                        );
+                    }
                     section(ui, "Issue detail", &detail_text(&issue.detail));
-                    if let Some(kb) = knowledge_base().lookup(&issue.name) {
+                    // A manual issue carries the user's name: its background is
+                    // that of its type (Burp's issue definition for
+                    // MANUALLY_GENERATED).
+                    let kb = if manual {
+                        knowledge_base().lookup(crate::scan::MANUAL_ISSUE_TYPE)
+                    } else {
+                        knowledge_base().lookup(&issue.name)
+                    };
+                    if let Some(kb) = kb {
                         section(
                             ui,
                             "Issue background",

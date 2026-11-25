@@ -39,6 +39,10 @@ pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
     // the proxy in absolute form.
     let req = entry.as_ref().map(|e| util::origin_form(&e.req_raw));
     let resp = entry.as_ref().and_then(|e| e.resp_raw.clone());
+    // The editors' "Record an issue" submenu (burp.Zgmp), for a message with
+    // a request and a response.
+    let has_pair = req.is_some() && resp.is_some();
+    let mut record: Option<crate::manual_issue_ui::Pick> = None;
     let dock_w = 32.0;
     let side_w = if app.dock_sel < 2 { 330.0 } else { 0.0 };
     // egui_extras strips give each region a hard size and clip rect, so a
@@ -59,7 +63,14 @@ pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
                     .size(egui_extras::Size::remainder())
                     .horizontal(|mut col| {
                         col.cell(|ui| {
-                            crate::msgpane::message_pane(
+                            let mut menu = |ui: &mut Ui, _sel: Option<String>| {
+                                if let Some(p) =
+                                    crate::manual_issue_ui::record_menu(ui, has_pair, has_pair)
+                                {
+                                    record = Some(p);
+                                }
+                            };
+                            crate::msgpane::message_pane_ex(
                                 ui,
                                 "hist_req",
                                 "Request",
@@ -67,6 +78,7 @@ pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
                                 &mut app.req_pane,
                                 false,
                                 full,
+                                has_pair.then_some(&mut menu as crate::msgpane::PaneMenu),
                             );
                         });
                         col.cell(|ui| {
@@ -76,7 +88,14 @@ pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
                                 r.y_range(),
                                 egui::Stroke::new(1.0, theme::line()),
                             );
-                            crate::msgpane::message_pane(
+                            let mut menu = |ui: &mut Ui, _sel: Option<String>| {
+                                if let Some(p) =
+                                    crate::manual_issue_ui::record_menu(ui, has_pair, has_pair)
+                                {
+                                    record = Some(p);
+                                }
+                            };
+                            crate::msgpane::message_pane_ex(
                                 ui,
                                 "hist_resp",
                                 "Response",
@@ -84,6 +103,7 @@ pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
                                 &mut app.resp_pane,
                                 true,
                                 full,
+                                has_pair.then_some(&mut menu as crate::msgpane::PaneMenu),
                             );
                         });
                     });
@@ -146,6 +166,9 @@ pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
                 }
             });
         });
+    if let (Some(pick), Some(e), Some(req)) = (record, &entry, &req) {
+        crate::manual_issue_ui::open_for_entry(app, pick, e, req);
+    }
 }
 
 pub(crate) fn scan_sev_color(sev: &str) -> egui::Color32 {

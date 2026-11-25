@@ -556,6 +556,26 @@ pub fn message_pane(
     response: bool,
     height: f32,
 ) {
+    message_pane_ex(ui, id, title, bytes, st, response, height, None);
+}
+
+/// `message_pane` with a right-click menu on the message (Burp's message
+/// editor menu, burp.Zgmp). The menu gets no selection: a read-only pane
+/// keeps none.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "message_pane's arguments plus the menu, as editable_pane_ex"
+)]
+pub fn message_pane_ex(
+    ui: &mut Ui,
+    id: &str,
+    title: &str,
+    bytes: Option<&[u8]>,
+    st: &mut PaneState,
+    response: bool,
+    height: f32,
+    mut menu: Option<PaneMenu>,
+) {
     let width = ui.available_width();
     ui.allocate_ui_with_layout(
         egui::vec2(width, height),
@@ -616,7 +636,7 @@ pub fn message_pane(
             };
             let total_len = full_bytes.len();
             let (bytes, clipped) = preview_of(full_bytes);
-            egui::ScrollArea::both()
+            let scroll = egui::ScrollArea::both()
                 .id_salt(id)
                 .max_height(body_h)
                 .min_scrolled_height(body_h)
@@ -804,6 +824,14 @@ pub fn message_pane(
                     }
                     }
                 });
+            if let Some(menu) = menu.as_mut() {
+                ui.interact(
+                    scroll.inner_rect,
+                    ui.scope_id().with((id, "message-menu")),
+                    egui::Sense::click(),
+                )
+                .context_menu(|ui| menu(ui, None));
+            }
             search_row(ui, id, st, highlights);
         },
     );
