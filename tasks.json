@@ -1402,7 +1402,7 @@
       "acceptance": "History/Logger/WebSocket filters and custom columns by script, as Burp's Bambda mode (scripting language decided in the task).",
       "effort": "M",
       "status": "todo",
-      "evidence": "Checked 2026-11-24: the Java Bambda backend (core/src/bambda.rs: compile and run filter and column batches), the library (core/src/bambda_library.rs) and a preview pane (src/bambda_ui.rs) exist and CI runs the real-Java Bambda tests, but nothing in the History, Logger or WebSocket filters or in the table columns calls them yet. The wiring is the open part. Earlier note: deferred 2026-11-18 by the user's instruction."
+      "evidence": "In progress 2026-11-25: branch feat/r16-bambda-filters-20261125 (wiring the filters and custom columns). Checked 2026-11-24: the Java Bambda backend (core/src/bambda.rs: compile and run filter and column batches), the library (core/src/bambda_library.rs) and a preview pane (src/bambda_ui.rs) exist and CI runs the real-Java Bambda tests, but nothing in the History, Logger or WebSocket filters or in the table columns calls them yet. The wiring is the open part. Earlier note: deferred 2026-11-18 by the user's instruction."
     },
     {
       "id": "R-17",
@@ -1575,7 +1575,7 @@
       "acceptance": "A Bambda can be a scan check, active or passive, with the library, editor and test run Burp offers for custom scan checks; its issues carry type 0x09008000 (\"Bambda generated issue\").",
       "effort": "L",
       "status": "todo",
-      "evidence": "Not started. The Java Bambda backend (core/src/bambda.rs) compiles filters and columns only. Burp: Zcot.BAMBDA_GENERATED, registered in burp.Zcug:277-281; UI strings \"Custom scan checks\", \"Selected bambda scan checks\" (burp.Zgfu)."
+      "evidence": "In progress 2026-11-25: branch feat/s03-bambda-scan-checks-20261125. Not started. The Java Bambda backend (core/src/bambda.rs) compiles filters and columns only. Burp: Zcot.BAMBDA_GENERATED, registered in burp.Zcug:277-281; UI strings \"Custom scan checks\", \"Selected bambda scan checks\" (burp.Zgfu)."
     },
     {
       "id": "S-04",
@@ -1585,7 +1585,7 @@
       "acceptance": "DOM-based issue types are also found without running the page, as Burp's static analysis does (task burp.Zwqm, JsAnalysisCheck); client-side SQL injection and local file path manipulation (three variants each) become reportable.",
       "effort": "XL",
       "status": "todo",
-      "evidence": "Not started. Research in progress 2026-11-24 (docs/specs/R-13-static-js-analysis.research.md, branch docs/static-js-analysis-research-20261124). No dynamic sink leads to local file path manipulation in Burp, and webdatabase.executeSql is gone from current Chromium, so the dynamic probe cannot reach these six types."
+      "evidence": "In progress 2026-11-25: branch feat/static-js-analysis-s0s2-20261125 (stages S0 to S2: script extraction, parsing, taint with Burp's tables). Not started. Research in progress 2026-11-24 (docs/specs/R-13-static-js-analysis.research.md, branch docs/static-js-analysis-research-20261124). No dynamic sink leads to local file path manipulation in Burp, and webdatabase.executeSql is gone from current Chromium, so the dynamic probe cannot reach these six types."
     },
     {
       "id": "S-05",
