@@ -849,7 +849,7 @@ fn route_reply(
         msg.get("id").and_then(|v| v.as_u64())
     };
     let waiter = key.and_then(|k| router.lock().unwrap().pending.remove(&k));
-    if !waiter.is_some_and(|tx| tx.send(msg).is_ok()) {
+    if waiter.is_none_or(|tx| tx.send(msg).is_err()) {
         push_line(errors, format!("skipped unmatched reply: {line}"));
     }
 }
@@ -867,7 +867,7 @@ fn route_scan_call(
         .get("scan")
         .and_then(|v| v.as_u64())
         .and_then(|s| router.lock().unwrap().pending.get(&s).cloned());
-    if !waiter.is_some_and(|tx| tx.send(msg).is_ok()) {
+    if waiter.is_none_or(|tx| tx.send(msg).is_err()) {
         let _ = back.send(
             serde_json::json!({"type": "sent", "sid": sid, "error": "no scan is running"})
                 .to_string(),
