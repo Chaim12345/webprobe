@@ -449,7 +449,7 @@ impl Capture {
                         a.fetch_add(1, Ordering::SeqCst);
                         let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
                         let record = read_client(&mut stream, &s);
-                        records.lock().unwrap().push(record);
+                        r.lock().unwrap().push(record);
                         let _ = stream.write_all(
                             b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                         );
