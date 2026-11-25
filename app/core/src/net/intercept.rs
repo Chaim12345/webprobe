@@ -3,10 +3,28 @@
 
 use super::*;
 
+/// The client behind a blocking proxy stream is gone: EOF or a hard error,
+/// seen with a non-blocking peek that consumes nothing. A client that only
+/// half-closes (FIN after its request) is indistinguishable from one that
+/// left and counts as gone, as on the WebSocket path.
+pub(crate) fn client_gone<S: ProxyIo>(stream: &S) -> bool {
+    if stream.set_nonblocking_io(true).is_err() {
+        return false;
+    }
+    let gone = stream.peer_closed();
+    let _ = stream.set_nonblocking_io(false);
+    gone
+}
+
+/// Hold a request that the interception rules select until the user
+/// forwards or drops it. `alive` is the client connection's liveness: when
+/// it turns false the held item leaves the queue and the request is dropped
+/// (nothing is sent upstream for a client that is no longer there).
 pub fn intercept_request(
     shared: &Shared,
     req: Vec<u8>,
     default_port: u16,
+    alive: &dyn Fn() -> bool,
 ) -> (Option<Vec<u8>>, ReqState) {
     if !shared.intercept_on.load(Ordering::SeqCst) {
         return (Some(req), ReqState::default());
@@ -52,8 +70,8 @@ pub fn intercept_request(
         },
     ));
     shared.wake();
-    match rx.recv() {
-        Ok(Some(edited)) => {
+    match intercept_wait(shared, id, &rx, alive) {
+        Some(edited) => {
             let (bytes, changed) = forwarded(req, &shown, edited);
             (
                 Some(bytes),
@@ -63,7 +81,7 @@ pub fn intercept_request(
                 },
             )
         }
-        Ok(None) => {
+        None => {
             shared.log("Intercepted request dropped");
             (
                 None,
@@ -73,18 +91,16 @@ pub fn intercept_request(
                 },
             )
         }
-        Err(_) => (
-            None,
-            ReqState {
-                edited: false,
-                held: true,
-            },
-        ),
     }
 }
 
 /// Hold a response that the response interception rules select, as Burp
-/// does: the user forwards (possibly edited) or drops it.
+/// does: the user forwards (possibly edited) or drops it. `alive` is the
+/// client connection's liveness, as for [`intercept_request`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one call site; the arguments are the exchange's identity"
+)]
 pub fn intercept_response(
     shared: &Shared,
     resp: Vec<u8>,
@@ -93,6 +109,7 @@ pub fn intercept_response(
     https: bool,
     url: &str,
     st: ReqState,
+    alive: &dyn Fn() -> bool,
 ) -> Option<Vec<u8>> {
     if !shared.intercept_on.load(Ordering::SeqCst) {
         return Some(resp);
@@ -116,9 +133,9 @@ pub fn intercept_response(
         InterceptKind::Response { https },
     ));
     shared.wake();
-    match rx.recv() {
-        Ok(Some(edited)) => Some(forwarded(resp, &shown, edited).0),
-        _ => {
+    match intercept_wait(shared, id, &rx, alive) {
+        Some(edited) => Some(forwarded(resp, &shown, edited).0),
+        None => {
             shared.log("Intercepted response dropped");
             None
         }

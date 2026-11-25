@@ -12,7 +12,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::Duration;
 
-use webprobe_core::net::{send_raw_with, Shared};
+use webprobe_core::net::{Shared, send_raw_with};
 
 const BODY: &[u8] = &[0x00, 0xff, 0xfe, 0x00, 0xc3, 0x28];
 
@@ -26,8 +26,11 @@ fn raw_request() -> Vec<u8> {
     r
 }
 
-/// Loopback origin that captures exactly what it received.
-fn capture() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
+/// Loopback origin that captures exactly what it received. `body_len` is the
+/// number of body bytes the test expects on the wire, not the declared
+/// Content-Length: the characterisation deliberately sends more than it
+/// declares, and a short TCP read must not end the capture early.
+fn capture(body_len: usize) -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let (tx, rx) = std::sync::mpsc::channel();
@@ -45,18 +48,10 @@ fn capture() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     buf.extend_from_slice(&chunk[..n]);
-                    if let Some(h) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-                        let cl = String::from_utf8_lossy(&buf[..h])
-                            .lines()
-                            .find_map(|l| {
-                                let (k, v) = l.split_once(':')?;
-                                k.eq_ignore_ascii_case("content-length")
-                                    .then(|| v.trim().parse::<usize>().ok())?
-                            })
-                            .unwrap_or(0);
-                        if buf.len() >= h + 4 + cl {
-                            break;
-                        }
+                    if let Some(h) = buf.windows(4).position(|w| w == b"\r\n\r\n")
+                        && buf.len() >= h + 4 + body_len
+                    {
+                        break;
                     }
                 }
             }
@@ -87,11 +82,13 @@ fn body_of(wire: &[u8]) -> &[u8] {
 #[test]
 fn control_transport_preserves_nul_and_non_utf8_body_bytes() {
     let shared = Shared::new();
-    let (port, rx) = capture();
+    let (port, rx) = capture(BODY.len());
     let raw = raw_request();
     let up = send_raw_with(&shared, "127.0.0.1", port, &raw, None);
     assert!(up.error.is_none(), "send error: {:?}", up.error);
-    let wire = rx.recv_timeout(Duration::from_secs(5)).expect("origin got the request");
+    let wire = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("origin got the request");
     println!("sent     : {}", hex(&raw));
     println!("received : {}", hex(&wire));
     // The transport adds `Connection: close` to the head by design; the body
@@ -112,7 +109,7 @@ fn control_transport_preserves_nul_and_non_utf8_body_bytes() {
 #[test]
 fn repeater_text_state_is_lossy_for_non_utf8_bodies() {
     let shared = Shared::new();
-    let (port, rx) = capture();
+    let (port, rx) = capture(12);
     let raw = raw_request();
 
     // Exactly the production conversion chain for an origin-form request.
@@ -121,14 +118,18 @@ fn repeater_text_state_is_lossy_for_non_utf8_bodies() {
 
     let up = send_raw_with(&shared, "127.0.0.1", port, &sent, None);
     assert!(up.error.is_none(), "send error: {:?}", up.error);
-    let wire = rx.recv_timeout(Duration::from_secs(5)).expect("origin got the request");
+    let wire = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("origin got the request");
 
     let wire_body = body_of(&wire);
     println!("stored text body : {}", hex(wire_body));
     println!("original body    : {}", hex(BODY));
     assert_eq!(
         wire_body,
-        [0x00, 0xef, 0xbf, 0xbd, 0xef, 0xbf, 0xbd, 0x00, 0xef, 0xbf, 0xbd, 0x28],
+        [
+            0x00, 0xef, 0xbf, 0xbd, 0xef, 0xbf, 0xbd, 0x00, 0xef, 0xbf, 0xbd, 0x28
+        ],
         "lossy conversion result"
     );
     assert_eq!(wire_body.len(), 12, "6 body bytes became 12");

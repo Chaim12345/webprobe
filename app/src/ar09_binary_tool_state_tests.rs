@@ -47,11 +47,19 @@ fn body_of(wire: &[u8]) -> &[u8] {
 }
 
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")
+    bytes
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Loopback origin capturing every request it receives.
-fn capture() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
+///
+/// `body_len` is the number of body bytes expected on the wire, not the
+/// declared Content-Length (Repeater sends more than it declares): a short
+/// TCP read must not end the capture early.
+fn capture(body_len: usize) -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let (tx, rx) = std::sync::mpsc::channel();
@@ -69,16 +77,15 @@ fn capture() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
                     Ok(n) => {
                         buf.extend_from_slice(&chunk[..n]);
                         if buf.windows(4).any(|w| w == b"\r\n\r\n")
-                            && buf.len() >= head_len(&buf) + 4 + declared_len(&buf)
+                            && buf.len() >= head_len(&buf) + 4 + body_len
                         {
                             break;
                         }
                     }
                 }
             }
-            let _ = stream.write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-            );
+            let _ = stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             let _ = tx.send(buf);
         }
     });
@@ -90,7 +97,7 @@ fn capture() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
 #[test]
 fn repeater_send_once_sends_the_lossy_body_with_a_stale_content_length() {
     let shared = net::Shared::new();
-    let (port, rx) = capture();
+    let (port, rx) = capture(12);
     let text = crate::ui::request_for_tools(&raw_request());
     // An edit in the text editor must not change the body bytes.
     let edited = text.replacen("POST /ar09", "POST /ar09?edited=1", 1);
@@ -115,7 +122,11 @@ fn repeater_send_once_sends_the_lossy_body_with_a_stale_content_length() {
     );
     assert_eq!(body_of(&wire), LOSSY_BODY, "send_once sent the lossy body");
     assert_eq!(declared_len(&wire), 6, "header keeps the captured length");
-    assert_eq!(body_of(&wire).len(), 12, "12 bytes under a 6-byte declaration");
+    assert_eq!(
+        body_of(&wire).len(),
+        12,
+        "12 bytes under a 6-byte declaration"
+    );
 }
 
 /// The real Intruder path: `request_for_tools` -> template text -> `start` ->
@@ -123,7 +134,7 @@ fn repeater_send_once_sends_the_lossy_body_with_a_stale_content_length() {
 #[test]
 fn intruder_attack_sends_the_lossy_template_body() {
     let shared = net::Shared::new();
-    let (port, rx) = capture();
+    let (port, rx) = capture(12);
     let text = crate::ui::request_for_tools(&raw_request());
     let template = text.replacen("POST /ar09", "POST /ar09§p§", 1);
     let state = intruder_run::start(

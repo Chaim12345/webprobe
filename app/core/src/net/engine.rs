@@ -487,7 +487,7 @@ fn serve_plain(shared: Arc<Shared>, mut stream: TcpStream, mut pending: Vec<u8>,
             return;
         }
 
-        let (req, req_state) = intercept_request(&shared, req, port);
+        let (req, req_state) = intercept_request(&shared, req, port, &|| !client_gone(&stream));
         let Some(req) = req else { return };
         let is_ws = util::get_header(&parts.headers, "Upgrade")
             .map(|v| v.eq_ignore_ascii_case("websocket"))
@@ -731,7 +731,7 @@ fn serve_mitm_conn<S: ProxyIo>(
         };
         first_request = false;
         drain_tls_plaintext(&mut tls, &mut pending);
-        let (req, req_state) = intercept_request(&shared, req, 443);
+        let (req, req_state) = intercept_request(&shared, req, 443, &|| !client_gone(&tls));
         let Some(req) = req else { return };
         let ws_parts = util::parse_http(&req);
         let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
@@ -773,7 +773,9 @@ pub fn serve_h2_client<S: ProxyIo>(
     let handler: crate::h2_server::Handler = Arc::new(
         move |req: Vec<u8>, mut out: crate::h2_server::ResponseWriter| {
             LISTENER_PORT.with(|p| p.set(listener));
-            let (req, state) = intercept_request(&pipeline_shared, req, 443);
+            // A reset or closed stream flips the writer's closed flag.
+            let (req, state) =
+                intercept_request(&pipeline_shared, req, 443, &|| !out.peer_closed());
             let Some(req) = req else { return };
             // h2 frames each stream independently; the close flag is h1-only.
             let _ = upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
@@ -1151,7 +1153,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 return true;
             }
             let Some(resp) =
-                intercept_response(shared, resp, &host, port, use_tls, &url, req_state)
+                intercept_response(shared, resp, &host, port, use_tls, &url, req_state, &|| {
+                    !client_gone(&*stream)
+                })
             else {
                 return true;
             };

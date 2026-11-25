@@ -2193,7 +2193,12 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
     if (h && q) { return "location.hash+location.search"; }
     return h ? "location.hash" : "location.search";
   }
+  // > 0 while a wrapped jQuery parse static runs: the native sink it
+  // delegates to (jQuery 3's parseJSON is JSON.parse itself) must not add a
+  // second, Firm hit for the same jQuery-dependent call.
+  var jqNested = 0;
   function record(sink, value) {
+    if (jqNested > 0 && sink.indexOf("jQuery.") !== 0) { return; }
     try {
       var s = String(value);
       var src = provenance(s);
@@ -2422,10 +2427,44 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       return origSetAttr.apply(this, arguments);
     };
   }
-  // jQuery sinks: jQuery loads after this script, so poll for it once.
+  // jQuery sinks: jQuery loads after this script, so poll for it.
   // jQuery-dependent results are Tentative in burp.Zwf8.Zd; the jQuery.*
   // sink names carry that signal.
-  var jqDone = false;
+  // Every wrapper is tagged, so wrapping is idempotent per function: a
+  // second jQuery copy assigned later gets its own wrappers, and a rerun
+  // over an already wrapped copy changes nothing.
+  function jqTag(f) { try { f.__wpJq = true; } catch (e) {} return f; }
+  function jqWrapped(f) { return typeof f !== "function" || f.__wpJq === true; }
+  // jQuery.parseJSON (JSON-injection family) and jQuery.parseXML (XPath
+  // family) are statics on the constructor, not on jQuery.fn, so they are
+  // wrapped independently of it. A static that is not there yet gets an
+  // accessor that wraps it at assignment: a page that publishes the
+  // constructor first and calls the parser in the same task is still seen.
+  function jqWrapStatic(jq, name) {
+    function wrap(orig) {
+      if (jqWrapped(orig)) { return orig; }
+      return jqTag(function (v) {
+        record("jQuery." + name, v);
+        jqNested++;
+        try { return orig.apply(jq, arguments); } finally { jqNested--; }
+      });
+    }
+    try {
+      var desc = Object.getOwnPropertyDescriptor(jq, name);
+      if (desc && (desc.get || desc.set)) { return; }
+      if (desc) {
+        if (!jqWrapped(desc.value)) { jq[name] = wrap(desc.value); }
+        return;
+      }
+      var cur;
+      Object.defineProperty(jq, name, {
+        configurable: true,
+        enumerable: true,
+        get: function () { return cur; },
+        set: function (v) { cur = wrap(v); }
+      });
+    } catch (e) {}
+  }
   // Wrap the moment jQuery arrives, not on the next poll tick: a setter on
   // window.jQuery catches the assignment. The fast poll stays: jQuery.fn is
   // often attached a tick after the assignment, and some pages define the
@@ -2440,46 +2479,37 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
     });
   } catch (e) {}
   function wrapJQuery() {
-    if (jqDone || !window.jQuery || !window.jQuery.fn) { return; }
-    jqDone = true;
     var jq = window.jQuery;
+    if (typeof jq !== "function") { return; }
+    jqWrapStatic(jq, "parseJSON");
+    jqWrapStatic(jq, "parseXML");
+    if (!jq.fn) { return; }
     ["html", "append", "prepend", "before", "after", "wrap", "replaceWith"].forEach(function (m) {
-      if (typeof jq.fn[m] === "function") {
+      if (!jqWrapped(jq.fn[m])) {
         var orig = jq.fn[m];
-        jq.fn[m] = function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); };
+        jq.fn[m] = jqTag(function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); });
       }
     });
-    if (typeof jq.parseHTML === "function") {
+    if (!jqWrapped(jq.parseHTML)) {
       var origPh = jq.parseHTML;
-      jq.parseHTML = function (v) { record("jQuery.parseHTML", v); return origPh.apply(jq, arguments); };
+      jq.parseHTML = jqTag(function (v) { record("jQuery.parseHTML", v); return origPh.apply(jq, arguments); });
     }
-    if (typeof jq.globalEval === "function") {
+    if (!jqWrapped(jq.globalEval)) {
       var origGe = jq.globalEval;
-      jq.globalEval = function (v) { record("jQuery.globalEval", v); return origGe.apply(jq, arguments); };
-    }
-    // jQuery.parseJSON is a static on jQuery itself (JSON-injection
-    // family); jQuery.parseXML likewise (XPath family). Both are wrapped
-    // here because jQuery arrives after this script and they live on the
-    // constructor, not on jQuery.fn.
-    if (typeof jq.parseJSON === "function") {
-      var origPj = jq.parseJSON;
-      jq.parseJSON = function (v) { record("jQuery.parseJSON", v); return origPj.apply(jq, arguments); };
-    }
-    if (typeof jq.parseXML === "function") {
-      var origPx = jq.parseXML;
-      jq.parseXML = function (v) { record("jQuery.parseXML", v); return origPx.apply(jq, arguments); };
+      jq.globalEval = jqTag(function (v) { record("jQuery.globalEval", v); return origGe.apply(jq, arguments); });
     }
     ["attr", "prop"].forEach(function (m) {
-      if (typeof jq.fn[m] === "function") {
+      if (!jqWrapped(jq.fn[m])) {
         var orig = jq.fn[m];
-        jq.fn[m] = function (n, v) { record("jQuery." + m + "." + String(n).toLowerCase(), v); return orig.apply(this, arguments); };
+        jq.fn[m] = jqTag(function (n, v) { record("jQuery." + m + "." + String(n).toLowerCase(), v); return orig.apply(this, arguments); });
       }
     });
   }
-  var jqTimer = setInterval(function () {
-    wrapJQuery();
-    if (jqDone) { clearInterval(jqTimer); }
-  }, 25);
+  // The poll never stops: members attached after the constructor (or a
+  // later jQuery copy on a page that defines the property itself) are
+  // wrapped on the next tick. A tick over a fully wrapped copy is a few
+  // property reads.
+  setInterval(wrapJQuery, 25);
   // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
   // wrapped: openDatabase is gone from current Chromium.
   // Constructors need Reflect.construct (`new` semantics).

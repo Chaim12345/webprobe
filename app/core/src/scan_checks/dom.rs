@@ -66,8 +66,7 @@ pub(crate) const DOM_STORAGE_MANIPULATION_SINKS: &[&str] = &[
     "sessionStorage.setItem.value",
 ];
 pub(crate) const DOM_JSON_INJECTION_SINKS: &[&str] = &["JSON.parse", "jQuery.parseJSON"];
-pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] =
-    &["document.evaluate", "jQuery.parseXML"];
+pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] = &["document.evaluate", "jQuery.parseXML"];
 pub(crate) const DOM_DOCUMENT_DOMAIN_SINKS: &[&str] = &["document.domain"];
 pub(crate) const DOM_COOKIE_MANIPULATION_SINKS: &[&str] = &["document.cookie"];
 pub(crate) const DOM_WEB_MESSAGE_SINKS: &[&str] = &["postMessage"];

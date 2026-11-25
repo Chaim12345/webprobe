@@ -6,11 +6,11 @@
 
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use webprobe_core::net::{handle_conn, intercept_release_all, Shared};
+use webprobe_core::net::{Shared, handle_conn, intercept_release_all};
 
 const DEADLINE: Duration = Duration::from_secs(3);
 
@@ -103,7 +103,6 @@ fn control_normal_request_reaches_the_origin_and_returns() {
 }
 
 #[test]
-#[ignore = "F9 defect: held HTTP request has no client-liveness wait; see notes/f9-intercept-disconnect.md"]
 fn held_request_is_released_when_the_client_disconnects() {
     let (origin_port, hits) = origin();
     let shared = shared_intercepting();

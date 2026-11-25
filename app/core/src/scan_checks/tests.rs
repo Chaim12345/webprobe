@@ -1736,6 +1736,26 @@ jQuery.parseXML = function (v) { window.__px = v; return null; };
             format!(
                 r#"<html><body><script>{jq}setTimeout(function () {{ jQuery.parseXML(location.hash.slice(1)); }}, 50);</script></body></html>"#
             )
+        } else if path.starts_with("/jq3-json-now") {
+            // jQuery 3 shape: the complete constructor is published in one
+            // assignment, parseJSON is the (already wrapped) JSON.parse
+            // itself, and the call happens in the same task.
+            r#"<html><body><script>var j = function () {}; j.fn = j.prototype = {}; j.parseJSON = JSON.parse;
+window.jQuery = j; try { jQuery.parseJSON(location.hash.slice(1)); } catch (e) {}</script></body></html>"#.to_string()
+        } else if path.starts_with("/jq-xml-late") {
+            // Constructor published without fn, the static attached
+            // afterwards and called before any poll tick.
+            r#"<html><body><script>window.jQuery = function () {};
+jQuery.parseXML = function (v) { window.__px = v; return null; };
+jQuery.parseXML(location.hash.slice(1));</script></body></html>"#
+                .to_string()
+        } else if path.starts_with("/jq-xml-second") {
+            // A second jQuery copy replaces a first, already wrapped one.
+            format!(
+                r#"<html><body><script>{jq}setTimeout(function () {{
+var j = function () {{}}; j.fn = j.prototype = {{}}; j.parseXML = function (v) {{ window.__px2 = v; return null; }};
+window.jQuery = j; jQuery.parseXML(location.hash.slice(1)); }}, 100);</script></body></html>"#
+            )
         } else if path.starts_with("/jq-json-search") {
             format!(
                 r#"<html><body><script>{jq}setTimeout(function () {{ jQuery.parseJSON(location.search.slice(1)); }}, 50);</script></body></html>"#
@@ -1760,9 +1780,10 @@ jQuery.parseXML = function (v) { window.__px = v; return null; };
         format!("GET /jq-json-hash HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Client-side JSON injection (DOM-based)"
-            && s == "low"
-            && c == "Tentative"),
+        got.iter()
+            .any(|(n, s, c)| n == "Client-side JSON injection (DOM-based)"
+                && s == "low"
+                && c == "Tentative"),
         "jQuery.parseJSON hash: {got:?}"
     );
     let got = lab_scan(
@@ -1773,9 +1794,10 @@ jQuery.parseXML = function (v) { window.__px = v; return null; };
         format!("GET /jq-xml-hash HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Client-side XPath injection (DOM-based)"
-            && s == "low"
-            && c == "Tentative"),
+        got.iter()
+            .any(|(n, s, c)| n == "Client-side XPath injection (DOM-based)"
+                && s == "low"
+                && c == "Tentative"),
         "jQuery.parseXML hash: {got:?}"
     );
     // Query provenance: same sink, search token -> still Tentative.
@@ -1787,11 +1809,46 @@ jQuery.parseXML = function (v) { window.__px = v; return null; };
         format!("GET /jq-json-search HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Client-side JSON injection (DOM-based)"
-            && s == "low"
-            && c == "Tentative"),
+        got.iter()
+            .any(|(n, s, c)| n == "Client-side JSON injection (DOM-based)"
+                && s == "low"
+                && c == "Tentative"),
         "jQuery.parseJSON search: {got:?}"
     );
+    // Same-task call on a jQuery 3 shaped copy: seen without waiting for
+    // the poll, and the nested native JSON.parse adds no second (Firm) hit.
+    let got = lab_scan(
+        port,
+        &["active.dom-json-injection"],
+        "GET",
+        "/jq3-json-now",
+        format!("GET /jq3-json-now HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert_eq!(
+        got,
+        [(
+            "Client-side JSON injection (DOM-based)".to_string(),
+            "low".to_string(),
+            "Tentative".to_string()
+        )],
+        "jQuery 3 parseJSON, one Tentative finding"
+    );
+    for path in ["/jq-xml-late", "/jq-xml-second"] {
+        let got = lab_scan(
+            port,
+            &["active.dom-xpath-injection"],
+            "GET",
+            path,
+            format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == "Client-side XPath injection (DOM-based)"
+                    && s == "low"
+                    && c == "Tentative"),
+            "jQuery.parseXML {path}: {got:?}"
+        );
+    }
     // Benign negative: no sink call -> no finding.
     let got = lab_scan(
         port,
@@ -1800,9 +1857,11 @@ jQuery.parseXML = function (v) { window.__px = v; return null; };
         "/jq-benign",
         format!("GET /jq-benign HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
-    assert!(got.is_empty(), "benign jQuery page must not report: {got:?}");
+    assert!(
+        got.is_empty(),
+        "benign jQuery page must not report: {got:?}"
+    );
 }
-
 
 /// The location.search source reaches six selected families beyond the
 /// XSS sinks: the wpdom query canary into storage, cookie,

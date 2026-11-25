@@ -43,8 +43,8 @@ not reported.
 | Ajax request header manipulation (DOM-based) | 00500c00 | Low | Firm | `xhr.setRequestHeader` name and value | - |
 | Cookie manipulation (DOM-based) | 00500b00 | Low | Firm | `document.cookie` setter | - |
 | HTML5 storage manipulation (DOM-based) | 00500f00 | Information | Firm | `localStorage.setItem` name and value, `sessionStorage.setItem` name and value | - |
-| Client-side JSON injection (DOM-based) | 00200370 | Low | Firm | `JSON.parse` | `jQuery.parseJSON` not covered |
-| Client-side XPath injection (DOM-based) | 00200360 | Low | Firm | `document.evaluate` | `jQuery.parseXML` |
+| Client-side JSON injection (DOM-based) | 00200370 | Low | Firm; `jQuery.parseJSON` always Tentative | `JSON.parse`, `jQuery.parseJSON` (a `JSON.parse` call nested in it adds no second finding) | - |
+| Client-side XPath injection (DOM-based) | 00200360 | Low | Firm; `jQuery.parseXML` always Tentative | `document.evaluate`, `jQuery.parseXML` | - |
 | Document domain manipulation (DOM-based) | 00501100 | Medium | Firm | `document.domain` setter | - |
 | HTML5 web message manipulation (DOM-based) | 00500e00 | Information | Firm | `postMessage` (the message argument) | - |
 | Client-side prototype pollution | 00200316 | Information | Firm for hash-only, Tentative for query/mixed | new own properties on `Object.prototype` containing a dedicated query/hash token | existing-property overwrites, stored pollution, transient additions missed between polls |

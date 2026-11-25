@@ -1372,7 +1372,7 @@
       "acceptance": "The 48 DOM-based issue types and client-side prototype pollution: source-to-sink tracking in the embedded Chromium crawl; a location.hash -> innerHTML fixture is reported as 'Cross-site scripting (DOM-based)'.",
       "effort": "L",
       "status": "todo",
-      "evidence": "Landed 2026-11-23/24 via #186/#188/#200/#205: one instrumented Chromium probe per URL per run, 14 wrapped families plus addition-only prototype pollution (`docs/specs/R-13-dom-coverage-matrix.md`). Not complete: stored-token submissions are disabled by default, several sinks (e.g. jQuery.parseJSON, jQuery.parseXML, document.URL/referrer/name, storage reads) are explicitly uncovered, and stored DOM tests are ignored. Keep open for the remaining 48-type boundary."
+      "evidence": "Landed 2026-11-23/24 via #186/#188/#200/#205: one instrumented Chromium probe per URL per run, 14 wrapped families plus addition-only prototype pollution (`docs/specs/R-13-dom-coverage-matrix.md`). Not complete: stored-token submissions are disabled by default, several sinks (e.g. document.URL/referrer/name, storage reads) are explicitly uncovered (jQuery.parseJSON and jQuery.parseXML were added 2026-11-25 with a live lab), and stored DOM tests are ignored. Keep open for the remaining 48-type boundary."
     },
     {
       "id": "R-14",
@@ -1452,7 +1452,7 @@
       "acceptance": "F12: warn-level lints and clippy in scripts/ci.sh, guard-returning lock API everywhere (no std poisonable locks), dead code removed (net::start_attack). F3: scope / match-and-replace / intercept / WebSocket / grep rules compiled once when edited, history filtering outside the history lock. F9 (first half): a held HTTP intercept is released when its client disconnects. F13: tests never read or write the real ~/.config/webprobe/ca.json (WEBPROBE_CA_DIR in tests).",
       "effort": "S",
       "status": "todo",
-      "evidence": "Partly done 2026-11-24 (PR #211): one workspace lint policy, every suppression is #[expect(.., reason)] (23 converted, 9 stale removed), and scripts/arch-gate.py ratchets cycles and structural counts in CI. Still open: the guard-returning lock API, compiled rule sets (F3), intercept liveness (F9) and test CA isolation (F13). Source: qa/ARCH-REVIEW-2026-11-18.md."
+      "evidence": "Partly done 2026-11-24 (PR #211): one workspace lint policy, every suppression is #[expect(.., reason)] (23 converted, 9 stale removed), and scripts/arch-gate.py ratchets cycles and structural counts in CI. F9 (first half) 2026-11-25: intercept_request/intercept_response wait through intercept_wait with a client-liveness source (client_gone for HTTP/1, the stream's closed flag for HTTP/2); app/core/tests/f9_intercept_disconnect.rs covers the cleartext HTTP/1 request hold, limits in notes/f9-intercept-disconnect.md. Still open: the guard-returning lock API, compiled rule sets (F3) and test CA isolation (F13). Source: qa/ARCH-REVIEW-2026-11-18.md."
     },
     {
       "id": "AR-02",
