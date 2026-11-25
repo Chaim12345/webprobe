@@ -1,165 +1,160 @@
-# AR-01/F13 — test CA isolation: finding evidence vs. fix (source-level)
+# AR-01/F13 — test CA isolation: finding, historical logs, proposal
 
 Pin `692f09728039884c59a676ff314879c06dcb1cf5` (`parity/2026-11-17`).
 Branch `goal/f13-test-ca-isolation-20261125`, PR #239.
 
-This note has two strictly separated halves. **Part A is evidence about the
-unpatched pin** and was produced by running tests before any change. **Part B
-describes the proposed fix and is unqualified**: the source was corrected after
-the original runs, and no test, build, check or clippy run has been performed on
-the corrected source. Nothing in Part B is a verified result.
+Three evidence classes, kept apart on purpose:
+
+- **A. Source-supported finding** — read from the code at the pin. Static, no
+  run involved.
+- **B. Historical log observations** — from runs on the unpatched pin. They are
+  log observations, including their own contradictions; they are **not**
+  acceptance evidence for the current head.
+- **C. Proposal** — the change on this branch. Unqualified: no build, test,
+  check or lint has been run on it.
 
 ---
 
-## Part A — Original finding evidence (unpatched `692f0972`)
+## A. Source-supported finding (static, at `692f0972`)
 
-### Environment (exactly as used)
+`MitmAuthority::new()` (`app/support/src/tls.rs`) is:
 
-| item | value |
+```rust
+if cfg!(test) { return Self::load_or_create(None); }
+Self::load_or_create(default_ca_dir())
+```
+
+`cfg!(test)` is a per-crate flag. It is true only for the crate being compiled
+as a test target, so it is **false for `webprobe-support` whenever support is a
+dependency** — that is, in every `webprobe-core` unit-test build, every
+integration binary, and every app-crate test binary.
+
+`Shared::new()` (`app/core/src/net/shared.rs`) calls `MitmAuthority::new()`
+without any gating at this pin, and `default_ca_dir()` resolves
+`$WEBPROBE_CA_DIR` → `$XDG_CONFIG_HOME/webprobe` → `$HOME/.config/webprobe`.
+
+So: a test-only caller of `Shared::new()` outside the core crate's own
+`cfg(test)` build resolves the default user CA. This part needs no run; it
+follows from the two code paths above.
+
+## B. Historical log observations (unpatched tree; not current-head acceptance)
+
+Runs were made in a worktree pinned to `692f0972` with
+`/workspace/toolchain/rust-1.100.0` (cargo 1.100.0, rustc 1.100.0), the env
+shims in `/workspace/project/webprobe/.openhands/evidence/pr163-fbd3b91/env.sh`,
+and a `CARGO_TARGET_DIR` outside the repo. Receipts are under
+`/workspace/f13-ca-test-20261125/`.
+
+### B.1 Suite counts as logged
+
+| command | logged result |
 | --- | --- |
-| worktree (pinned) | `/workspace/wt-f13-692f097` at `692f0972`, branch created from it |
-| second worktree for the negative run | `/workspace/wt-f13-base` at `692f0972` (removed after use) |
-| toolchain | `/workspace/toolchain/rust-1.100.0` — cargo 1.100.0 (3acc79c0c 2026-11-05), rustc 1.100.0 (0ef1bc386 2026-11-09) |
-| env shims | `/workspace/project/webprobe/.openhands/evidence/pr163-fbd3b91/env.sh` (`CARGO_BUILD_RUSTC_WRAPPER=`, linker `gcc`, `RUSTFLAGS=-C incremental=false`) |
-| target dirs | `/workspace/f13-692f097-target`, `/workspace/f13-692f097-target-base` (removed) |
-| fake HOMEs | `/workspace/f13-ca-test-20261125/home`, `home2`, `final-home`, `dbg`, `dbg2` |
-| receipts | `/workspace/f13-ca-test-20261125/` + `MANIFEST.sha256` (45 entries, hashes of logs only) |
+| `-p webprobe-core --lib net::tests` | 77 passed, 0 failed |
+| `-p webprobe-core --test session_contracts` | 25 passed, 0 failed |
+| `-p webprobe-support --lib tls::` | 4 passed, 0 failed |
+| `-p webprobe-core --test pipeline_matrix` | 7 passed, 0 failed |
+| `-p webprobe-core --test intruder_baseline` | 4 passed, 0 failed |
 
-`app/.cargo/config.toml` pins `/usr/local/bin/rustc` and `/usr/local/bin/sccache`,
-which do not exist in this sandbox; every command below ran with the shims above.
+### B.2 Default-path sentinel
 
-### Defect, as observed
+With an isolated `HOME`/`XDG_CONFIG_HOME` and a sentinel `ca.json` at the
+default path, the `net::tests` run and the `session_contracts` run both left a
+real CA document at that path instead of the sentinel. The captured output
+contains CA JSON prefixes (a `key_pkcs8` base64 field plus `not_before`,
+`not_after`, `serial`), and sentinel hashing was performed. This note does not
+reproduce that content and makes no claim that receipts are free of it.
 
-`Shared::new()` (`app/core/src/net/shared.rs`) built its authority with
-`MitmAuthority::new()`. `new()` skips the on-disk CA only under `cfg!(test)`
-(`app/support/src/tls.rs`), which is **false for the support crate when it is a
-dependency**. So `webprobe-core` unit tests and all integration binaries fell
-through to `default_ca_dir()` = `$WEBPROBE_CA_DIR`, else
-`$XDG_CONFIG_HOME/webprobe`, else `$HOME/.config/webprobe`.
+### B.3 Contradictory baseline, preserved as-is
 
-### Sentinel runs (isolated HOME/XDG, sentinel `ca.json` at the default path, no `WEBPROBE_CA_DIR`)
+On the **same** base tree two fixture runs disagree:
 
-| command (all `--locked --offline -p webprobe-core`) | result | sentinel |
+- one run of the first fixture version reported `3 passed; 0 failed`;
+- a later run of the rewritten fixture reported `2 passed; 1 failed`, the
+  failure being "a test run wrote the default user CA sentinel".
+
+The two runs used different fixture sources: the first version set
+`WEBPROBE_CA_DIR`, which the base tree already honours, so it could not
+discriminate. That is a factual difference between the runs; it is not offered
+as proof that it fully explains the delta, and the delta is left unresolved.
+
+### B.4 Wording rules applied to these logs
+
+- Cargo fingerprint suffixes such as `195babd0…` and `43c809e6…` are **build
+  paths**, not a cryptographic binding of source or binary. Nothing in this
+  note treats them as provenance.
+- Differing hashes between runs do **not** by themselves identify which test or
+  code path wrote the sentinel.
+
+## C. Proposal (unqualified; no run on this head)
+
+### 1. Unwind-safe child
+
+`app/core/tests/ca_isolation.rs` owns each child in a `ChildGuard` whose `Drop`
+kills and reaps. `wait_deadline` polls `try_wait` to a 120 s deadline, reaps on
+success, and on timeout kills, reaps and returns `TimedOut`; a `try_wait` error
+propagates and the guard still reaps on unwind. The owned root is declared
+**before** the guard, so reverse drop order reaps the child before `OwnedDir`
+removes any file.
+
+### 2. Strict parent-side and child-side validation
+
+- The parent refuses to launch if any of `WP_F13_CHILD`, `WP_F13_ROOT`,
+  `WP_F13_CA_DIR`, `WP_F13_CASE` is present in its own environment: an ambient
+  marker means the run is not its own.
+- The parent writes a nonce into `<root>/.f13-nonce`; the child requires that
+  file to exist and to equal the marker, so an inherited marker alone can never
+  reach a CA construction.
+- `ROOT`, `HOME`, `XDG_CONFIG_HOME` and the CA directory are required to be
+  absolute. Containment is checked on `canonicalize`d paths, not lexically, so
+  `..` and symlinks cannot escape; the CA directory is validated by its
+  resolved parent (must be the owned root) and must not pre-exist. All of this
+  runs before any `Shared` is constructed.
+
+### 3. `test_support::shared` uses an in-memory CA
+
+`app/core/tests/test_support/mod.rs` is now a single call to
+`Shared::with_ca_dir(None)`. There is no directory to own, so a constructor
+panic cannot leave CA material behind, and there is no ignored cleanup error.
+No `set_var` remains in any file this PR touches.
+
+### 4. Fingerprints
+
+`fingerprint()` returns `len`, `modified`, `digest` and `mode`, and returns
+`io::Result`: a failed `stat` fails the test instead of becoming `None`.
+`override`, `in_memory` and `default` are three separate child runs, each with
+its own owned root and sentinel.
+
+### 5. Case separation and what it does not claim
+
+- `override` — `with_ca_dir(Some(dir))`: the fixture asserts the default
+  sentinel is identical before and after (length, mtime, digest, mode) and that
+  the injected file's mode is owner-only.
+- `in_memory` — `with_ca_dir(None)`: the fixture asserts the same sentinel
+  equality and that no CA directory was created.
+- `default` — `Shared::new()` in an integration binary: recorded as a probe of
+  the residual path (`default_path_written=yes|no`), not asserted either way.
+
+This fixture therefore does **not** prove a no-default-read guarantee for the
+test suite. It proves the two injected paths avoid the default path and shows
+where the residual one still reaches it.
+
+### Coverage inventory
+
+| entrypoint | CA after the change | covered |
 | --- | --- | --- |
-| `--lib net::tests` | 77 passed, 0 failed, exit 0 | **mutated** |
-| `--test session_contracts` | 25 passed, 0 failed, exit 0 | **mutated** |
-| `--lib net::tests::connect_intercepts_https_with_a_ca_signed_host_certificate` | 1 passed | **mutated** |
-| `--lib net::tests::client_certificate_presented_to_mtls_server` | 1 passed | **mutated** |
-| `-p webprobe-support --lib tls::` | 4 passed, 0 failed | unchanged (explicit temp dirs) |
-
-Control: with `WEBPROBE_CA_DIR` exported, the single-test run left the sentinel
-unchanged and wrote `ca.json` (mode 0600) into the override directory. The
-override was already honoured; nothing forced a test to use it.
-
-Receipts: `net-tests-full.log` (`7ab94ba5…`), `int-session.log` (`92981035…`),
-`per-test-writer.txt` (`291c204f…`), `parallel-isolation.txt` (`31a47151…`).
-
-### Negative fixture against the unpatched pin
-
-The fixture (then a sibling-binary check) was copied into the `692f0972`
-worktree and run:
-
-```
-test child_loads_ca ... ok
-test integration_test_binary_leaves_the_default_user_ca_untouched ... FAILED
-test explicit_ca_dir_is_honored_and_default_sentinel_untouched ... ok
-test result: FAILED. 2 passed; 1 failed; ...
-assertion `left == right` failed: a test run wrote the default user CA sentinel
-```
-
-Receipts: `base-ca-isolation.log` (`3974cd58…`), `base-fixture-summary.txt`
-(`485b2963…`).
-
-### Caveats on Part A
-
-- The sentinel was synthetic; no real user CA was read into evidence and no CA
-  content appears in this note or in any receipt.
-- Three concurrent runs with distinct `WEBPROBE_CA_DIR` produced three distinct
-  `ca.json` files (`parallel-isolation.txt`), which is consistent with
-  contention on the shared default path but does not prove a race.
-- These runs are **not** the PR200 workspace/Chromium/UI gate and do not stand in
-  for it.
-
----
-
-## Part B — Proposed fix (unqualified; no run performed on this source)
-
-### G) No global environment mutation
-
-Removed: the per-binary `shared()` helpers that called `unsafe { set_var("WEBPROBE_CA_DIR", …) }`
-inside a parallel harness. `set_var` mutates the process-wide `environ`, which
-every other test thread shares, and the helper also overwrote a caller's own
-`WEBPROBE_CA_DIR`.
-
-Added, as explicit injection:
-
-- `app/support/src/tls.rs` — `MitmAuthority::in_memory()` (delegates to
-  `load_or_create(None)`); `new()` unchanged, so production still resolves
-  `default_ca_dir()`.
-- `app/core/src/net/shared.rs` — `Shared::new()` now delegates to a private
-  `with_authority(mitm)`; new `Shared::with_ca_dir(Option<PathBuf>)` loads or
-  creates `dir/ca.json`, or keeps the CA in memory for `None`.
-- `app/core/tests/test_support/mod.rs` (new) — `shared()` builds a `Shared` on a
-  freshly created, exclusively owned temp CA directory (`create_dir`, so an
-  existing path is an error rather than a reuse), then removes only that
-  directory after the CA is in memory. No environment access.
-- `app/core/tests/{session_contracts,pipeline_matrix,intruder_baseline}.rs` —
-  `mod test_support; use test_support::shared;` replaces the local helper
-  (17 / 7 / 4 call sites). `net/intercept.rs`, `net/engine.rs` and
-  `h2_server.rs` were not touched; nothing was adopted from the ccr branch.
-
-### H) Deterministic, bounded fixture
-
-`app/core/tests/ca_isolation.rs` rewritten:
-
-- binds to `std::env::current_exe()` — this exact current-build binary — and
-  re-executes it with `--exact child_injects_explicit_ca_dir`. No profile-tree
-  scan, no stale-binary selection.
-- fails closed: spawn failure, non-zero exit, missing `test result: ok. 1 passed`,
-  missing `cases=` count, or a count other than 2 all panic. There is no skip
-  path.
-- child safety: `try_wait` poll loop with a 120 s deadline, then `kill()` +
-  `wait()`; stdout/stderr go to files inside the owned root (no `Command::output`,
-  no pipes, no deadlock); stdin is null.
-- temp directories: `OwnedDir` with a non-PID-reuse name
-  (`wp-f13-case-<pid>-<nanos>`), created with `create_dir` and removed on drop —
-  a pre-existing path is an error, never deleted.
-- inherited markers: the child runs its body only when `WP_F13_CHILD` is set, and
-  then requires the `f13-` prefix, a matching owned root name, a CA directory
-  under that root and a CA directory that does not already exist — all validated
-  **before** any `Shared` is constructed.
-- the parent asserts the sentinel fingerprint (length + mtime + non-crypto
-  digest, no content) is unchanged and that the injected CA file is mode 0600.
-
-Runtime proof is deliberately absent: the corrected source has not been compiled
-or executed.
-
-### Coverage inventory (what the fix does and does not cover)
-
-| entrypoint | CA used after the fix | covered? |
-| --- | --- | --- |
-| `app/core/src/**` unit tests (`--lib`, incl. `net/tests.rs` 61 sites, `scan/tests.rs`, `scan_lifecycle.rs`, `request_reader_tests.rs`, …) | `cfg(test)` in-memory branch of `Shared::new()` | yes |
-| `app/core/tests/session_contracts.rs`, `pipeline_matrix.rs`, `intruder_baseline.rs` | injected temp CA dir | yes |
-| `app/core/tests/ca_isolation.rs` | injected dir + in-memory (child) | yes |
-| `app/core/tests` any future file using `Shared::new()` | **default user CA** (cfg(test) false) | no — must use `test_support::shared()` |
-| `app/src/**` tests (`tools.rs` 9, `ui/tests.rs` 8, `repeater_ops.rs` 4 sites) | **default user CA** — app crate tests compile core as a dependency, so `cfg(test)` is false | **no — outside this PR's files** |
-| `app/core/examples/{extension_drop_probe,loaded_proxy,proxy_bench}.rs` | **default user CA** (not tests; dev tools) | no — out of scope |
+| `app/core/src/**` unit tests (`--lib`, incl. 61 `Shared::new()` sites in `net/tests.rs`) | `cfg(test)` in-memory branch | yes |
+| `app/core/tests/{session_contracts,pipeline_matrix,intruder_baseline}.rs` | `test_support::shared()` → in-memory | yes |
+| `app/core/tests/ca_isolation.rs` | injected dir + in-memory, default probed | yes |
+| any future `app/core/tests` file calling `Shared::new()` | default user CA | no |
+| `app/src/**` tests (`tools.rs` 9, `ui/tests.rs` 8, `repeater_ops.rs` 4) | default user CA — app tests compile core as a dependency | **no, outside this PR** |
+| `app/core/examples/*` | default user CA (dev tools, not tests) | no |
 | `app/support/tests`, `app/report/tests` | explicit dirs / no `Shared` | not applicable |
 
-`cfg(test)` in the core library is therefore **not** universal coverage. Closing
-the app-crate row needs app-side injection (`Shared::with_ca_dir`) or a
-test-only constructor, which is outside the files this PR owns and is left as a
-proposal.
+## D. Limits
 
-### I) Receipts
-
-Part A receipts remain untouched under `/workspace/f13-ca-test-20261125/`
-(full files, not truncated); `MANIFEST.sha256` lists them. No CA content is
-stored, hashed or printed anywhere.
-
-## Not verified
-
-- Every claim in Part B: no `cargo build`, `test`, `check` or `clippy` was run
-  after the correction.
-- Windows/macOS path behaviour; GUI CA retire/import flows in
-  `app/src/proxy_settings.rs` (read only, needs GUI); full workspace test run.
+- No `cargo build`, `test`, `check` or `clippy` was run on this head; every
+  statement in section C is a code claim, not a result.
+- Windows/macOS path behaviour is unverified. GUI CA retire/import flows in
+  `app/src/proxy_settings.rs` were read, not executed.
+- The historical numbers in section B are log observations of the unpatched
+  tree and must not be read as current-head acceptance.
