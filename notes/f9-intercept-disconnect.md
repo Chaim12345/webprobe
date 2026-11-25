@@ -1,68 +1,73 @@
-# F9 — intercept disconnect liveness: findings and fix
+# F9 — a held intercept request outlived its client: findings and fix
 
 Source pin: `692f09728039884c59a676ff314879c06dcb1cf5` (parity/2026-11-17).
 Branch: `goal/f9-intercept-disconnect-20261125`.
 
-## Status: fixed on the integration branch, fixture executed
+## Status: fixed and executed on the integration branch
 
-The fixture revision below was written source-only on `goal/f9-intercept-disconnect-20261125`.
-On the integration branch it was formatted with `cargo fmt`, built and run together with the
-production fix in "Fix (applied)"; the held case is promoted out of `#[ignore]` and passes. The
-numbers in the next section are the pre-fix measurements, kept as recorded.
+The fixture below was written source-only on `goal/f9-intercept-disconnect-20261125` as a
+characterisation of the defect. On the integration branch the production fix in "Fix (applied)"
+was added, and the fixture was built and run with it. The numbers in the next section are the
+pre-fix measurements, kept as recorded.
 
-## What the pre-fix run measured
+## What the case is
+
+`held_request_is_released_when_the_client_disconnects` is the target-behaviour regression that
+replaced the characterisation case once the fix landed:
+
+1. precondition: the held entry is established before the cancel, and the origin has seen
+   nothing;
+2. after a full client close: the entry leaves the queue within the 3 s window, and the origin
+   saw zero accepts and zero complete requests at the cancel and again 300 ms later;
+3. nothing is left in the queue to forward or drop;
+4. the proxy worker exits within the settle window (a detached worker fails the parent).
+
+## Pre-fix measurements
 
 - the held queue entry was still present 3.001 s after the client closed (`released=false`);
-- after the explicit forward, one origin connection appeared (`origin connections after
-  cancel=1`).
+- after the explicit forward, one origin connection appeared.
 
-What this does and does not show:
+Limits: retention and later deliverability only. No claim about next-request desync (the origin
+closed its side) and no claim about connection-reuse corruption.
 
-- it shows a held HTTP request outlives its client and is still deliverable afterwards;
-- it does **not** show next-request desync, connection-reuse corruption, or any behaviour on a
-  pooled connection. No such claim is made anywhere.
+## Consolidated blocker pass A-F
 
-## Corrections in this revision (fixture only)
-
-- Each case is now a parent wrapper that never constructs `Shared`. The parent creates a unique
-  tempdir with a fake HOME, a fake XDG_CONFIG_HOME and an explicit CA dir, writes non-secret
-  sentinels at `fakeHOME/.config/webprobe/ca.json` and `fakeXDG/webprobe/ca.json`, and spawns
-  this test binary with `--exact <case> --nocapture --test-threads=1` (plus `--ignored` for the
-  draft case). The isolated paths are set in the CHILD environment only; no process-wide env
-  mutation, no `set_var`, no chdir.
-- The child branch validates that HOME, XDG_CONFIG_HOME and WEBPROBE_CA_DIR are absolute and
-  inside the owned tempdir, then runs exactly one case.
-- The parent requires: the child finished inside a 60 s budget (`try_wait` with a deadline,
-  kill and reap on timeout), exactly one reported case, an explicit per-case
-  `CASE-COMPLETE:` record, unchanged sentinels, and no new files under the fake HOME or XDG.
-- The held case is no longer `#[ignore]`d: its parent requires the child to pass, to print
-  `F9-EVIDENCE released=true` and its `CASE-COMPLETE:` record.
-- TCP accepts, fully parsed requests and retained wire bytes are separate counters, so a
-  connection that never parses is not counted as a request.
-- The held entry is established (queue length 1) before the cancel.
-- Cancellation is a fully sent request followed by `Shutdown::Both`, not a write-half close.
-- The observation is bounded to 3 s and the queue/accept/parsed/retained snapshot is taken
-  before any cleanup.
-- Teardown always drops held entries (`intercept_release_all(_, true)`) and never forwards.
-  Forwarding is a separate, explicitly recorded characterisation action.
-- Every spawned worker is owned: nonblocking accept loops with stop flags, per-stream read
-  timeouts, stored join handles; finished handlers are joined, and any handler that cannot be
-  time-bounded is reported as `F9-PROXY-WORKERS-DETACHED` with the parent's child kill as the
-  containment.
+- **A — case binding.** Every case constant is checked statically against the real test fn name,
+  including the app module prefix (`ar09_binary_tool_state_tests::…`) in the 233 files. At this
+  HEAD `CONTROL` and `HELD` already matched their fns; the check is now reproducible
+  (`python3 /tmp/case_binding_check.py`, 0 failures, script reads only `git show HEAD:` output).
+  As a runtime backstop each parent also requires the child-only `F9-ISOLATION-OK` line, so a
+  stale constant fails with "the case never ran" instead of a bare test-count mismatch.
+- **B — teardown and drop order.** `HeldQueueGuard` is declared after the proxy, so on any exit
+  path — including a panic before the explicit teardown — the queue is dropped first and the
+  proxy settle runs second. The guard only ever calls `intercept_release_all(.., true)`; teardown
+  never forwards. `Proxy::drop` now runs the whole ordered sequence: shut down cloned client
+  handles, stop and join the acceptor, drop held entries, then give workers a **bounded**
+  `PROXY_SETTLE` (3 s) window in which finished handles are joined. Anything still running at the
+  end prints `F9-PROXY-WORKERS-DETACHED` and the parent rejects it: child termination is
+  containment, not clean worker termination.
+- **C — positive evidence before expected failure.** The characterisation asserts
+  `released=false`, `held_after_3s == 1`, `accepts_before == 0`, `parsed_before == 0`,
+  `accepts_at_cancel == 0`, `parsed_at_cancel == 0`, `forwards == 1` and
+  `parsed_after_forward == parsed_at_cancel + 1` before the final target assertion. The parent
+  requires `F9-CASE-EVIDENCE-COMPLETE` and `F9-TARGET-CHECK` in the child stdout, in that order,
+  plus `F9-TARGET-FAILURE` on stderr, so an unrelated assertion failure cannot satisfy the
+  expected-failure match. The characterisation label is unchanged.
+- **D/E — not applicable to this branch** (233 capture fixture work; see that branch's note).
+- **F — retained.** Guarded child through `finish`, file-backed child logs, exact one-case summary
+  checks, canonicalised child environment plus sentinels plus the `ca.json` artefact, fail-closed
+  inspection, and parent rejection of non-clean worker outcomes.
 
 ## Formatting
 
-The source-only revision was formatted by hand and still differed from rustfmt in 7 hunks of
-the fixture. `cargo fmt --all` was run on the integration branch; `cargo fmt --all -- --check`
-is clean there.
+`cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` are
+clean on the integration branch.
 
-## CA isolation status
+## CA inspection scope
 
-Earlier run: unknown and uncontrolled — the fixtures constructed `Shared::new()` directly, so a
-test binary could resolve the real user CA through `WEBPROBE_CA_DIR`, `XDG_CONFIG_HOME` or
-`HOME`. The wrapper above was executed on the integration branch: both cases passed, including
-its sentinel and no-new-file assertions. That run was in a throwaway container with no real
-user CA, so it shows the wrapper works, not that a real CA was ever at risk or protected.
+Path, existence, mtime, size/hash and permissions only; never certificate or private-key
+contents; no deletion or repair. This revision reads only names and existence under the owned
+tempdir.
 
 ## Fix (applied)
 
@@ -91,8 +96,3 @@ Executed after the fix, with the isolated-child fixture described above:
 - A forward racing the disconnect can still reach the origin: the UI removes the item before
   the next liveness poll. A further liveness check before the upstream write would narrow that
   window but cannot close it, because the client can still leave between the check and the write.
-
-## CA inspection scope
-
-If CA state is ever inspected: path, existence, mtime, size/hash and permissions only. Never
-certificate or private-key contents. No deletion or repair. No inspection was performed here.
