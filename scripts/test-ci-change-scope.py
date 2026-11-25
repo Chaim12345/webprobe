@@ -12,10 +12,10 @@ spec.loader.exec_module(scope)
 
 class ScopeTests(unittest.TestCase):
     def test_docs_and_config_only(self):
-        self.assertFalse(scope.requires_ci(["README.md", "docs/design.md", "app/docs/guide.rst", ".coderabbit.yaml"]))
+        self.assertFalse(scope.requires_ci(["README.md", "docs/design.md", "app/docs/guide.rst", ".coderabbit.yaml", ".deepsource.toml", "notes/f9.md"]))
 
     def test_every_unknown_or_executable_path_requires_ci(self):
-        for path in ["app/src/main.rs", "app/Cargo.lock", "app/Cargo.toml", "app/build.rs", "scripts/test.py", ".github/workflows/ci.yml", "docs/example.py", "docs/fixture.json", "qa/craft/test.mjs", "scripts/issue-coverage-baseline.json", "requirements.txt", "app/tests/fixture.md"]:
+        for path in ["app/src/main.rs", "app/Cargo.lock", "app/Cargo.toml", "app/build.rs", "scripts/test.py", ".github/workflows/ci.yml", "docs/example.py", "docs/fixture.json", "qa/craft/test.mjs", "scripts/issue-coverage-baseline.json", "requirements.txt", "app/tests/fixture.md", "notes/fixture.json", "qa/report.md", "app/.deepsource.toml"]:
             with self.subTest(path=path):
                 self.assertTrue(scope.requires_ci(["README.md", path]))
 

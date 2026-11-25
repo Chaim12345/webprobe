@@ -7,20 +7,24 @@ import subprocess
 
 
 def docs_only_path(path):
+    """True for a path that no build, test or gate reads."""
     p = PurePosixPath(path)
-    if path in {".coderabbit.yaml", ".coderabbit.yml"}:
+    # Review-service configuration: read by the service, never by a build.
+    if path in {".coderabbit.yaml", ".coderabbit.yml", ".deepsource.toml"}:
         return True
     if p.suffix.lower() not in {".md", ".rst"}:
         return False
-    return len(p.parts) == 1 or path.startswith(("docs/", "app/docs/"))
+    return len(p.parts) == 1 or path.startswith(("docs/", "app/docs/", "notes/"))
 
 
 def requires_ci(paths):
+    """True unless every changed path is proven docs-only."""
     # An empty/incomplete change set must never suppress acceptance.
     return not paths or not all(docs_only_path(p) for p in paths)
 
 
 def changed_paths(event, git=subprocess.check_output):
+    """Paths changed by the push or pull request described by `event`."""
     if "pull_request" in event:
         base = event["pull_request"]["base"]["sha"]
         head = event["pull_request"]["head"]["sha"]
@@ -36,6 +40,7 @@ def changed_paths(event, git=subprocess.check_output):
 
 
 def main():
+    """Write run_ci to the job outputs; any doubt runs full CI."""
     try:
         with open(os.environ["GITHUB_EVENT_PATH"]) as f:
             paths = changed_paths(json.load(f))

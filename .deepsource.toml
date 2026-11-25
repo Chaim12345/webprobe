@@ -1,8 +1,26 @@
 version = 1
 
-# These paths mark tests; they are not excluded from analysis.
+# Not this project's code: vendored crates, reverse-engineering notes and
+# decompiler output, generated graphs, and QA evidence captured from runs.
+# Findings there cannot be acted on and count against every pull request.
+exclude_patterns = [
+  "vendor/**",
+  "re/**",
+  "graphify-out/**",
+  "qa/**",
+  "docs/**",
+  "app/target/**",
+  "app/shots/**",
+  "app/extensions/examples/**"
+]
+
+# Test code is still analysed, with the rules that only fit production code
+# relaxed. Rust unit tests here live beside the code as tests.rs / *_tests.rs,
+# not only under tests/.
 test_patterns = [
   "app/**/tests/**",
+  "app/**/tests.rs",
+  "app/**/*_tests.rs",
   "app/sidecar/stage-tests/**",
   "scripts/test-*.py"
 ]
@@ -12,8 +30,16 @@ name = "rust"
 enabled = true
 
   [analyzers.meta]
-  # Matches app/Cargo.toml. DeepSource toolchain compatibility needs a live run.
-  msrv = "1.95"
+  # app/Cargo.toml declares rust-version 1.95, but the analyzer supports
+  # toolchains up to 1.93 (DeepSource core analyzers reference). 1.93 is the
+  # closest supported value: it stops the analyzer suggesting newer syntax.
+  msrv = "1.93"
+  # The project has no rustdoc coverage target; without this every
+  # undocumented item counts against the documentation-coverage metric.
+  skip_doc_coverage = ["const", "struct", "union", "enum", "function", "module", "static", "trait", "type-alias"]
+  track_test_doc_coverage = false
+  # Protocol parsers and the egui frame functions are large by nature.
+  cyclomatic_complexity_threshold = "very-high"
 
 [[analyzers]]
 name = "python"
@@ -21,11 +47,18 @@ enabled = true
 
   [analyzers.meta]
   runtime_version = "3.x.x"
-
-[[analyzers]]
-name = "javascript"
-enabled = true
+  # The CI scripts are written to about 120 columns.
+  max_line_length = 120
+  skip_doc_coverage = ["module", "magic", "init", "class", "nonpublic"]
+  cyclomatic_complexity_threshold = "high"
 
 [[analyzers]]
 name = "shell"
 enabled = true
+
+  [analyzers.meta]
+  dialect = "bash"
+
+# No JavaScript analyzer: the repository tracks no .js/.ts files. The
+# JavaScript the scanner injects lives inside Rust string literals, which the
+# analyzer does not read.

@@ -5,6 +5,16 @@ on:
     branches: [master, "parity/**", "roadmap/**"]
   pull_request:
 
+permissions:
+  contents: read
+
+# A newer push to a pull request supersedes the run in flight. Pushes to a
+# long-lived branch each get a group of their own (the run id), so none is
+# cancelled or dropped while queued: every merged commit keeps its result.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # app/.cargo/config.toml pins a machine-local rustc, sccache and ld.lld-22.
 # These overrides make the repo build on a fresh runner. (An empty
 # RUSTFLAGS replaces the linker flags from that file.)
@@ -46,6 +56,7 @@ jobs:
     # Expand both toolchains even for docs-only changes, preserving check names.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       # Each toolchain reports on its own: a failure on one does not cancel
       # the other.
@@ -74,16 +85,12 @@ jobs:
             app/target
           key: cargo-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('app/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-${{ matrix.toolchain }}-
-      # webprobe-core has no UI dependency, so no system libraries are needed.
-      - run: cargo check --workspace --all-targets --all-features --locked
-        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
+      # Clippy type-checks everything it lints, so no separate cargo check
+      # runs first. Zero-warning policy (issue #33): clippy is blocking.
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings ${{ matrix.clippy_extra }}
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
-      - run: cargo check -p webprobe-core --locked
-        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
-      - run: cargo test -p webprobe-core --locked --no-run
-        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
-      # Zero-warning policy (issue #33): clippy is blocking.
+      # The engine on its own, without the features the desktop crate turns
+      # on: it must build and lint clean with no UI dependency.
       - run: cargo clippy -p webprobe-core --locked --all-targets -- -D warnings ${{ matrix.clippy_extra }}
         if: ${{ needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false' }}
       # These tests must run in a real JVM, not pass by skipping prerequisites.
@@ -105,6 +112,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: rustup update stable && rustup default stable
