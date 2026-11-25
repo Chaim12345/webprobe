@@ -8,11 +8,12 @@ import subprocess
 
 def docs_only_path(path):
     p = PurePosixPath(path)
-    if path in {".coderabbit.yaml", ".coderabbit.yml"}:
+    # Review-service configuration: read by the service, never by a build.
+    if path in {".coderabbit.yaml", ".coderabbit.yml", ".deepsource.toml"}:
         return True
     if p.suffix.lower() not in {".md", ".rst"}:
         return False
-    return len(p.parts) == 1 or path.startswith(("docs/", "app/docs/"))
+    return len(p.parts) == 1 or path.startswith(("docs/", "app/docs/", "notes/"))
 
 
 def requires_ci(paths):
