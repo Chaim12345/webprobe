@@ -118,8 +118,7 @@ impl Isolation {
     /// Bounded wait. The child is owned by a kill-on-drop guard for the whole
     /// call, so a panic here cannot orphan it.
     fn finish(&mut self) -> ChildRun {
-        let child = self.child.take().expect("child was spawned");
-        let mut guard = ChildGuard { child: Some(child) };
+        let mut guard = ChildGuard::new(self.child.take().expect("child was spawned"));
         let exited = guard.wait_bounded(CASE_BUDGET);
         let status = guard.status();
         if !exited {
@@ -205,6 +204,10 @@ struct ChildGuard {
 }
 
 impl ChildGuard {
+    fn new(child: Child) -> ChildGuard {
+        ChildGuard { child: Some(child) }
+    }
+
     fn child_mut(&mut self) -> &mut Child {
         self.child.as_mut().expect("live child")
     }
