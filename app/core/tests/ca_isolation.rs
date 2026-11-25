@@ -27,6 +27,7 @@ impl OwnedDir {
     fn create(tag: &str, nonce: &str) -> Self {
         let path = std::env::temp_dir().join(format!("{tag}-{nonce}"));
         fs::create_dir(&path).expect("exclusive temp directory");
+        restrict_to_owner(&path);
         Self(path)
     }
 
@@ -49,7 +50,7 @@ struct ChildGuard {
 }
 
 impl ChildGuard {
-    fn spawn(command: Command) -> Self {
+    fn spawn(mut command: Command) -> Self {
         Self {
             child: Some(command.spawn().expect("spawn child fixture")),
         }
@@ -118,6 +119,58 @@ fn f13_keys() -> Vec<String> {
     keys
 }
 
+/// The private root is created owner-only, not with inherited permissions.
+#[cfg(unix)]
+fn restrict_to_owner(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).expect("private directory mode");
+}
+
+#[cfg(not(unix))]
+fn restrict_to_owner(_path: &Path) {}
+
+#[cfg(unix)]
+fn is_private_dir(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .map(|meta| meta.is_dir() && meta.permissions().mode() & 0o077 == 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_private_dir(path: &Path) -> bool {
+    path.is_dir()
+}
+
+/// `f13-<pid>-<hex nanos>`: the shape the parent produces.
+fn nonce_is_well_formed(marker: &str) -> bool {
+    match marker.split('-').collect::<Vec<_>>().as_slice() {
+        ["f13", pid, hex] => {
+            !pid.is_empty()
+                && pid.bytes().all(|b| b.is_ascii_digit())
+                && !hex.is_empty()
+                && hex.bytes().all(|b| b.is_ascii_hexdigit())
+        }
+        _ => false,
+    }
+}
+
+/// The child must be the exact launch this fixture makes: no extra arguments
+/// and no other test filter.
+fn assert_child_launch_shape() {
+    let args: Vec<String> = std::env::args_os()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        args.len(),
+        4,
+        "child must be launched as --exact child_case --nocapture"
+    );
+    assert_eq!(args[1], "--exact");
+    assert_eq!(args[2], "child_case");
+    assert_eq!(args[3], "--nocapture");
+}
+
 fn nonce() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -173,40 +226,25 @@ fn canonical(path: &Path, what: &str) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|e| panic!("{what} must resolve: {e}"))
 }
 
-fn require_within(path: &Path, root: &Path, what: &str) -> PathBuf {
-    let resolved = canonical(path, what);
-    let owned = canonical(root, "owned root");
-    assert!(resolved != owned, "{what} must not be the owned root");
+/// The CA path is rebuilt from the resolved owned root plus a fixed child name,
+/// never from the caller's lexical path. Absence must be `NotFound`
+/// specifically: a symlink or any other error is rejected, so a pre-existing
+/// link cannot redirect where the CA is written.
+fn validate_ca_dir(owned_root: &Path, name: &str) -> PathBuf {
     assert!(
-        resolved.starts_with(&owned),
-        "{what} escapes the owned root"
+        !name.is_empty() && name != "." && name != ".." && !name.contains('/'),
+        "CA child name must be a plain component"
     );
-    resolved
-}
-
-/// The CA directory is validated by its resolved parent: it must be a direct
-/// child of the owned root and must not exist yet.
-fn validate_ca_dir(ca_dir: &Path, root: &Path) -> PathBuf {
-    assert!(ca_dir.is_absolute(), "CA dir must be absolute");
-    assert!(
-        fs::metadata(ca_dir).is_err(),
-        "CA dir must not pre-exist"
-    );
-    let name = ca_dir
-        .file_name()
-        .and_then(|f| f.to_str())
-        .expect("CA dir has a plain name");
-    assert!(
-        !name.is_empty() && name != "." && name != "..",
-        "CA dir name must be a plain component"
-    );
-    let parent = ca_dir.parent().expect("CA dir has a parent");
-    assert_eq!(
-        canonical(parent, "CA parent"),
-        canonical(root, "owned root"),
-        "CA dir must be a direct child of the owned root"
-    );
-    ca_dir.to_path_buf()
+    let candidate = owned_root.join(name);
+    match fs::symlink_metadata(&candidate) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("CA path must be absent: {error}"),
+        Ok(meta) => panic!(
+            "CA path must not pre-exist (symlink: {})",
+            meta.file_type().is_symlink()
+        ),
+    }
+    candidate
 }
 
 /// Each case gets its own owned root and sentinel. `root` is declared before
@@ -297,10 +335,12 @@ fn injected_ca_leaves_the_default_user_ca_alone() {
             _ => {
                 // Probe, not a guarantee: in an integration binary `Shared::new()`
                 // compiles the lib without cfg(test), so it still resolves the
-                // default path. The child records which happened.
+                // default path. Only a before/after change counts as a write;
+                // the pre-created sentinel makes existence meaningless.
                 assert!(
-                    stdout.contains("default_path_written="),
-                    "default case did not report its observation:\n{stdout}"
+                    stdout.contains("default_path=changed")
+                        || stdout.contains("default_path=unchanged"),
+                    "default case did not report a before/after comparison:\n{stdout}"
                 );
             }
         }
@@ -320,7 +360,11 @@ fn child_case() {
     let Ok(marker) = std::env::var(MARKER) else {
         return;
     };
-    assert!(marker.starts_with("f13-"), "inherited marker rejected");
+    assert_child_launch_shape();
+    assert!(
+        nonce_is_well_formed(&marker),
+        "malformed marker rejected: {marker}"
+    );
     let mut expected = vec![
         CA_VAR.to_string(),
         CASE_VAR.to_string(),
@@ -333,27 +377,51 @@ fn child_case() {
         expected,
         "unexpected ambient WP_F13_* marker in the child"
     );
+
     let root = PathBuf::from(std::env::var_os(ROOT_VAR).expect("child root"));
     let case = std::env::var(CASE_VAR).expect("child case");
-    let ca_dir = PathBuf::from(std::env::var_os(CA_VAR).expect("child ca dir"));
+    let ca_var = PathBuf::from(std::env::var_os(CA_VAR).expect("child ca dir"));
     let home = PathBuf::from(std::env::var_os("HOME").expect("child HOME"));
     let xdg = PathBuf::from(std::env::var_os("XDG_CONFIG_HOME").expect("child XDG_CONFIG_HOME"));
 
-    // Ownership proof: only the parent can have written this file, so an
-    // inherited marker alone can never reach a CA construction.
+    // Ambient-state protection, not authentication: a matching nonce file shows
+    // this process was launched with the parent's inputs. A process that can
+    // write the root and set every variable itself can forge all of this.
     let recorded = fs::read_to_string(root.join(NONCE_FILE))
-        .expect("nonce file proves the parent owns this run");
-    assert_eq!(recorded.trim(), marker.as_str(), "nonce file must match the marker");
-
-    // Canonical containment of every injected path, before any CA work.
-    canonical(&root, "owned root");
-    let resolved_home = require_within(&home, &root, "HOME");
-    let resolved_xdg = require_within(&xdg, &root, "XDG_CONFIG_HOME");
-    assert!(
-        resolved_xdg.starts_with(&resolved_home),
-        "XDG_CONFIG_HOME must live under HOME"
+        .expect("nonce file must match the parent's run");
+    assert_eq!(
+        recorded.trim(),
+        marker.as_str(),
+        "nonce file must match the marker"
     );
-    let ca_dir = validate_ca_dir(&ca_dir, &root);
+
+    // Exact owned layout, resolved, before any CA work.
+    let owned = canonical(&root, "owned root");
+    assert_eq!(
+        owned.parent(),
+        Some(canonical(&std::env::temp_dir(), "temp dir").as_path()),
+        "owned root must be a direct child of the temp directory"
+    );
+    assert!(is_private_dir(&owned), "owned root must be owner-only");
+    let resolved_home = canonical(&home, "HOME");
+    let resolved_xdg = canonical(&xdg, "XDG_CONFIG_HOME");
+    assert_eq!(resolved_home, owned.join("home"), "HOME must be <root>/home");
+    assert_eq!(
+        resolved_xdg,
+        resolved_home.join(".config"),
+        "XDG_CONFIG_HOME must be <root>/home/.config"
+    );
+    let ca_dir = validate_ca_dir(&owned, "ca");
+    assert_eq!(
+        canonical(ca_var.parent().expect("CA parent"), "CA parent"),
+        owned,
+        "CA dir must be a direct child of the owned root"
+    );
+    assert_eq!(
+        ca_var.file_name().and_then(|f| f.to_str()),
+        Some("ca"),
+        "CA dir must be named ca"
+    );
 
     match case.as_str() {
         "override" => {
@@ -366,12 +434,16 @@ fn child_case() {
             assert!(shared.mitm.server_config("f13.test").is_ok());
         }
         "default" => {
+            // Paired before/after on the same file: the parent pre-creates the
+            // sentinel, so existence alone would not show a write.
+            let default_ca = resolved_xdg.join("webprobe").join("ca.json");
+            let before = fingerprint(&default_ca).expect("default-path fingerprint before");
             let shared = webprobe_core::net::Shared::new();
             assert!(shared.mitm.server_config("f13.test").is_ok());
-            let written = fs::metadata(resolved_xdg.join("webprobe").join("ca.json")).is_ok();
+            let after = fingerprint(&default_ca).expect("default-path fingerprint after");
             println!(
-                "default_path_written={}",
-                if written { "yes" } else { "no" }
+                "default_path={}",
+                if after == before { "unchanged" } else { "changed" }
             );
         }
         other => panic!("unknown case {other}"),
