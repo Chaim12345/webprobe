@@ -1,0 +1,30 @@
+{
+  "status": "PASS_FIXTURE_ARITHMETIC_ONLY",
+  "javascript_parser_tests": {
+    "run": 0,
+    "passed": 0,
+    "failed": 0,
+    "not_run_families": 4
+  },
+  "multibyte_member_utf8_bytes": [
+    19,
+    30
+  ],
+  "multibyte_identifier_utf8_bytes": [
+    19,
+    25
+  ],
+  "malformed_sibling_combined_utf8_bytes": [
+    17,
+    28
+  ],
+  "raw_literal_utf8_bytes": [
+    16,
+    34
+  ],
+  "decoded_utf8_hex": "6c696e650a4142",
+  "large_input": {
+    "bytes": 1048576,
+    "sha256": "d95efe00f25a50bbd1df379e2edaa7b00034abf594f4edba1d04c745c543db77"
+  }
+}
