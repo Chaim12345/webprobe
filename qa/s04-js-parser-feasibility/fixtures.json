@@ -1,0 +1,71 @@
+{
+  "schema": "webprobe.s04-js-parser-fixtures.v1",
+  "status": "NOT_RUN",
+  "execution_permission": "Run only with separately authorized, already available isolated dependencies; never as a production test or sink-coverage claim.",
+  "candidates": [
+    {"crate": "oxc_parser", "version": "0.146.0", "status": "NOT_RUN"},
+    {"crate": "boa_parser", "version": "0.22.0", "status": "NOT_RUN"},
+    {"crate": "swc_ecma_parser", "version": "48.1.0", "status": "NOT_RUN"},
+    {"crate": "rslint_parser", "version": "0.3.1", "status": "NOT_RUN"}
+  ],
+  "common_requirements": {
+    "offset_unit": "zero-based UTF-8 byte offsets into the original script source, end-exclusive",
+    "script_parse_mode": "classic script, not module",
+    "capture": ["crate_graph", "rustc_version", "elapsed_ms", "peak_rss_bytes_if_available", "errors", "ast_present", "raw_spans", "decoded_values", "valid_sibling_retained"],
+    "reject_input_bytes_above": 1048576,
+    "deadline_ms_per_case": 1000,
+    "harness_rss_limit_bytes": 268435456,
+    "note": "Limits are fixture harness requirements, not measured parser limits or production recommendations."
+  },
+  "fixtures": [
+    {
+      "id": "multibyte_offsets",
+      "status": "NOT_RUN",
+      "source": "const π = \"💩\";\nwindow.name;",
+      "source_utf8_bytes": 31,
+      "expected": {
+        "member_expression": {"text": "window.name", "start": 19, "end": 30},
+        "identifier": {"text": "window", "start": 19, "end": 25},
+        "raw_source_slices_must_match": true,
+        "must_not_use_character_offsets": {"member_start": 15, "identifier_end": 21}
+      }
+    },
+    {
+      "id": "malformed_fragment_valid_sibling",
+      "status": "NOT_RUN",
+      "units": [
+        {"id": "bad", "source": "const broken = ;", "valid": false},
+        {"id": "good", "source": "window.name;", "valid": true}
+      ],
+      "combined_source_for_recovery_observation": "const broken = ;\nwindow.name;",
+      "expected": {
+        "separate_units": "Bad unit reports an error without aborting analysis of the good unit; good window.name span is retained.",
+        "combined_unit": "Record recovery behavior; a page adapter must not erase the valid sibling merely because the combined parse has an error.",
+        "good_member_utf8_start_in_combined": 17,
+        "good_member_utf8_end_in_combined": 28,
+        "trailing_semicolon_byte": 28,
+        "no_universal_partial_ast_assumption": true
+      }
+    },
+    {
+      "id": "escape_decoding",
+      "status": "NOT_RUN",
+      "source": "const payload = \"line\\n\\u0041\\x42\";",
+      "raw_literal_source": "\"line\\n\\u0041\\x42\"",
+      "raw_literal_start": 16,
+      "raw_literal_end": 34,
+      "expected_decoded_value": "line\nAB",
+      "expected_decoded_utf8_hex": "6c696e650a4142",
+      "expected": "Expose the decoded string value for source matching while retaining the raw literal span; do not substitute decoded offsets for raw response offsets."
+    },
+    {
+      "id": "bounded_large_input",
+      "status": "NOT_RUN",
+      "generation_python": "source = '/*' + ('x' * (1048576 - 6)) + '*/\\n;'",
+      "expected_utf8_bytes": 1048576,
+      "expected_sha256": "d95efe00f25a50bbd1df379e2edaa7b00034abf594f4edba1d04c745c543db77",
+      "oversize_input": "Append one ASCII byte; harness must reject before parsing.",
+      "expected": "Complete or terminate within fixture deadline/RSS ceiling without panic, hang, cross-unit contamination, or unbounded buffering; record actual time/RSS/cancellation. No performance pass is asserted here."
+    }
+  ]
+}
