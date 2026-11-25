@@ -1522,6 +1522,9 @@ fn main() {
 }
 
 #[cfg(test)]
+mod ar09_binary_tool_state_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
