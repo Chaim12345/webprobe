@@ -372,11 +372,11 @@ fn read_request(stream: &mut TcpStream, stop: &AtomicBool) -> OriginRecord {
             Ok(n) => {
                 let room = MAX_REQUEST_BYTES - wire.len();
                 wire.extend_from_slice(&chunk[..n.min(room)]);
-                if let Some(head) = find_head(&wire) {
-                    if wire.len() >= head + 4 + declared_len(&wire[..head]) {
-                        complete = true;
-                        break;
-                    }
+                if let Some(head) = find_head(&wire)
+                    && wire.len() >= head + 4 + declared_len(&wire[..head])
+                {
+                    complete = true;
+                    break;
                 }
             }
             Err(ref e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {}
@@ -633,7 +633,7 @@ fn control_body() {
 }
 
 fn held_body() {
-    let mut origin = Origin::start();
+    let origin = Origin::start();
     let shared = Shared::new();
     shared.intercept_on.store(true, Ordering::SeqCst);
     shared.intercept_rules.lock().unwrap().clear();
@@ -688,7 +688,12 @@ fn held_body() {
         "F9-TARGET-FAILURE: held request outlived its client: released={released}",
     );
     assert_eq!(
-        (accepts_at_cancel, parsed_at_cancel, accepts_final, parsed_final),
+        (
+            accepts_at_cancel,
+            parsed_at_cancel,
+            accepts_final,
+            parsed_final
+        ),
         (0, 0, 0, 0),
         "F9-TARGET-FAILURE: the origin was contacted after the client left",
     );

@@ -392,12 +392,11 @@ fn read_client(stream: &mut std::net::TcpStream, stop: &AtomicBool) -> Record {
         if now >= deadline || stop.load(Ordering::SeqCst) || wire.len() >= MAX_REQUEST_BYTES {
             break;
         }
-        if let Some(at) = complete_at {
-            if now.duration_since(at) >= TRAILING_DRAIN
-                || now.duration_since(last_byte_at) >= QUIET_WINDOW
-            {
-                break;
-            }
+        if let Some(at) = complete_at
+            && (now.duration_since(at) >= TRAILING_DRAIN
+                || now.duration_since(last_byte_at) >= QUIET_WINDOW)
+        {
+            break;
         }
         match stream.read(&mut chunk) {
             Ok(0) => break,
@@ -405,13 +404,12 @@ fn read_client(stream: &mut std::net::TcpStream, stop: &AtomicBool) -> Record {
                 let room = MAX_REQUEST_BYTES - wire.len();
                 wire.extend_from_slice(&chunk[..n.min(room)]);
                 last_byte_at = Instant::now();
-                if !complete {
-                    if let Some(head) = find_head(&wire) {
-                        if wire.len() >= head + 4 + declared_len(&wire[..head]) {
-                            complete = true;
-                            complete_at = Some(Instant::now());
-                        }
-                    }
+                if !complete
+                    && let Some(head) = find_head(&wire)
+                    && wire.len() >= head + 4 + declared_len(&wire[..head])
+                {
+                    complete = true;
+                    complete_at = Some(Instant::now());
                 }
             }
             Err(ref e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {}

@@ -387,8 +387,8 @@ fn child_case() {
     // Ambient-state protection, not authentication: a matching nonce file shows
     // this process was launched with the parent's inputs. A process that can
     // write the root and set every variable itself can forge all of this.
-    let recorded = fs::read_to_string(root.join(NONCE_FILE))
-        .expect("nonce file must match the parent's run");
+    let recorded =
+        fs::read_to_string(root.join(NONCE_FILE)).expect("nonce file must match the parent's run");
     assert_eq!(
         recorded.trim(),
         marker.as_str(),
@@ -405,7 +405,11 @@ fn child_case() {
     assert!(is_private_dir(&owned), "owned root must be owner-only");
     let resolved_home = canonical(&home, "HOME");
     let resolved_xdg = canonical(&xdg, "XDG_CONFIG_HOME");
-    assert_eq!(resolved_home, owned.join("home"), "HOME must be <root>/home");
+    assert_eq!(
+        resolved_home,
+        owned.join("home"),
+        "HOME must be <root>/home"
+    );
     assert_eq!(
         resolved_xdg,
         resolved_home.join(".config"),
@@ -443,7 +447,11 @@ fn child_case() {
             let after = fingerprint(&default_ca).expect("default-path fingerprint after");
             println!(
                 "default_path={}",
-                if after == before { "unchanged" } else { "changed" }
+                if after == before {
+                    "unchanged"
+                } else {
+                    "changed"
+                }
             );
         }
         other => panic!("unknown case {other}"),

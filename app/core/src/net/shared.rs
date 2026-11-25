@@ -228,8 +228,8 @@ impl Shared {
         // compile it without cfg(test) and must inject a CA with
         // `with_ca_dir` instead of mutating the process environment.
         #[cfg(test)]
-        let mitm = crate::tls::MitmAuthority::in_memory()
-            .expect("failed to initialize in-memory test CA");
+        let mitm =
+            crate::tls::MitmAuthority::in_memory().expect("failed to initialize in-memory test CA");
         #[cfg(not(test))]
         let mitm = crate::tls::MitmAuthority::new().expect("failed to initialize local HTTPS CA");
         Self::with_authority(mitm)

@@ -4,7 +4,7 @@ use std::net::TcpListener;
 use std::sync::{Arc, Mutex, atomic::Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use webprobe_core::{intruder, intruder_run as run, net};
+use webprobe_core::{intruder, intruder_run as run};
 
 mod test_support;
 use test_support::shared;
