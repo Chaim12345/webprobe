@@ -1,20 +1,22 @@
 //! AR-09 app layer: NUL and non-UTF-8 bodies through the real Repeater and
-//! Intruder send paths.
+//! Intruder send paths. Source-only artifact for review: nothing here has
+//! been built or run.
 //!
-//! Source-only revision under review: each case that constructs `Shared` is a
-//! parent wrapper that never constructs it itself. The parent creates a unique
-//! tempdir with a fake HOME, a fake XDG_CONFIG_HOME and an explicit CA dir,
-//! writes non-secret sentinels, then spawns this binary with `--exact <case>`
-//! and those paths in the CHILD environment only. The split-delivery fixture
-//! check constructs neither `Shared` nor `App` and runs directly.
+//! Each case that constructs `Shared` is a parent wrapper that never
+//! constructs it itself. The parent creates a unique tempdir with a fake
+//! HOME, a fake XDG_CONFIG_HOME and an explicit CA dir, writes non-secret
+//! sentinels, and spawns this binary with `--exact <case>` and those paths in
+//! the CHILD environment only. Child output goes to files, never to an
+//! undrained pipe. The split-delivery fixture check constructs neither
+//! `Shared` nor `App` and runs directly.
 //!
-//! Loopback only. No fix claim: these are characterisations of the current
-//! code plus the transport control.
+//! Loopback only. The send-path cases are CHARACTERISATIONS of the current
+//! lossy conversion, not a fix and not GUI proof.
 
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -24,8 +26,13 @@ use webprobe_core::intruder::{AttackType, SetSpec};
 use webprobe_core::intruder_run::{self, AttackSettings, RunState};
 use webprobe_core::net;
 
-const IDLE: Duration = Duration::from_millis(400);
+const CONNECTION_BUDGET: Duration = Duration::from_secs(10);
+const QUIET_WINDOW: Duration = Duration::from_millis(150);
+const TRAILING_DRAIN: Duration = Duration::from_millis(400);
 const CASE_BUDGET: Duration = Duration::from_secs(120);
+const RUN_BUDGET: Duration = Duration::from_secs(15);
+const SETTLE_BUDGET: Duration = Duration::from_secs(5);
+const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const CHILD_MARKER: &str = "WEBPROBE_AR09_APP_CHILD_CASE";
 const CHILD_ROOT: &str = "WEBPROBE_AR09_APP_CHILD_ROOT";
 const SENTINEL_HOME: &[u8] = b"ar09-app-sentinel-home: not a CA\n";
@@ -33,6 +40,7 @@ const SENTINEL_XDG: &[u8] = b"ar09-app-sentinel-xdg: not a CA\n";
 const REPEATER: &str = "ar09_binary_tool_state_tests::repeater_send_once_sends_the_lossy_body";
 const INTRUDER: &str =
     "ar09_binary_tool_state_tests::intruder_attack_sends_the_lossy_template_body";
+const CLEANUP_FAILED: &str = "AR09-INTRUDER-CLEANUP-FAILED";
 
 const BODY: &[u8] = &[0x00, 0xff, 0xfe, 0x00, 0xc3, 0x28];
 const LOSSY_BODY: &[u8] = &[
@@ -47,7 +55,6 @@ struct Isolation {
     xdg: PathBuf,
     ca: PathBuf,
     child: Option<Child>,
-    timed_out: bool,
 }
 
 impl Isolation {
@@ -56,10 +63,12 @@ impl Isolation {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
+        let raw = std::env::temp_dir().join(format!(
             "webprobe-ar09-app-{tag}-{}-{nanos}",
             std::process::id()
         ));
+        std::fs::create_dir_all(&raw).expect("create isolation root");
+        let root = raw.canonicalize().expect("canonical isolation root");
         let home = root.join("home");
         let xdg = root.join("xdg");
         let ca = root.join("ca");
@@ -83,16 +92,19 @@ impl Isolation {
             xdg,
             ca,
             child: None,
-            timed_out: false,
         }
     }
 
     fn spawn(&mut self, case: &str) {
-        assert!(
-            std::env::var_os(CHILD_MARKER).is_none(),
-            "refusing to spawn a child from inside a child",
-        );
+        for var in [CHILD_MARKER, CHILD_ROOT] {
+            assert!(
+                std::env::var_os(var).is_none(),
+                "{var} is inherited; a validation runner must clear child marker/root vars",
+            );
+        }
         let exe = std::env::current_exe().expect("current test binary");
+        let stdout = std::fs::File::create(self.root.join("child.stdout")).expect("stdout file");
+        let stderr = std::fs::File::create(self.root.join("child.stderr")).expect("stderr file");
         let mut cmd = Command::new(exe);
         cmd.arg("--exact")
             .arg(case)
@@ -105,96 +117,190 @@ impl Isolation {
             .env("WEBPROBE_CA_DIR", &self.ca)
             .env_remove("RUST_BACKTRACE")
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr));
         self.child = Some(cmd.spawn().expect("spawn isolated child"));
     }
 
-    fn finish(&mut self) -> std::process::Output {
-        let mut child = self.child.take().expect("child was spawned");
-        let end = Instant::now() + CASE_BUDGET;
-        loop {
-            match child.try_wait().expect("try_wait") {
-                Some(_) => break,
-                None if Instant::now() >= end => {
-                    self.timed_out = true;
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break;
-                }
-                None => std::thread::sleep(Duration::from_millis(25)),
-            }
+    /// Bounded wait. The child is owned by a kill-on-drop guard for the whole
+    /// call, so a panic here cannot orphan it.
+    fn finish(&mut self) -> ChildRun {
+        let mut guard = ChildGuard::new(self.child.take().expect("child was spawned"));
+        let exited = guard.wait_bounded(CASE_BUDGET);
+        let status = guard.status();
+        if !exited {
+            println!("AR09-APP-CLEANUP-TIMEOUT: child exceeded {CASE_BUDGET:?}");
         }
-        child.wait_with_output().expect("child output")
+        let stdout = std::fs::read_to_string(self.root.join("child.stdout")).unwrap_or_default();
+        let stderr = std::fs::read_to_string(self.root.join("child.stderr")).unwrap_or_default();
+        ChildRun {
+            status,
+            timed_out: !exited,
+            stdout,
+            stderr,
+        }
     }
 
-    fn assert_sentinels(&self) {
+    /// Exact-shape layout check, run before any status assertion so it is
+    /// reported even when the child fails unexpectedly. Fails closed on
+    /// inspection errors.
+    fn verify_layout(&self, expect_ca: bool) {
+        let home_sentinel = self.home.join(".config").join("webprobe").join("ca.json");
+        let xdg_sentinel = self.xdg.join("webprobe").join("ca.json");
+        let home_files = list_files(&self.home).expect("inspect the fake HOME");
+        let xdg_files = list_files(&self.xdg).expect("inspect the fake XDG dir");
         assert_eq!(
-            std::fs::read(self.home.join(".config").join("webprobe").join("ca.json"))
-                .expect("HOME sentinel readable"),
+            home_files,
+            vec![home_sentinel.clone()],
+            "the fake HOME may contain only its sentinel",
+        );
+        assert_eq!(
+            xdg_files,
+            vec![xdg_sentinel.clone()],
+            "the fake XDG dir may contain only its sentinel",
+        );
+        assert_eq!(
+            std::fs::read(&home_sentinel).expect("read the HOME sentinel"),
             SENTINEL_HOME,
             "the child changed the fake HOME CA file",
         );
         assert_eq!(
-            std::fs::read(self.xdg.join("webprobe").join("ca.json"))
-                .expect("XDG sentinel readable"),
+            std::fs::read(&xdg_sentinel).expect("read the XDG sentinel"),
             SENTINEL_XDG,
             "the child changed the fake XDG CA file",
         );
-    }
-
-    fn assert_no_ca_outside_owned_ca(&self) {
-        let mut files = Vec::new();
-        collect_files(&self.home, &mut files);
-        collect_files(&self.xdg, &mut files);
-        files.retain(|p| !p.ends_with("webprobe/ca.json"));
-        assert!(
-            files.is_empty(),
-            "files created outside the owned CA dir: {files:?}",
-        );
-        println!("AR09-APP-CA-DIR: {:?}", self.ca);
+        let ca_files = list_files(&self.ca).expect("inspect the owned CA dir");
+        for file in &ca_files {
+            assert!(
+                file.starts_with(&self.ca),
+                "CA artifact outside the owned CA dir: {file:?}",
+            );
+            let name = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            assert!(
+                name == "ca.json" || name.starts_with("ca.json.retired-"),
+                "unexpected CA artifact: {file:?}",
+            );
+        }
+        if expect_ca {
+            assert!(
+                self.ca.join("ca.json").is_file(),
+                "no CA artifact inside the owned CA dir; an empty dir is not proof",
+            );
+        }
+        println!("AR09-APP-CA-FILES: {ca_files:?}");
     }
 }
 
 impl Drop for Isolation {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take()
-            && !matches!(child.try_wait(), Ok(Some(_)))
-        {
-            let _ = child.kill();
-            let _ = child.wait();
+        if let Some(mut child) = self.child.take() {
+            match child.try_wait() {
+                Ok(Some(_)) => {}
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
         }
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 
-fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_files(&path, out);
-        } else {
-            out.push(path);
+struct ChildGuard {
+    child: Option<Child>,
+}
+
+impl ChildGuard {
+    fn new(child: Child) -> ChildGuard {
+        ChildGuard { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> &mut Child {
+        self.child.as_mut().expect("live child")
+    }
+
+    fn wait_bounded(&mut self, budget: Duration) -> bool {
+        let end = Instant::now() + budget;
+        loop {
+            match self.child_mut().try_wait() {
+                Ok(Some(_)) => return true,
+                Ok(None) if Instant::now() >= end => {
+                    let _ = self.child_mut().kill();
+                    let _ = self.child_mut().wait();
+                    return false;
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+                Err(_) => return false,
+            }
+        }
+    }
+
+    fn status(&mut self) -> Option<ExitStatus> {
+        self.child_mut().try_wait().ok().flatten()
+    }
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            match child.try_wait() {
+                Ok(Some(_)) => {}
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
         }
     }
 }
 
+struct ChildRun {
+    status: Option<ExitStatus>,
+    timed_out: bool,
+    stdout: String,
+    stderr: String,
+}
+
+fn list_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        for entry in std::fs::read_dir(&current)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// True only inside the spawned child for `case`. The three paths must be the
+/// exact owned children of the canonical root, not a lexical prefix match.
 fn child_branch(case: &str) -> bool {
     if std::env::var(CHILD_MARKER).ok().as_deref() != Some(case) {
         return false;
     }
     let root = PathBuf::from(std::env::var_os(CHILD_ROOT).expect("child root missing"));
     assert!(root.is_absolute(), "child root must be absolute: {root:?}");
-    for var in ["HOME", "XDG_CONFIG_HOME", "WEBPROBE_CA_DIR"] {
+    let canonical = root.canonicalize().expect("canonical child root");
+    assert_eq!(canonical, root, "child root is not canonical: {root:?}");
+    let expected = [
+        ("HOME", root.join("home")),
+        ("XDG_CONFIG_HOME", root.join("xdg")),
+        ("WEBPROBE_CA_DIR", root.join("ca")),
+    ];
+    for (var, want) in &expected {
         let value = std::env::var_os(var).unwrap_or_else(|| panic!("{var} missing in the child"));
         let path = PathBuf::from(value);
-        assert!(path.is_absolute(), "{var} is not absolute: {path:?}");
-        assert!(
-            path.starts_with(&root),
-            "{var} {path:?} is outside the owned tempdir {root:?}",
+        assert_eq!(&path, want, "{var} is not the owned path {want:?}");
+        let canonical = path.canonicalize().expect("canonical isolated path");
+        assert_eq!(
+            canonical, *want,
+            "{var} resolves through a symlink: {path:?}"
         );
     }
     println!("AR09-APP-ISOLATION-OK root={}", root.display());
@@ -211,6 +317,13 @@ fn assert_single_case(stdout: &str) {
         summary.contains("1 passed") && summary.contains("0 failed"),
         "child did not run exactly one passing case: {summary}",
     );
+}
+
+fn report(run: &ChildRun) {
+    println!("AR09-APP-CHILD-STDOUT-BEGIN");
+    print!("{}", run.stdout);
+    println!("AR09-APP-CHILD-STDOUT-END");
+    eprint!("{}", run.stderr);
 }
 
 // ---------- capture fixture (child side only) ----------
@@ -256,27 +369,77 @@ fn raw_request() -> Vec<u8> {
     r
 }
 
+struct Record {
+    wire: Vec<u8>,
+    complete: bool,
+}
+
+/// Reads one request under an absolute deadline, a size cap and the shared
+/// stop flag. `complete` is set once the head and the declared body arrived,
+/// but reading continues: trailing bytes past the declared length are the
+/// defect under test, so stopping at Content-Length would hide them. The
+/// post-complete drain ends after a quiet window or a hard drain cap.
+fn read_client(stream: &mut std::net::TcpStream, stop: &AtomicBool) -> Record {
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(25)));
+    let deadline = Instant::now() + CONNECTION_BUDGET;
+    let mut wire = Vec::new();
+    let mut chunk = [0u8; 2048];
+    let mut complete = false;
+    let mut complete_at: Option<Instant> = None;
+    let mut last_byte_at = Instant::now();
+    loop {
+        let now = Instant::now();
+        if now >= deadline || stop.load(Ordering::SeqCst) || wire.len() >= MAX_REQUEST_BYTES {
+            break;
+        }
+        if let Some(at) = complete_at {
+            if now.duration_since(at) >= TRAILING_DRAIN
+                || now.duration_since(last_byte_at) >= QUIET_WINDOW
+            {
+                break;
+            }
+        }
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                let room = MAX_REQUEST_BYTES - wire.len();
+                wire.extend_from_slice(&chunk[..n.min(room)]);
+                last_byte_at = Instant::now();
+                if !complete {
+                    if let Some(head) = find_head(&wire) {
+                        if wire.len() >= head + 4 + declared_len(&wire[..head]) {
+                            complete = true;
+                            complete_at = Some(Instant::now());
+                        }
+                    }
+                }
+            }
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {}
+            Err(_) => break,
+        }
+    }
+    Record { wire, complete }
+}
+
 struct Capture {
     port: u16,
     accepts: Arc<AtomicUsize>,
-    requests: Arc<Mutex<Vec<Vec<u8>>>>,
+    records: Arc<Mutex<Vec<Record>>>,
     stop: Arc<AtomicBool>,
     join: Option<JoinHandle<()>>,
 }
 
 impl Capture {
-    /// `body_len` is the number of body bytes the case expects on the wire,
-    /// not the declared Content-Length (the lossy case sends more).
-    fn start(body_len: usize) -> Capture {
+    fn start() -> Capture {
         let listener = TcpListener::bind("127.0.0.1:0").expect("capture bind");
         listener.set_nonblocking(true).expect("capture nonblocking");
         let port = listener.local_addr().unwrap().port();
         let accepts = Arc::new(AtomicUsize::new(0));
-        let requests = Arc::new(Mutex::new(Vec::new()));
+        let records = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let (a, r, s) = (
             Arc::clone(&accepts),
-            Arc::clone(&requests),
+            Arc::clone(&records),
             Arc::clone(&stop),
         );
         let join = std::thread::spawn(move || {
@@ -284,44 +447,15 @@ impl Capture {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         a.fetch_add(1, Ordering::SeqCst);
-                        let _ = stream.set_read_timeout(Some(IDLE));
-                        let mut wire = Vec::new();
-                        let mut chunk = [0u8; 2048];
-                        // An idle read ends the capture only once the
-                        // expected body is in (or the overall deadline has
-                        // passed): a sender paused between split writes is
-                        // not a finished request.
-                        let deadline = Instant::now() + Duration::from_secs(5);
-                        loop {
-                            match stream.read(&mut chunk) {
-                                Ok(0) => break,
-                                Ok(n) => wire.extend_from_slice(&chunk[..n]),
-                                Err(e)
-                                    if matches!(
-                                        e.kind(),
-                                        std::io::ErrorKind::WouldBlock
-                                            | std::io::ErrorKind::TimedOut
-                                    ) =>
-                                {
-                                    let body = wire
-                                        .windows(4)
-                                        .position(|w| w == b"\r\n\r\n")
-                                        .map_or(0, |h| wire.len() - (h + 4));
-                                    let headed = wire.windows(4).any(|w| w == b"\r\n\r\n");
-                                    if (headed && body >= body_len) || Instant::now() >= deadline {
-                                        break;
-                                    }
-                                }
-                                Err(_) => break,
-                            }
-                        }
-                        r.lock().unwrap().push(wire);
+                        let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+                        let record = read_client(&mut stream, &s);
+                        r.lock().unwrap().push(record);
                         let _ = stream.write_all(
                             b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                         );
                         let _ = stream.flush();
                     }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(5))
                     }
                     Err(_) => return,
@@ -331,7 +465,7 @@ impl Capture {
         Capture {
             port,
             accepts,
-            requests,
+            records,
             stop,
             join: Some(join),
         }
@@ -344,15 +478,23 @@ impl Capture {
         }
     }
 
-    fn first(&self, deadline: Duration) -> Vec<u8> {
+    /// Bounded wait for the first complete record.
+    fn first_complete(&self, deadline: Duration) -> Vec<u8> {
         let end = Instant::now() + deadline;
         loop {
-            if let Some(wire) = self.requests.lock().unwrap().first().cloned() {
+            if let Some(wire) = self
+                .records
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|r| r.complete)
+                .map(|r| r.wire.clone())
+            {
                 return wire;
             }
             assert!(
                 Instant::now() < end,
-                "the origin recorded no request in time"
+                "the origin recorded no complete request in time",
             );
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -365,16 +507,40 @@ impl Drop for Capture {
     }
 }
 
+/// Owns the running Intruder attack. `settle` is the explicit cleanup path; a
+/// failed settle prints a non-success record that the parent rejects. Drop is
+/// only a backstop and never panics.
 struct RunGuard {
     state: Arc<RunState>,
+    settled: bool,
+}
+
+impl RunGuard {
+    fn new(state: Arc<RunState>) -> RunGuard {
+        RunGuard {
+            state,
+            settled: false,
+        }
+    }
+
+    fn stop_and_settle(&mut self, budget: Duration) -> bool {
+        self.state.stop.store(true, Ordering::SeqCst);
+        let end = Instant::now() + budget;
+        while self.state.is_running() && Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        self.settled = !self.state.is_running();
+        if !self.settled {
+            println!("{CLEANUP_FAILED}: the run was still active after {budget:?}");
+        }
+        self.settled
+    }
 }
 
 impl Drop for RunGuard {
     fn drop(&mut self) {
-        self.state.stop.store(true, Ordering::SeqCst);
-        let end = Instant::now() + Duration::from_secs(5);
-        while self.state.is_running() && Instant::now() < end {
-            std::thread::sleep(Duration::from_millis(10));
+        if !self.settled && self.state.is_running() {
+            let _ = self.stop_and_settle(SETTLE_BUDGET);
         }
     }
 }
@@ -384,7 +550,7 @@ impl Drop for RunGuard {
 /// Real Repeater path: `request_for_tools` -> `send_following` ->
 /// `send_once` -> `req.as_bytes()` -> socket.
 fn repeater_body() {
-    let mut capture = Capture::start(12);
+    let mut capture = Capture::start();
     let shared = net::Shared::new();
     let text = crate::ui::request_for_tools(&raw_request());
     let edited = text.replacen("POST /ar09", "POST /ar09?edited=1", 1);
@@ -399,7 +565,7 @@ fn repeater_body() {
         &|_, _| {},
     );
     assert!(out.error.is_none(), "send error: {:?}", out.error);
-    let wire = capture.first(IDLE + Duration::from_secs(3));
+    let wire = capture.first_complete(CONNECTION_BUDGET + Duration::from_secs(2));
     let head = find_head(&wire).expect("head terminator");
     let declared = declared_len(&wire[..head]);
     let body = body_of(&wire).to_vec();
@@ -407,18 +573,20 @@ fn repeater_body() {
     let accepts = capture.accepts.load(Ordering::SeqCst);
     capture.stop_and_join();
     let edited_line = String::from_utf8_lossy(&wire[..head]).starts_with("POST /ar09?edited=1 ");
+    println!("AR09-REPEATER-EVIDENCE accepts={accepts} declared={declared}");
     println!(
-        "AR09-REPEATER-EVIDENCE accepts={accepts} declared={declared} body_len={} trailing={trailing} edited_line={edited_line} body_hex={}",
-        body.len(),
-        hex(&body),
+        "AR09-REPEATER-EVIDENCE body_len={} trailing={trailing}",
+        body.len()
     );
+    println!("AR09-REPEATER-EVIDENCE edited_line={edited_line}");
+    println!("AR09-REPEATER-EVIDENCE body_hex={}", hex(&body));
     assert!(edited_line, "the edited request line reached the wire");
     assert_eq!(accepts, 1, "one origin connection");
     assert_eq!(
         body,
         LOSSY_BODY,
         "the converted body was sent (hex {})",
-        hex(&body)
+        hex(&body),
     );
     assert_eq!(declared, 6, "header keeps the captured length");
     assert_eq!(trailing, 6, "6 bytes sit past the declared length");
@@ -428,7 +596,7 @@ fn repeater_body() {
 /// Real Intruder path: `request_for_tools` -> template -> `intruder_run::start`
 /// (dispatcher and `execute_probe`) -> `update_content_length` -> socket.
 fn intruder_body() {
-    let mut capture = Capture::start(12);
+    let mut capture = Capture::start();
     let shared = net::Shared::new();
     let text = crate::ui::request_for_tools(&raw_request());
     let template = text.replacen("POST /ar09", "POST /ar09\u{a7}p\u{a7}", 1);
@@ -441,35 +609,38 @@ fn intruder_body() {
         AttackSettings::default(),
     )
     .expect("attack starts");
-    let guard = RunGuard {
-        state: Arc::clone(&state),
-    };
-    let end = Instant::now() + Duration::from_secs(15);
+    let mut guard = RunGuard::new(Arc::clone(&state));
+    let end = Instant::now() + RUN_BUDGET;
     while state.is_running() && Instant::now() < end {
         std::thread::sleep(Duration::from_millis(10));
     }
+    let finished = !state.is_running();
+    if !finished {
+        guard.stop_and_settle(SETTLE_BUDGET);
+    }
     assert!(
-        !state.is_running(),
-        "the Intruder run did not finish within 15 s (done={})",
+        finished,
+        "the Intruder run did not finish within {RUN_BUDGET:?} (done={})",
         state.done.load(Ordering::SeqCst),
     );
     state.drain_rows();
-    let wire = capture.first(IDLE + Duration::from_secs(3));
+    let wire = capture.first_complete(CONNECTION_BUDGET + Duration::from_secs(2));
     let head = find_head(&wire).expect("head terminator");
     let declared = declared_len(&wire[..head]);
     let body = body_of(&wire).to_vec();
     let trailing = body.len().saturating_sub(declared);
     capture.stop_and_join();
     println!(
-        "AR09-INTRUDER-EVIDENCE declared={declared} body_len={} trailing={trailing} body_hex={}",
-        body.len(),
-        hex(&body),
+        "AR09-INTRUDER-EVIDENCE declared={declared} body_len={}",
+        body.len()
     );
+    println!("AR09-INTRUDER-EVIDENCE trailing={trailing}");
+    println!("AR09-INTRUDER-EVIDENCE body_hex={}", hex(&body));
     assert_eq!(
         body,
         LOSSY_BODY,
         "the converted template body was sent (hex {})",
-        hex(&body)
+        hex(&body),
     );
     assert_eq!(
         declared,
@@ -477,50 +648,64 @@ fn intruder_body() {
         "Intruder restamped Content-Length to the converted length",
     );
     assert_eq!(trailing, 0, "no bytes past the restamped length");
-    drop(guard);
     println!("CASE-COMPLETE: {INTRUDER}");
 }
 
 // ---------- top-level cases ----------
 
 /// Fixture self-check: constructs neither `Shared` nor `App`, so it needs no
-/// child-process CA isolation. It proves the capture records a known byte
-/// length across a split delivery, independent of the declared length.
+/// child-process CA isolation. It must discriminate the declared-length
+/// capture bug, so it sends `Content-Length: 6` followed by 6 bytes, a delay,
+/// then 6 more of an actual 12-byte body. A capture that stops at the declared
+/// length would record 6 bytes and no trailing data.
 #[test]
 fn capture_fixture_records_a_split_delivery_without_trusting_content_length() {
-    let mut capture = Capture::start(BODY.len());
-    let raw = raw_request();
-    let head_end = find_head(&raw).expect("head terminator") + 4;
+    let mut capture = Capture::start();
+    let head = b"POST /ar09split HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 6\r\n\r\n".to_vec();
+    assert_eq!(LOSSY_BODY.len(), 12, "the fixture body is 12 bytes");
     let mut client =
         std::net::TcpStream::connect(("127.0.0.1", capture.port)).expect("client connect");
     client
-        .set_read_timeout(Some(IDLE + Duration::from_secs(1)))
-        .expect("client read timeout");
-    client.write_all(&raw[..head_end]).expect("write head");
+        .set_read_timeout(Some(CONNECTION_BUDGET))
+        .expect("read timeout");
+    client.write_all(&head).expect("write head");
+    client
+        .write_all(&LOSSY_BODY[..6])
+        .expect("write first half");
     let _ = client.flush();
     std::thread::sleep(Duration::from_millis(50));
-    client.write_all(&raw[head_end..]).expect("write body");
+    client
+        .write_all(&LOSSY_BODY[6..])
+        .expect("write second half");
     let _ = client.flush();
     let mut response = Vec::new();
     let _ = client.read_to_end(&mut response);
-    let wire = capture.first(IDLE + Duration::from_secs(3));
+    let wire = capture.first_complete(CONNECTION_BUDGET + Duration::from_secs(2));
     let declared = declared_len(&wire[..find_head(&wire).expect("head")]);
     let body = body_of(&wire).to_vec();
     let trailing = body.len().saturating_sub(declared);
     capture.stop_and_join();
     println!(
-        "AR09-FIXTURE-EVIDENCE known_len={} captured_len={} declared={declared} body_len={} trailing={trailing}",
-        raw.len(),
+        "AR09-FIXTURE-EVIDENCE expected_wire={} captured_len={}",
+        head.len() + LOSSY_BODY.len(),
         wire.len(),
-        body.len(),
     );
+    println!(
+        "AR09-FIXTURE-EVIDENCE declared={declared} body_len={}",
+        body.len()
+    );
+    println!("AR09-FIXTURE-EVIDENCE trailing={trailing}");
+    assert_eq!(declared, 6, "the header declares only the first 6 bytes");
+    assert_eq!(
+        body, LOSSY_BODY,
+        "all 12 bytes must be captured across the split delivery",
+    );
+    assert_eq!(trailing, 6, "6 bytes sit past the declared length");
     assert_eq!(
         wire.len(),
-        raw.len(),
-        "the fixture captured the known length"
+        head.len() + LOSSY_BODY.len(),
+        "the fixture captured the complete known wire length",
     );
-    assert_eq!(body, BODY, "the split body is intact");
-    assert_eq!(trailing, 0, "no bytes past the declared length");
 }
 
 #[test]
@@ -531,29 +716,31 @@ fn repeater_send_once_sends_the_lossy_body() {
     }
     let mut iso = Isolation::new("repeater");
     iso.spawn(REPEATER);
-    let out = iso.finish();
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    let run = iso.finish();
+    iso.verify_layout(true);
+    report(&run);
     assert!(
-        !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        !run.timed_out,
+        "AR09-APP-CLEANUP-TIMEOUT: the child had to be killed",
     );
     assert!(
-        out.status.success(),
-        "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status,
+        run.status.is_some_and(|s| s.success()),
+        "child failed ({:?})\nstdout:\n{}\nstderr:\n{}",
+        run.status,
+        run.stdout,
+        run.stderr,
     );
-    assert_single_case(&stdout);
+    assert_single_case(&run.stdout);
     assert!(
-        stdout.contains("AR09-REPEATER-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}",
+        run.stdout.contains("AR09-REPEATER-EVIDENCE"),
+        "no per-case completion record\nstdout:\n{}",
+        run.stdout,
     );
     assert!(
-        stdout.contains(&format!("CASE-COMPLETE: {REPEATER}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}",
+        run.stdout.contains(&format!("CASE-COMPLETE: {REPEATER}")),
+        "no CASE-COMPLETE line\nstdout:\n{}",
+        run.stdout,
     );
-    iso.assert_sentinels();
-    iso.assert_no_ca_outside_owned_ca();
 }
 
 #[test]
@@ -564,27 +751,33 @@ fn intruder_attack_sends_the_lossy_template_body() {
     }
     let mut iso = Isolation::new("intruder");
     iso.spawn(INTRUDER);
-    let out = iso.finish();
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    let run = iso.finish();
+    iso.verify_layout(true);
+    report(&run);
     assert!(
-        !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        !run.timed_out,
+        "AR09-APP-CLEANUP-TIMEOUT: the child had to be killed",
     );
     assert!(
-        out.status.success(),
-        "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status,
-    );
-    assert_single_case(&stdout);
-    assert!(
-        stdout.contains("AR09-INTRUDER-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}",
+        run.status.is_some_and(|s| s.success()),
+        "child failed ({:?})\nstdout:\n{}\nstderr:\n{}",
+        run.status,
+        run.stdout,
+        run.stderr,
     );
     assert!(
-        stdout.contains(&format!("CASE-COMPLETE: {INTRUDER}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}",
+        !run.stdout.contains(CLEANUP_FAILED),
+        "the Intruder run did not settle; child termination is containment, not acceptance",
     );
-    iso.assert_sentinels();
-    iso.assert_no_ca_outside_owned_ca();
+    assert_single_case(&run.stdout);
+    assert!(
+        run.stdout.contains("AR09-INTRUDER-EVIDENCE"),
+        "no per-case completion record\nstdout:\n{}",
+        run.stdout,
+    );
+    assert!(
+        run.stdout.contains(&format!("CASE-COMPLETE: {INTRUDER}")),
+        "no CASE-COMPLETE line\nstdout:\n{}",
+        run.stdout,
+    );
 }

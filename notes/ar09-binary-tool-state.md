@@ -3,77 +3,82 @@
 Source pin: `692f09728039884c59a676ff314879c06dcb1cf5` (parity/2026-11-17).
 Branch: `goal/ar09-binary-tool-state-20261125`.
 
-## Status: source-only revision, nothing executed
+## Status: source-only artifact, runtime HOLD still in force
 
-This revision touches the test files and this note only. No build, test run or test binary was
-executed for it. The coverage and byte figures below are the earlier run's records.
+Nothing in this revision was built, linked, executed or checked. No cargo command, no test
+binary, no script touching project code, no installs. The only tool run was a standalone
+`rustfmt` on copies of the changed test files in `/tmp` (formatter already present from the
+earlier, recorded deviation).
 
-## Coverage at the earlier run (a3345a2)
+## What the cases are
 
-- `app/core/tests/ar09_binary_tool_state.rs`: 2 cases passed (transport control and the lossy
-  characterisation).
-- `app/src/ar09_binary_tool_state_tests.rs`: 2 cases passed, driving the real app code
+- `control_transport_preserves_nul_and_non_utf8_body_bytes` — control: the real send path
+  (`send_raw_with`) carries the captured bytes and declared length exactly.
+- `characterisation_repeater_text_state_is_lossy_for_non_utf8_bodies` (core) and
+  `repeater_send_once_sends_the_lossy_body` / `intruder_attack_sends_the_lossy_template_body`
+  (app) — CHARACTERISATIONS: they assert the CURRENT lossy outcome, so they pass while the
+  defect exists. They are not a fix, not a fix guard and not GUI proof.
+- `capture_fixture_records_a_split_delivery_without_trusting_content_length` (app) — fixture
+  self-check that constructs neither `Shared` nor `App`.
+
+## Consolidated blocker pass A-F
+
+- **A — case binding.** Every case constant is checked statically against the real test fn name,
+  including the module prefix the app binary needs: `INTRUDER` and `REPEATER` are
+  `ar09_binary_tool_state_tests::…` and that module is declared in `app/src/main.rs`. The check
+  runs from `git show HEAD:` output (`python3 /tmp/case_binding_check.py`, 0 failures) and also
+  asserts each spawned constant is used by `child_branch`.
+- **B — teardown order.** Not applicable here (no held-queue/intercept path); this branch keeps
+  the child guard, bounded Intruder settle and parent rejection from the earlier pass.
+- **C — labelling.** The lossy cases remain CHARACTERISATIONS; no indefinite-wait or
+  next-request-desync claim is made.
+- **D — capture regression fixed.** Both `read_client` implementations again stop hiding data at
+  the declared length: `complete` is set when head plus declared body have arrived, but reading
+  continues through a bounded trailing drain — 150 ms quiet window after the last byte or a hard
+  400 ms drain cap, whichever comes first — inside the absolute `CONNECTION_BUDGET`, the
+  `MAX_REQUEST_BYTES` cap and the stop flag, with a write timeout on every reply. The record
+  exposes declared length and captured bytes separately, so declared 6 versus captured 12 with
+  trailing 6 is asserted rather than assumed. No test depends on one socket read coalescing.
+- **E — discriminating self-check.** The split fixture now sends `Content-Length: 6` plus the
+  first 6 bytes, waits 50 ms, then the last 6 bytes of an actual 12-byte body, and asserts: all
+  12 bytes captured, `trailing == 6`, and the wire length equals head plus the full body. A
+  capture that stopped at the declared length would record 6 bytes and no trailing data and
+  would fail this fixture.
+- **F — retained.** Guarded child through `finish`, file-backed child logs, exact one-case
+  summary checks, canonicalised child environment plus sentinels plus the `ca.json` artefact,
+  fail-closed inspection, and parent rejection of an Intruder settle failure
+  (`AR09-INTRUDER-CLEANUP-FAILED`).
+
+## Coverage at the earlier run (`a3345a2`), not re-run
+
+- `app/core/tests/ar09_binary_tool_state.rs`: 2 cases passed (control plus characterisation).
+- `app/src/ar09_binary_tool_state_tests.rs`: 2 send-path cases passed driving the real app code
   (`request_for_tools` -> `send_following`/`send_once`; `request_for_tools` -> template ->
-  `intruder_run::start` -> `execute_probe`). The Repeater case was named
-  `repeater_send_once_sends_the_lossy_body_with_a_stale_content_length` then; this revision
-  shortens it to `repeater_send_once_sends_the_lossy_body` and adds a third, non-isolated
-  split-delivery fixture self-check, so the next run reports 3 app cases + 2 core cases.
-- Total: 4 passing cases; 0 failing; 0 ignored. These are characterisations of the current code
-  and a transport control — **not** a fix, not GUI evidence, and not proof of correct binary
-  handling.
+  `intruder_run::start` -> `execute_probe`).
+- Observed then: body `00 ff fe 00 c3 28` (6 bytes) arrived as
+  `00 ef bf bd ef bf bd 00 ef bf bd 28` (12 bytes) under `Content-Length: 6`; the Intruder chain
+  sent the same 12 bytes with Content-Length restamped to 12.
 
-Observed then: body `00 ff fe 00 c3 28` (6 bytes) arrived as `00 ef bf bd ef bf bd 00 ef bf bd
-28` (12 bytes) under `Content-Length: 6` in the Repeater chain; the Intruder chain sent the same
-12 bytes with Content-Length restamped to 12.
+The next run is expected to report 3 app cases (two isolated send-path cases plus the
+discriminating split fixture) and 2 core cases.
 
-## Corrections in this revision (fixtures and this note only)
+Claim limits: a converted body plus a declared-length mismatch on one connection. Malformed
+framing and data loss only; no desync or connection-reuse claim.
 
-- Each case that constructs `Shared` is now a parent wrapper that never constructs it. The
-  parent creates a unique tempdir with a fake HOME, a fake XDG_CONFIG_HOME and an explicit CA
-  dir, writes non-secret sentinels at `fakeHOME/.config/webprobe/ca.json` and
-  `fakeXDG/webprobe/ca.json`, and spawns this binary with `--exact <case> --nocapture
-  --test-threads=1`. Isolated paths go to the CHILD environment only; no `set_var`, no chdir,
-  no inherited-HOME reliance, no shell prefixes.
-- The child validates that the three paths are absolute and inside the owned tempdir, and runs
-  exactly one case.
-- The parent requires: child finished inside a 120 s budget (`try_wait` with a deadline, kill
-  and reap on timeout), exactly one reported case, an explicit `CASE-COMPLETE:` record,
-  unchanged sentinels, and no new files under the fake HOME or XDG.
-- The capture fixture records every byte under a bounded idle deadline and never stops early on
-  the declared Content-Length, so header length, body length and trailing bytes are reported
-  separately.
-- A split-delivery self-check (head, 50 ms gap, body) asserts the fixture captures the known
-  byte length; it constructs neither `Shared` nor `App`, so it needs no child-process isolation.
-- The Intruder case asserts the run finishes inside 15 s and carries a guard that stops the run
-  and waits for it to settle during failure cleanup.
-- No subsequent-request desync and no connection-reuse claim is made; the observed facts are a
-  converted body and a declared-length mismatch on one connection. The risk is described as
-  malformed framing and data loss only.
+## Formatting
 
-## Hand-formatting in this revision (rustfmt not run)
-
-Formatting was applied by hand because this goal forbids running any binary, including the
-formatter: import order inside brace groups (`{Shared, send_raw_with}`), the long `INTRUDER`
-constant broken after `=`, one-line calls for split evidence lines, trailing commas in vertical
-macro arguments, short struct literals collapsed to one line, and short method chains joined.
-These hunks are hand-formatting only; the reviewer should validate them with
-`cargo fmt --check` before any rerun.
-
-## CA isolation status
-
-Earlier run: unknown and uncontrolled — the fixtures constructed `Shared::new()` directly, so a
-test binary could resolve the real user CA through `WEBPROBE_CA_DIR`, `XDG_CONFIG_HOME` or
-`HOME`. The wrapper above is designed to prevent that, but it has not been executed; isolation
-remains unproven until an independent reviewer runs it.
-
-## Proposed production change (unapproved, proposal only)
-
-The raw-bytes fallback sketch in the earlier revision is withdrawn. Binary body handling needs a
-byte-backed tool-state design of its own (capture bytes beside the text, transport from the
-bytes, an explicit hex/binary editor decision) and must be reviewed before any edit. No
-production file is touched here.
+The changed test files were copied to `/tmp`, formatted there with
+`rustfmt 1.11.0-stable (0ef1bc3860 2026-11-09)` under `--edition 2024`, and the copies were
+folded back. `rustfmt --check` on copies of the committed blobs exits 0.
 
 ## CA inspection scope
 
-If CA state is ever inspected: path, existence, mtime, size/hash and permissions only. Never
-certificate or private-key contents. No deletion or repair. No inspection was performed here.
+Path, existence, mtime, size/hash and permissions only; never certificate or private-key
+contents; no deletion or repair. This revision reads only names and existence under the owned
+tempdir.
+
+## Proposed production change (unapproved, proposal only)
+
+Binary body handling needs a byte-backed tool-state design of its own (capture bytes beside the
+text, transport from the bytes, an explicit hex/binary editor decision) and must be reviewed
+before any edit. No production file is touched here.
