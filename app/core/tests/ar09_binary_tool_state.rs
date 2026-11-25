@@ -73,27 +73,17 @@ impl Isolation {
         .expect("write HOME sentinel");
         std::fs::write(xdg.join("webprobe").join("ca.json"), SENTINEL_XDG)
             .expect("write XDG sentinel");
-        Isolation {
-            root,
-            home,
-            xdg,
-            ca,
-            child: None,
-            timed_out: false,
-        }
+        Isolation { root, home, xdg, ca, child: None, timed_out: false }
     }
 
     fn spawn(&mut self, case: &str) {
         assert!(
             std::env::var_os(CHILD_MARKER).is_none(),
-            "refusing to spawn a child from inside a child"
+            "refusing to spawn a child from inside a child",
         );
         let exe = std::env::current_exe().expect("current test binary");
         let mut cmd = Command::new(exe);
-        cmd.arg("--exact")
-            .arg(case)
-            .arg("--nocapture")
-            .arg("--test-threads=1");
+        cmd.arg("--exact").arg(case).arg("--nocapture").arg("--test-threads=1");
         cmd.env(CHILD_MARKER, case)
             .env(CHILD_ROOT, &self.root)
             .env("HOME", &self.home)
@@ -129,13 +119,13 @@ impl Isolation {
             std::fs::read(self.home.join(".config").join("webprobe").join("ca.json"))
                 .expect("HOME sentinel readable"),
             SENTINEL_HOME,
-            "the child changed the fake HOME CA file"
+            "the child changed the fake HOME CA file",
         );
         assert_eq!(
             std::fs::read(self.xdg.join("webprobe").join("ca.json"))
                 .expect("XDG sentinel readable"),
             SENTINEL_XDG,
-            "the child changed the fake XDG CA file"
+            "the child changed the fake XDG CA file",
         );
     }
 
@@ -146,7 +136,7 @@ impl Isolation {
         files.retain(|p| !p.ends_with("webprobe/ca.json"));
         assert!(
             files.is_empty(),
-            "files created outside the owned CA dir: {files:?}"
+            "files created outside the owned CA dir: {files:?}",
         );
         println!("AR09-CA-DIR: {:?}", self.ca);
     }
@@ -193,7 +183,7 @@ fn child_branch(case: &str) -> bool {
         assert!(path.is_absolute(), "{var} is not absolute: {path:?}");
         assert!(
             path.starts_with(&root),
-            "{var} {path:?} is outside the owned tempdir {root:?}"
+            "{var} {path:?} is outside the owned tempdir {root:?}",
         );
     }
     println!("AR09-ISOLATION-OK root={}", root.display());
@@ -209,12 +199,12 @@ fn assert_single_case(stdout: &str, want_pass: bool) {
     if want_pass {
         assert!(
             summary.contains("1 passed") && summary.contains("0 failed"),
-            "child did not run exactly one passing case: {summary}"
+            "child did not run exactly one passing case: {summary}",
         );
     } else {
         assert!(
             summary.contains("1 failed") && summary.contains("0 passed"),
-            "child did not run exactly one failing case: {summary}"
+            "child did not run exactly one failing case: {summary}",
         );
     }
 }
@@ -295,13 +285,7 @@ impl Capture {
                 }
             }
         });
-        Capture {
-            port,
-            accepts,
-            requests,
-            stop,
-            join: Some(join),
-        }
+        Capture { port, accepts, requests, stop, join: Some(join) }
     }
 
     fn stop_and_join(&mut self) {
@@ -369,7 +353,7 @@ fn control_body() {
         body.len(),
         raw.len(),
         wire.len(),
-        hex(&body)
+        hex(&body),
     );
     assert_eq!(accepts, 1, "the origin accepted exactly one connection");
     assert_eq!(body, BODY, "body bytes intact (hex {})", hex(&body));
@@ -378,7 +362,7 @@ fn control_body() {
     assert_eq!(
         wire.len(),
         raw.len() + b"Connection: close\r\n".len(),
-        "only the Connection header was added"
+        "only the Connection header was added",
     );
     println!("CASE-COMPLETE: {CONTROL}");
 }
@@ -403,7 +387,7 @@ fn lossy_body() {
     println!(
         "AR09-LOSSY-EVIDENCE declared={declared} body_len={} trailing={trailing} body_hex={}",
         body.len(),
-        hex(&body)
+        hex(&body),
     );
     assert_eq!(body, LOSSY_BODY, "lossy conversion result (hex {})", hex(&body));
     assert_eq!(declared, 6, "header keeps the captured length");
@@ -428,21 +412,21 @@ fn control_transport_preserves_nul_and_non_utf8_body_bytes() {
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(
         !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
     );
     assert!(
         out.status.success(),
         "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status
+        out.status,
     );
     assert_single_case(&stdout, true);
     assert!(
         stdout.contains("AR09-CONTROL-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}"
+        "no per-case completion record\nstdout:\n{stdout}",
     );
     assert!(
         stdout.contains(&format!("CASE-COMPLETE: {CONTROL}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}"
+        "no CASE-COMPLETE line\nstdout:\n{stdout}",
     );
     iso.assert_sentinels();
     iso.assert_no_ca_outside_owned_ca();
@@ -463,21 +447,21 @@ fn repeater_text_state_is_lossy_for_non_utf8_bodies() {
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(
         !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
     );
     assert!(
         out.status.success(),
         "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status
+        out.status,
     );
     assert_single_case(&stdout, true);
     assert!(
         stdout.contains("AR09-LOSSY-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}"
+        "no per-case completion record\nstdout:\n{stdout}",
     );
     assert!(
         stdout.contains(&format!("CASE-COMPLETE: {LOSSY}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}"
+        "no CASE-COMPLETE line\nstdout:\n{stdout}",
     );
     iso.assert_sentinels();
     iso.assert_no_ca_outside_owned_ca();

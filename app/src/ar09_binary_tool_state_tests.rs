@@ -31,7 +31,8 @@ const CHILD_ROOT: &str = "WEBPROBE_AR09_APP_CHILD_ROOT";
 const SENTINEL_HOME: &[u8] = b"ar09-app-sentinel-home: not a CA\n";
 const SENTINEL_XDG: &[u8] = b"ar09-app-sentinel-xdg: not a CA\n";
 const REPEATER: &str = "ar09_binary_tool_state_tests::repeater_send_once_sends_the_lossy_body";
-const INTRUDER: &str = "ar09_binary_tool_state_tests::intruder_attack_sends_the_lossy_template_body";
+const INTRUDER: &str =
+    "ar09_binary_tool_state_tests::intruder_attack_sends_the_lossy_template_body";
 
 const BODY: &[u8] = &[0x00, 0xff, 0xfe, 0x00, 0xc3, 0x28];
 const LOSSY_BODY: &[u8] = &[
@@ -76,27 +77,17 @@ impl Isolation {
         .expect("write HOME sentinel");
         std::fs::write(xdg.join("webprobe").join("ca.json"), SENTINEL_XDG)
             .expect("write XDG sentinel");
-        Isolation {
-            root,
-            home,
-            xdg,
-            ca,
-            child: None,
-            timed_out: false,
-        }
+        Isolation { root, home, xdg, ca, child: None, timed_out: false }
     }
 
     fn spawn(&mut self, case: &str) {
         assert!(
             std::env::var_os(CHILD_MARKER).is_none(),
-            "refusing to spawn a child from inside a child"
+            "refusing to spawn a child from inside a child",
         );
         let exe = std::env::current_exe().expect("current test binary");
         let mut cmd = Command::new(exe);
-        cmd.arg("--exact")
-            .arg(case)
-            .arg("--nocapture")
-            .arg("--test-threads=1");
+        cmd.arg("--exact").arg(case).arg("--nocapture").arg("--test-threads=1");
         cmd.env(CHILD_MARKER, case)
             .env(CHILD_ROOT, &self.root)
             .env("HOME", &self.home)
@@ -132,13 +123,13 @@ impl Isolation {
             std::fs::read(self.home.join(".config").join("webprobe").join("ca.json"))
                 .expect("HOME sentinel readable"),
             SENTINEL_HOME,
-            "the child changed the fake HOME CA file"
+            "the child changed the fake HOME CA file",
         );
         assert_eq!(
             std::fs::read(self.xdg.join("webprobe").join("ca.json"))
                 .expect("XDG sentinel readable"),
             SENTINEL_XDG,
-            "the child changed the fake XDG CA file"
+            "the child changed the fake XDG CA file",
         );
     }
 
@@ -149,7 +140,7 @@ impl Isolation {
         files.retain(|p| !p.ends_with("webprobe/ca.json"));
         assert!(
             files.is_empty(),
-            "files created outside the owned CA dir: {files:?}"
+            "files created outside the owned CA dir: {files:?}",
         );
         println!("AR09-APP-CA-DIR: {:?}", self.ca);
     }
@@ -196,7 +187,7 @@ fn child_branch(case: &str) -> bool {
         assert!(path.is_absolute(), "{var} is not absolute: {path:?}");
         assert!(
             path.starts_with(&root),
-            "{var} {path:?} is outside the owned tempdir {root:?}"
+            "{var} {path:?} is outside the owned tempdir {root:?}",
         );
     }
     println!("AR09-APP-ISOLATION-OK root={}", root.display());
@@ -211,7 +202,7 @@ fn assert_single_case(stdout: &str) {
         .unwrap_or_else(|| panic!("child printed no test summary:\n{stdout}"));
     assert!(
         summary.contains("1 passed") && summary.contains("0 failed"),
-        "child did not run exactly one passing case: {summary}"
+        "child did not run exactly one passing case: {summary}",
     );
 }
 
@@ -306,13 +297,7 @@ impl Capture {
                 }
             }
         });
-        Capture {
-            port,
-            accepts,
-            requests,
-            stop,
-            join: Some(join),
-        }
+        Capture { port, accepts, requests, stop, join: Some(join) }
     }
 
     fn stop_and_join(&mut self) {
@@ -385,7 +370,7 @@ fn repeater_body() {
     println!(
         "AR09-REPEATER-EVIDENCE accepts={accepts} declared={declared} body_len={} trailing={trailing} edited_line={edited_line} body_hex={}",
         body.len(),
-        hex(&body)
+        hex(&body),
     );
     assert!(edited_line, "the edited request line reached the wire");
     assert_eq!(accepts, 1, "one origin connection");
@@ -411,9 +396,7 @@ fn intruder_body() {
         AttackSettings::default(),
     )
     .expect("attack starts");
-    let guard = RunGuard {
-        state: Arc::clone(&state),
-    };
+    let guard = RunGuard { state: Arc::clone(&state) };
     let end = Instant::now() + Duration::from_secs(15);
     while state.is_running() && Instant::now() < end {
         std::thread::sleep(Duration::from_millis(10));
@@ -421,7 +404,7 @@ fn intruder_body() {
     assert!(
         !state.is_running(),
         "the Intruder run did not finish within 15 s (done={})",
-        state.done.load(Ordering::SeqCst)
+        state.done.load(Ordering::SeqCst),
     );
     state.drain_rows();
     let wire = capture.first(IDLE + Duration::from_secs(3));
@@ -433,13 +416,13 @@ fn intruder_body() {
     println!(
         "AR09-INTRUDER-EVIDENCE declared={declared} body_len={} trailing={trailing} body_hex={}",
         body.len(),
-        hex(&body)
+        hex(&body),
     );
     assert_eq!(body, LOSSY_BODY, "the converted template body was sent (hex {})", hex(&body));
     assert_eq!(
         declared,
         body.len(),
-        "Intruder restamped Content-Length to the converted length"
+        "Intruder restamped Content-Length to the converted length",
     );
     assert_eq!(trailing, 0, "no bytes past the restamped length");
     drop(guard);
@@ -477,7 +460,7 @@ fn capture_fixture_records_a_split_delivery_without_trusting_content_length() {
         "AR09-FIXTURE-EVIDENCE known_len={} captured_len={} declared={declared} body_len={} trailing={trailing}",
         raw.len(),
         wire.len(),
-        body.len()
+        body.len(),
     );
     assert_eq!(wire.len(), raw.len(), "the fixture captured the known length");
     assert_eq!(body, BODY, "the split body is intact");
@@ -497,21 +480,21 @@ fn repeater_send_once_sends_the_lossy_body() {
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(
         !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
     );
     assert!(
         out.status.success(),
         "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status
+        out.status,
     );
     assert_single_case(&stdout);
     assert!(
         stdout.contains("AR09-REPEATER-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}"
+        "no per-case completion record\nstdout:\n{stdout}",
     );
     assert!(
         stdout.contains(&format!("CASE-COMPLETE: {REPEATER}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}"
+        "no CASE-COMPLETE line\nstdout:\n{stdout}",
     );
     iso.assert_sentinels();
     iso.assert_no_ca_outside_owned_ca();
@@ -530,21 +513,21 @@ fn intruder_attack_sends_the_lossy_template_body() {
     let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(
         !iso.timed_out,
-        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "child timed out\nstdout:\n{stdout}\nstderr:\n{stderr}",
     );
     assert!(
         out.status.success(),
         "child failed ({:?})\nstdout:\n{stdout}\nstderr:\n{stderr}",
-        out.status
+        out.status,
     );
     assert_single_case(&stdout);
     assert!(
         stdout.contains("AR09-INTRUDER-EVIDENCE"),
-        "no per-case completion record\nstdout:\n{stdout}"
+        "no per-case completion record\nstdout:\n{stdout}",
     );
     assert!(
         stdout.contains(&format!("CASE-COMPLETE: {INTRUDER}")),
-        "no CASE-COMPLETE line\nstdout:\n{stdout}"
+        "no CASE-COMPLETE line\nstdout:\n{stdout}",
     );
     iso.assert_sentinels();
     iso.assert_no_ca_outside_owned_ca();
