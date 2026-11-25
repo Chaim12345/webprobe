@@ -8,9 +8,9 @@
     "p1": 44,
     "p2": 29,
     "by_status": {
-      "done": 122,
+      "done": 123,
       "rejected": 2,
-      "todo": 18
+      "todo": 17
     }
   },
   "tasks": [
@@ -1521,8 +1521,9 @@
       "title": "Java sidecar: route replies by id, no lock across the round trip",
       "acceptance": "F2: exchange_with no longer holds io_lock for a whole round trip; one extension's active check cannot serialise proxied messages. Before R-20.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section. In progress 2026-11-24: branch arch/ar08-sidecar-demux-20261124."
+      "status": "done",
+      "evidence": "core/src/ext_host.rs: the reader thread routes each reply by id, and each scan-time call by the scan it names, to the caller waiting for it; no lock is held across a round trip (io_lock is gone). app/sidecar (MontoyaBridge, Engine, Wire, Persist): messages run on lanes (HTTP and Proxy handlers, active scan, passive scan, UI, Intruder, WebSocket, session), in arrival order within a lane and side by side across lanes. A failed round trip passes that message through; the sidecar is marked dead only on closed pipes or three timeouts in a row on one lane. Real-JVM test ext_host::tests::stage5_proxy_hook_does_not_wait_for_a_scan_check added to scripts/ci-jvm-tests.py; the gate passes locally with JDK 21 (6 stage tests). Source: qa/ARCH-REVIEW-2026-11-18.md F2.",
+      "completed": "2026-11-25"
     },
     {
       "id": "AR-09",
