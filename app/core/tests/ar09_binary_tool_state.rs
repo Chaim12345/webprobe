@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use webprobe_core::net::{send_raw_with, Shared};
+use webprobe_core::net::{Shared, send_raw_with};
 
 const IDLE: Duration = Duration::from_millis(400);
 const CASE_BUDGET: Duration = Duration::from_secs(60);
@@ -73,7 +73,14 @@ impl Isolation {
         .expect("write HOME sentinel");
         std::fs::write(xdg.join("webprobe").join("ca.json"), SENTINEL_XDG)
             .expect("write XDG sentinel");
-        Isolation { root, home, xdg, ca, child: None, timed_out: false }
+        Isolation {
+            root,
+            home,
+            xdg,
+            ca,
+            child: None,
+            timed_out: false,
+        }
     }
 
     fn spawn(&mut self, case: &str) {
@@ -83,7 +90,10 @@ impl Isolation {
         );
         let exe = std::env::current_exe().expect("current test binary");
         let mut cmd = Command::new(exe);
-        cmd.arg("--exact").arg(case).arg("--nocapture").arg("--test-threads=1");
+        cmd.arg("--exact")
+            .arg(case)
+            .arg("--nocapture")
+            .arg("--test-threads=1");
         cmd.env(CHILD_MARKER, case)
             .env(CHILD_ROOT, &self.root)
             .env("HOME", &self.home)
@@ -285,7 +295,13 @@ impl Capture {
                 }
             }
         });
-        Capture { port, accepts, requests, stop, join: Some(join) }
+        Capture {
+            port,
+            accepts,
+            requests,
+            stop,
+            join: Some(join),
+        }
     }
 
     fn stop_and_join(&mut self) {
@@ -303,7 +319,10 @@ impl Capture {
             if let Some(wire) = self.requests.lock().unwrap().first().cloned() {
                 return wire;
             }
-            assert!(Instant::now() < end, "the origin recorded no request in time");
+            assert!(
+                Instant::now() < end,
+                "the origin recorded no request in time"
+            );
             std::thread::sleep(Duration::from_millis(10));
         }
     }
@@ -389,9 +408,18 @@ fn lossy_body() {
         body.len(),
         hex(&body),
     );
-    assert_eq!(body, LOSSY_BODY, "lossy conversion result (hex {})", hex(&body));
+    assert_eq!(
+        body,
+        LOSSY_BODY,
+        "lossy conversion result (hex {})",
+        hex(&body)
+    );
     assert_eq!(declared, 6, "header keeps the captured length");
-    assert_eq!(declared, BODY.len(), "header still declares the original body");
+    assert_eq!(
+        declared,
+        BODY.len(),
+        "header still declares the original body"
+    );
     assert_eq!(trailing, 6, "6 bytes sit past the declared length");
     println!("CASE-COMPLETE: {LOSSY}");
 }
@@ -466,4 +494,3 @@ fn repeater_text_state_is_lossy_for_non_utf8_bodies() {
     iso.assert_sentinels();
     iso.assert_no_ca_outside_owned_ca();
 }
-
