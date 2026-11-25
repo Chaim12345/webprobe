@@ -90,17 +90,21 @@ as proof that it fully explains the delta, and the delta is left unresolved.
 ### 1. Unwind-safe child
 
 `app/core/tests/ca_isolation.rs` owns each child in a `ChildGuard` whose `Drop`
-kills and reaps. `wait_deadline` polls `try_wait` to a 120 s deadline, reaps on
-success, and on timeout kills, reaps and returns `TimedOut`; a `try_wait` error
-propagates and the guard still reaps on unwind. The owned root is declared
-**before** the guard, so reverse drop order reaps the child before `OwnedDir`
-removes any file.
+calls `kill_and_reap` (kill, then wait). `wait_deadline` polls `try_wait` to a
+120 s deadline, reaps on success, and on timeout kills, reaps and returns
+`TimedOut`; a `try_wait` error propagates and the guard still reaps on unwind.
+The guard is held until the case is finished, then `kill_and_reap` is called
+explicitly before `drop(root)`; the owned root is also declared **before** the
+guard, so reverse drop order reaps the child first even on unwind.
 
 ### 2. Strict parent-side and child-side validation
 
-- The parent refuses to launch if any of `WP_F13_CHILD`, `WP_F13_ROOT`,
-  `WP_F13_CA_DIR`, `WP_F13_CASE` is present in its own environment: an ambient
-  marker means the run is not its own.
+- The parent refuses to launch if **any** ambient f13 marker is present in its
+  own environment — any key starting with `WP_F13_`, including ones this fixture
+  does not know about, or any value starting with `f13-`: an ambient marker means
+  the run is not its own.
+- The child requires its `WP_F13_*` key set to be exactly the four it was
+  given, so an inherited extra marker fails closed.
 - The parent writes a nonce into `<root>/.f13-nonce`; the child requires that
   file to exist and to equal the marker, so an inherited marker alone can never
   reach a CA construction.

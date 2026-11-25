@@ -93,6 +93,31 @@ impl Drop for ChildGuard {
     }
 }
 
+/// Any ambient f13 marker - a `WP_F13_*` key or an `f13-` value - means this
+/// process is not the child of this run, so nothing may be launched from it.
+fn ambient_marker() -> Option<String> {
+    std::env::vars_os().find_map(|(key, value)| {
+        let key = key.to_string_lossy().into_owned();
+        if key.starts_with("WP_F13_") {
+            return Some(key);
+        }
+        value
+            .to_string_lossy()
+            .starts_with("f13-")
+            .then(|| format!("value of {key}"))
+    })
+}
+
+/// The `WP_F13_*` keys this process actually carries, sorted.
+fn f13_keys() -> Vec<String> {
+    let mut keys: Vec<String> = std::env::vars_os()
+        .map(|(key, _)| key.to_string_lossy().into_owned())
+        .filter(|key| key.starts_with("WP_F13_"))
+        .collect();
+    keys.sort();
+    keys
+}
+
 fn nonce() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -189,11 +214,8 @@ fn validate_ca_dir(ca_dir: &Path, root: &Path) -> PathBuf {
 /// killed and reaped before `OwnedDir` removes anything.
 #[test]
 fn injected_ca_leaves_the_default_user_ca_alone() {
-    for var in [MARKER, ROOT_VAR, CA_VAR, CASE_VAR] {
-        assert!(
-            std::env::var_os(var).is_none(),
-            "ambient {var}: this run is not its own child, refusing to launch"
-        );
+    if let Some(marker) = ambient_marker() {
+        panic!("ambient f13 marker ({marker}): this run is not its own child, refusing to launch");
     }
 
     let mut cases = 0usize;
@@ -282,8 +304,11 @@ fn injected_ca_leaves_the_default_user_ca_alone() {
                 );
             }
         }
+        // Reap explicitly before the owned root goes away instead of relying on
+        // drop order alone; `kill_and_reap` is a no-op once the child is reaped.
+        child.kill_and_reap();
+        drop(root);
         cases += 1;
-        // `child` (declared after `root`) is reaped here before `root` drops.
     }
     assert_eq!(cases, 3, "case count");
 }
@@ -296,6 +321,18 @@ fn child_case() {
         return;
     };
     assert!(marker.starts_with("f13-"), "inherited marker rejected");
+    let mut expected = vec![
+        CA_VAR.to_string(),
+        CASE_VAR.to_string(),
+        MARKER.to_string(),
+        ROOT_VAR.to_string(),
+    ];
+    expected.sort();
+    assert_eq!(
+        f13_keys(),
+        expected,
+        "unexpected ambient WP_F13_* marker in the child"
+    );
     let root = PathBuf::from(std::env::var_os(ROOT_VAR).expect("child root"));
     let case = std::env::var(CASE_VAR).expect("child case");
     let ca_dir = PathBuf::from(std::env::var_os(CA_VAR).expect("child ca dir"));
