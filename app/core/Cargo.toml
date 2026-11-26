@@ -23,7 +23,7 @@ regex.workspace = true
 rcgen = { version = "0.13", features = ["x509-parser"] }
 x509-parser = { version = "0.16", features = ["verify"] }
 rand.workspace = true
-rsa = "0.9"
+rsa = "0.10"
 serde.workspace = true
 serde_json.workspace = true
 # N-06: history bodies in mapped, unlinked segment files (core/src/body.rs).

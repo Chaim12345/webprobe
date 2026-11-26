@@ -121,7 +121,7 @@ pub fn parse_interaction(json: &str) -> Option<RemoteInteraction> {
 /// Unwrap the AES key (RSA-OAEP-SHA256) and decrypt each `iv || AES-CTR`
 /// message. Messages that fail to decode are skipped.
 pub fn decrypt_messages(
-    key: &rsa::RsaPrivateKey,
+    key: &rsa::PrivateKey,
     aes_key_b64: &str,
     data: &[String],
 ) -> Result<Vec<String>, String> {
@@ -130,7 +130,7 @@ pub fn decrypt_messages(
         .decode(aes_key_b64.trim())
         .map_err(|e| format!("aes_key base64: {e}"))?;
     let aes_key = key
-        .decrypt(rsa::Oaep::new::<sha2::Sha256>(), &wrapped)
+        .oaep_decrypt::<rsa::sha2::Sha256>(&wrapped)
         .map_err(|e| format!("aes_key unwrap: {e}"))?;
     let mut out = Vec::new();
     for item in data {
@@ -252,7 +252,7 @@ pub struct Session {
     pub cid: String,
     secret: String,
     token: Option<String>,
-    key: rsa::RsaPrivateKey,
+    key: rsa::PrivateKey,
     /// The upstream route every control-server connection follows,
     /// captured at registration; a route change applies to the next
     /// registration.
@@ -300,7 +300,7 @@ impl Session {
     ) -> Result<Self, String> {
         use rsa::pkcs8::EncodePublicKey;
         let (server, port) = parse_server(server)?;
-        let key = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 2048)
+        let key = rsa::PrivateKey::new(&mut crate::tls::OsRandom, 2048)
             .map_err(|e| format!("rsa: {e}"))?;
         let der = key
             .to_public_key()
@@ -431,11 +431,11 @@ mod tests {
     fn decrypts_interactsh_messages() {
         use ctr::cipher::{KeyIvInit, StreamCipher};
         let mut rng = rand::thread_rng();
-        let key = rsa::RsaPrivateKey::new(&mut rng, 1024).unwrap();
+        let key = rsa::PrivateKey::new(&mut crate::tls::OsRandom, 1024).unwrap();
         let aes_key: [u8; 32] = rng.r#gen();
         let wrapped = key
             .to_public_key()
-            .encrypt(&mut rng, rsa::Oaep::new::<sha2::Sha256>(), &aes_key)
+            .oaep_encrypt::<rsa::sha2::Sha256>(&aes_key)
             .unwrap();
         let msg = r#"{"protocol":"smtp","unique-id":"ABCDEFGHIJKLMNOPQRST1234567890abc","full-id":"abcdefghijklmnopqrst1234567890abc","raw-request":"MAIL FROM:<a@b>","remote-address":"203.0.113.9","smtp-from":"a@b","timestamp":"2026-11-16T00:00:00Z"}"#;
         let iv: [u8; 16] = rng.r#gen();

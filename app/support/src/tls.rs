@@ -88,9 +88,35 @@ pub fn import_ca(dir: &std::path::Path, cert: &[u8], key: &[u8]) -> Result<Strin
         .join(":"))
 }
 
+/// The operating system's random source, in the shape `rsa` 0.10 takes
+/// (rand_core 0.10). The rest of the workspace is on rand 0.8, whose `OsRng`
+/// does the actual work.
+pub struct OsRandom;
+
+impl rsa::rand_core::TryRng for OsRandom {
+    type Error = rand::Error;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut b = [0u8; 4];
+        self.try_fill_bytes(&mut b)?;
+        Ok(u32::from_le_bytes(b))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut b = [0u8; 8];
+        self.try_fill_bytes(&mut b)?;
+        Ok(u64::from_le_bytes(b))
+    }
+
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        rand::RngCore::try_fill_bytes(&mut rand::rngs::OsRng, dst)
+    }
+}
+
+impl rsa::rand_core::TryCryptoRng for OsRandom {}
+
 fn generate_rsa_key() -> Result<KeyPair, String> {
-    let mut rng = rand::rngs::OsRng;
-    let key = rsa::RsaPrivateKey::new(&mut rng, RSA_BITS)
+    let key = rsa::PrivateKey::new(&mut OsRandom, RSA_BITS)
         .map_err(|e| format!("generate RSA key: {e}"))?;
     let der = key
         .to_pkcs8_der()

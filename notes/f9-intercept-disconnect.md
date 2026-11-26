@@ -89,7 +89,8 @@ Executed after the fix, with the isolated-child fixture described above:
   response-hold call sites are wired but have no disconnect test.
 - Liveness is a peek for EOF. A client that half-closes after its request (FIN, still reading)
   looks the same as a client that left, so its held request is dropped; the WebSocket path
-  already behaves this way.
+  already behaves this way. Accepted by the owner on 2026-11-26 (issue #241): the
+  alternative keeps requests from departed clients queued and forwardable.
 - Over TLS a clean close leaves the peer's close_notify record unread in the socket buffer, so
   the peek sees data, not EOF: a clean TLS close is not detected, only a reset or a FIN without
   close_notify. Detecting it needs a different primitive (for example POLLRDHUP).

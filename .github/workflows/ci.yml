@@ -108,6 +108,23 @@ jobs:
           WEBPROBE_REQUIRE_JAVA: '1'
           WEBPROBE_BURP_JAR: ${{ runner.temp }}/montoya-api.jar
         run: cargo test -p webprobe-core --locked ext_host::tests::montoya_ -- --test-threads=1
+  # Known-vulnerable dependencies fail the build (issue #251). Unmaintained
+  # crates are reported as warnings and do not fail it.
+  advisories:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-0.23.0
+      - name: Install cargo-audit
+        run: command -v cargo-audit || cargo install cargo-audit --version 0.23.0 --locked
+      - run: cargo audit
+
   bambda:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci != 'false') }}
