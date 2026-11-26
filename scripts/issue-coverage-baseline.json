@@ -10,16 +10,16 @@
       "status": "excluded"
     },
     "Client-side SQL injection (DOM-based)": {
-      "note": "NOT COVERED by WebProbe. Source reading found no detection path in the inspected reference build: the decoded static analyser tables (burp.Zeys) and dynamic decoder (burp.Zcwh) yielded no SQL sink mapping; the observed webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). This is build-scoped negative evidence, not proof of retirement, unreachability, or exclusion from parity. Support is deferred pending an explicit scope decision and further verification (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6).",
-      "status": "decision"
+      "note": "Out of scope by the owner's decision of 2026-11-26 (issue #260): the sink it targets, WebSQL's executeSql, is gone from current Chromium, and no detection path was found in the inspected reference build (burp.Zeys, burp.Zcwh; docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6). Reopen if static JavaScript analysis (S-04) shows Burp reports it.",
+      "status": "excluded"
     },
     "Client-side SQL injection (reflected DOM-based)": {
-      "note": "NOT COVERED by WebProbe. Source reading found no detection path in the inspected reference build: the decoded static analyser tables (burp.Zeys) and dynamic decoder (burp.Zcwh) yielded no SQL sink mapping; the observed webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). This is build-scoped negative evidence, not proof of retirement, unreachability, or exclusion from parity. Support is deferred pending an explicit scope decision and further verification (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6).",
-      "status": "decision"
+      "note": "Out of scope by the owner's decision of 2026-11-26 (issue #260): the sink it targets, WebSQL's executeSql, is gone from current Chromium, and no detection path was found in the inspected reference build (burp.Zeys, burp.Zcwh; docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6). Reopen if static JavaScript analysis (S-04) shows Burp reports it.",
+      "status": "excluded"
     },
     "Client-side SQL injection (stored DOM-based)": {
-      "note": "NOT COVERED by WebProbe. Source reading found no detection path in the inspected reference build: the decoded static analyser tables (burp.Zeys) and dynamic decoder (burp.Zcwh) yielded no SQL sink mapping; the observed webdatabase.executeSql literal is a follow-up payload context (burp.Zbjx:158). This is build-scoped negative evidence, not proof of retirement, unreachability, or exclusion from parity. Support is deferred pending an explicit scope decision and further verification (docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6).",
-      "status": "decision"
+      "note": "Out of scope by the owner's decision of 2026-11-26 (issue #260): the sink it targets, WebSQL's executeSql, is gone from current Chromium, and no detection path was found in the inspected reference build (burp.Zeys, burp.Zcwh; docs/specs/R-13-static-js-analysis.research.md, sections 2.4 and 6). Reopen if static JavaScript analysis (S-04) shows Burp reports it.",
+      "status": "excluded"
     },
     "Client-side desync": {
       "note": "Burp detects these by response timing only (Zg3d, Zhao); excluded by the owner's no-timing rule, roadmap F-06",

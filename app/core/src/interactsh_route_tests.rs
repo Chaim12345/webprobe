@@ -314,7 +314,7 @@ fn poll_and_deregister_use_the_selected_route() {
         cid: random_lower_alnum(CID_LEN),
         secret: random_uuid(),
         token: None,
-        key: rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 1024).unwrap(),
+        key: rsa::PrivateKey::new(&mut crate::tls::OsRandom, 1024).unwrap(),
         route: http_route(&proxy),
     };
     let _ = session.poll();
