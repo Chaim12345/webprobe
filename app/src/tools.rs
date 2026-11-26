@@ -3049,6 +3049,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         tls_pass_through: app.shared.tls_bypass.lock().unwrap().clone(),
         streaming_responses: app.shared.streaming.lock().unwrap().clone(),
         listener_http2: app.shared.listener_http2.load(Ordering::SeqCst),
+        http2_enabled: webprobe_core::scan_config::shared_config(&app.shared).lock().unwrap().http.http2_enabled,
         ws_match_replace_rules: app.shared.ws_rules.lock().unwrap().clone(),
         ws_match_replace_disable_out_of_scope: app
             .shared
@@ -3476,6 +3477,11 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.shared
         .listener_http2
         .store(data.proxy.listener_http2, Ordering::SeqCst);
+    webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap()
+        .http
+        .http2_enabled = data.proxy.http2_enabled;
     *app.shared.ws_rules.lock().unwrap() = data.proxy.ws_match_replace_rules.clone();
     app.shared.ws_rules_in_scope_only.store(
         data.proxy.ws_match_replace_disable_out_of_scope,
@@ -3726,7 +3732,10 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                 running: app.shared.listener_running.load(Ordering::SeqCst),
                 ..Default::default()
             };
-            let json = webprobe_core::burp_config::export_project_options(&listener);
+            let http = webprobe_core::burp_config::HttpOptions {
+                http2_enabled: webprobe_core::scan_config::shared_config(&app.shared).lock().unwrap().http.http2_enabled,
+            };
+            let json = webprobe_core::burp_config::export_project_options(&listener, &http);
             // The file holds the REST API keys: private from the first write.
             match webprobe_core::util::write_private(
                 std::path::Path::new(opts_path.trim()),
@@ -3752,13 +3761,20 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
             match loaded {
                 Ok((text, json)) => {
                     let mut listener = webprobe_core::burp_config::ProxyListener::default();
+                    let mut http = webprobe_core::burp_config::HttpOptions::default();
                     let mut notes = Vec::new();
                     webprobe_core::burp_config::apply_project_options(
                         &json,
                         &mut listener,
+                        &mut http,
                         &mut notes,
                     );
                     app.shared.proxy_port.store(listener.port, Ordering::SeqCst);
+                    webprobe_core::scan_config::shared_config(&app.shared)
+                        .lock()
+                        .unwrap()
+                        .http
+                        .http2_enabled = http.http2_enabled;
                     if let Ok(mut cfg) = webprobe_core::scan_library::parse_config(
                         opts_path.trim(),
                         text.as_bytes(),
@@ -4135,6 +4151,39 @@ mod save_restore_tests {
             .expect("save/restore finished (no deadlock)");
         assert!(checks && points, "scanner settings restored ({status})");
         assert_eq!(poll, 9, "Collaborator poll interval restored");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// S-05: Burp's upstream HTTP/2 setting is saved with the project and
+    /// restored with it.
+    #[test]
+    fn project_http2_setting_round_trips() {
+        let dir = std::env::temp_dir().join(format!("wp-http2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json").to_string_lossy().into_owned();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let mut app = crate::App::new(net::Shared::new());
+            app.project_path = p2;
+            webprobe_core::scan_config::shared_config(&app.shared)
+                .lock()
+                .unwrap()
+                .http
+                .http2_enabled = false;
+            save_project(&mut app, true);
+            let mut fresh = crate::App::new(net::Shared::new());
+            fresh.project_path = app.project_path.clone();
+            restore_project(&mut fresh, true);
+            let _ = tx.send((
+                webprobe_core::scan_config::shared_config(&fresh.shared).lock().unwrap().http.http2_enabled,
+                fresh.project_status.clone(),
+            ));
+        });
+        let (on, status) = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("save/restore finished");
+        assert!(!on, "http.http2.enable_http2 restored off ({status})");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

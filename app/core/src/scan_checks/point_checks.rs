@@ -855,8 +855,9 @@ impl RequestCheck for JwkSetDisclosed {
 /// burp.Zpf9.Zq). WebProbe keeps no such record: the probe's own handshake
 /// stands in for it, and a host whose ALPN selected `h2` is not reported.
 /// Burp also returns, logging Zm8i.H2_DISABLED, when the project option
-/// project_options.http.http2.enable_http2 is off (Zps6.ZUp); WebProbe's
-/// upstream connections always offer HTTP/2, so that gate never closes.
+/// project_options.http.http2.enable_http2 is off (Zps6.ZUp). WebProbe's
+/// upstream connections always offer HTTP/2, so that option gates only
+/// this check (`scan_config::shared_config().http.http2_enabled`).
 /// After reporting, Zpfw.Zd marks the host in the scan task (Zggr.Z_o),
 /// which only the request smuggling check reads (burp.Zg3d.Zn, to pick its
 /// HTTP/2 techniques); WebProbe has no such check, so nothing is marked.
@@ -875,6 +876,7 @@ impl RequestCheck for HiddenHttp2 {
     fn run(&self, cx: &ScanCtx) {
         if cx.stopped()
             || !cx.runs(self.issue())
+            || !cx.http2_enabled
             || !cx.entry.https
             || !cx
                 .state()

@@ -81,38 +81,79 @@ impl Default for ApiConfig {
     }
 }
 
-/// Project options JSON, Burp's `proxy.request_listeners` shape. WebProbe
-/// has one listener, so it is the single array entry.
-pub fn export_project_options(listener: &ProxyListener) -> Value {
-    obj(vec![(
-        "proxy",
-        obj(vec![(
-            "request_listeners",
-            json!([{
-                "certificate_mode": "per_host",
-                "listen_mode": listener.listen_mode,
-                "listener_port": listener.port,
-                "running": listener.running,
-            }]),
-        )]),
-    )])
+/// Burp's project options `http` section. Only the fields WebProbe acts on
+/// are modelled; unknown keys are left alone on import.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HttpOptions {
+    /// `http.http2.enable_http2` (Burp's default: on). With it off the
+    /// Hidden HTTP/2 check does not run.
+    pub http2_enabled: bool,
 }
 
-/// Read a project options JSON into `listener`. Unknown sections and keys
-/// are ignored with a note in `notes` (like Burp's "not all settings could
-/// be restored" note). Scan-configuration sections (`scanner`, `crawler`)
-/// are skipped silently here: R-11's scan configuration model owns them,
-/// and the binaries route each --config-file through `scan_library` for
-/// those keys.
-pub fn apply_project_options(json: &Value, listener: &mut ProxyListener, notes: &mut Vec<String>) {
+impl Default for HttpOptions {
+    fn default() -> Self {
+        Self {
+            http2_enabled: true,
+        }
+    }
+}
+
+/// Project options JSON, Burp's `proxy.request_listeners` and
+/// `http.http2.enable_http2` shapes. WebProbe has one listener, so it is
+/// the single array entry.
+pub fn export_project_options(listener: &ProxyListener, http: &HttpOptions) -> Value {
+    obj(vec![
+        (
+            "proxy",
+            obj(vec![(
+                "request_listeners",
+                json!([{
+                    "certificate_mode": "per_host",
+                    "listen_mode": listener.listen_mode,
+                    "listener_port": listener.port,
+                    "running": listener.running,
+                }]),
+            )]),
+        ),
+        (
+            "http",
+            obj(vec![(
+                "http2",
+                obj(vec![("enable_http2", Value::Bool(http.http2_enabled))]),
+            )]),
+        ),
+    ])
+}
+
+/// Read a project options JSON into `listener` and `http`. Unknown sections
+/// and keys are ignored with a note in `notes` (like Burp's "not all
+/// settings could be restored" note). Scan-configuration sections
+/// (`scanner`, `crawler`) are skipped silently here: R-11's scan
+/// configuration model owns them, and the binaries route each
+/// --config-file through `scan_library` for those keys.
+pub fn apply_project_options(
+    json: &Value,
+    listener: &mut ProxyListener,
+    http: &mut HttpOptions,
+    notes: &mut Vec<String>,
+) {
     let Some(root) = json.as_object() else {
         notes.push("config file is not a JSON object; ignored".to_string());
         return;
     };
     for section in root.keys() {
-        if section != "proxy" && section != "scanner" && section != "crawler" {
+        if !matches!(section.as_str(), "proxy" | "scanner" | "crawler" | "http") {
             notes.push(format!("unsupported section `{section}` ignored"));
         }
+    }
+    if let Some(enable) = root
+        .get("http")
+        .and_then(Value::as_object)
+        .and_then(|h| h.get("http2"))
+        .and_then(Value::as_object)
+        .and_then(|h2| get_bool(h2, "enable_http2"))
+    {
+        http.http2_enabled = enable;
     }
     let Some(proxy) = root.get("proxy").and_then(Value::as_object) else {
         return;
@@ -250,8 +291,8 @@ mod tests {
         assert_eq!(l.listen_mode, "loopback_only");
     }
 
-    /// The project options JSON has Burp's proxy.request_listeners shape
-    /// and round-trips.
+    /// The project options JSON has Burp's proxy.request_listeners and
+    /// http.http2 shapes and round-trips.
     #[test]
     fn project_options_round_trip() {
         let listener = ProxyListener {
@@ -259,7 +300,10 @@ mod tests {
             running: false,
             listen_mode: "all_interfaces".to_string(),
         };
-        let json = export_project_options(&listener);
+        let http = HttpOptions {
+            http2_enabled: false,
+        };
+        let json = export_project_options(&listener, &http);
         assert_eq!(
             json["proxy"]["request_listeners"][0]["listener_port"],
             json!(8081)
@@ -268,11 +312,37 @@ mod tests {
             json["proxy"]["request_listeners"][0]["running"],
             Value::Bool(false)
         );
+        assert_eq!(json["http"]["http2"]["enable_http2"], Value::Bool(false));
         let mut back = ProxyListener::default();
+        let mut back_http = HttpOptions::default();
         let mut notes = Vec::new();
-        apply_project_options(&json, &mut back, &mut notes);
+        apply_project_options(&json, &mut back, &mut back_http, &mut notes);
         assert!(notes.is_empty(), "{notes:?}");
         assert_eq!(back, listener);
+        assert_eq!(back_http, http);
+    }
+
+    /// Burp's project option `http.http2.enable_http2` is read from the
+    /// project options JSON (S-05).
+    #[test]
+    fn http2_enable_setting_is_read_from_project_options() {
+        let json = json!({"http": {"http2": {"enable_http2": false}}});
+        let mut listener = ProxyListener::default();
+        let mut http = HttpOptions::default();
+        let mut notes = Vec::new();
+        apply_project_options(&json, &mut listener, &mut http, &mut notes);
+        assert!(!http.http2_enabled, "off is applied");
+        assert!(notes.is_empty(), "http is a supported section: {notes:?}");
+
+        // A file without the key leaves the default (on) alone.
+        let mut http = HttpOptions::default();
+        apply_project_options(
+            &json!({"http": {"http1": {"enable_keep_alive": false}}}),
+            &mut listener,
+            &mut http,
+            &mut notes,
+        );
+        assert!(http.http2_enabled);
     }
 
     /// Unknown sections are noted; scan-configuration sections are skipped
@@ -286,8 +356,9 @@ mod tests {
             "proxy": {"request_listeners": [{"listener_port": 9090}]},
         });
         let mut listener = ProxyListener::default();
+        let mut http = HttpOptions::default();
         let mut notes = Vec::new();
-        apply_project_options(&json, &mut listener, &mut notes);
+        apply_project_options(&json, &mut listener, &mut http, &mut notes);
         assert_eq!(listener.port, 9090);
         assert_eq!(notes.len(), 1, "{notes:?}");
         assert!(notes[0].contains("target"));
@@ -299,8 +370,9 @@ mod tests {
     fn last_listener_wins() {
         let json = json!({"proxy": {"request_listeners": [{"listener_port": 8081}, {"listener_port": 8082, "running": false}]}});
         let mut listener = ProxyListener::default();
+        let mut http = HttpOptions::default();
         let mut notes = Vec::new();
-        apply_project_options(&json, &mut listener, &mut notes);
+        apply_project_options(&json, &mut listener, &mut http, &mut notes);
         assert_eq!(listener.port, 8082);
         assert!(!listener.running);
     }

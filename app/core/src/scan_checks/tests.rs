@@ -973,6 +973,15 @@ fn hidden_h2_lab_answering(
 /// Scan `GET /` on 127.0.0.1:`port` with only the hidden HTTP/2 check
 /// on; the (path, severity, confidence, detail) of each Hidden HTTP 2.
 fn hidden_h2_scan(port: u16, https: bool) -> Vec<(String, String, String, String)> {
+    hidden_h2_scan_with_http2(port, https, true)
+}
+
+/// The same scan with the project option `http.http2.enable_http2` set.
+fn hidden_h2_scan_with_http2(
+    port: u16,
+    https: bool,
+    http2_enabled: bool,
+) -> Vec<(String, String, String, String)> {
     let shared = crate::net::Shared::new();
     let mut cfg = crate::scan_config::ScanConfig::default();
     for (id, ..) in crate::scan::check_catalogue() {
@@ -980,6 +989,7 @@ fn hidden_h2_scan(port: u16, https: bool) -> Vec<(String, String, String, String
             cfg.disabled_checks.insert(id.into());
         }
     }
+    cfg.http.http2_enabled = http2_enabled;
     *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
     let mut e = crate::net::HistEntry {
         method: "GET".into(),
@@ -1033,6 +1043,20 @@ fn hidden_http2_is_reported_when_h2_answers_without_alpn() {
         )]
     );
     assert_eq!(*log.lock().unwrap(), [(false, "http/1.1"), (false, "h2")]);
+}
+
+/// Burp's project option http.http2.enable_http2 off (Zps6.ZUp, logging
+/// Zm8i.H2_DISABLED) skips the check entirely: the baseline request still
+/// goes out, but no forced HTTP/2 probe is sent (S-05).
+#[test]
+fn hidden_http2_is_skipped_when_the_project_http2_setting_is_off() {
+    let (port, log) = hidden_h2_lab(vec![], true);
+    assert_eq!(hidden_h2_scan_with_http2(port, true, false), []);
+    assert_eq!(
+        *log.lock().unwrap(),
+        [(false, "http/1.1")],
+        "no forced probe"
+    );
 }
 
 /// A server that advertises h2: the probe's handshake selects h2 (Burp
