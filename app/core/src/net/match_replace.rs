@@ -18,10 +18,17 @@ pub fn pattern_matches(pattern: &str, is_regex: bool, text: &str) -> bool {
 }
 
 /// True when the URL is in target scope. With no include entries every URL is
-/// in scope; an enabled matching exclude entry always removes it.
+/// in scope; an enabled matching exclude entry always removes it. Rules with
+/// a blank pattern are ignored.
 pub fn in_scope(shared: &Shared, url: &str) -> bool {
     let rules = shared.scope.lock().unwrap().clone();
-    let active: Vec<&ScopeRule> = rules.iter().filter(|r| r.enabled).collect();
+    // A rule with no pattern is one the user has not filled in yet: it
+    // selects nothing. (pattern_matches treats "" as match-all, which as an
+    // exclusion would put every URL out of scope.)
+    let active: Vec<&ScopeRule> = rules
+        .iter()
+        .filter(|r| r.enabled && !r.pattern.trim().is_empty())
+        .collect();
     if active
         .iter()
         .any(|r| !r.include && pattern_matches(&r.pattern, r.is_regex, url))

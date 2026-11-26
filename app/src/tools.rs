@@ -73,6 +73,23 @@ pub fn scope_editor(app: &mut App, ui: &mut Ui) {
     if let Some(i) = remove {
         rules.remove(i);
     }
+    // A blank rule selects nothing and an invalid regex never matches: say
+    // so, or the rule silently does nothing.
+    for (i, rule) in rules.iter().enumerate() {
+        if !rule.enabled {
+            continue;
+        }
+        if rule.pattern.trim().is_empty() {
+            hint(ui, &format!("Rule {}: empty pattern, ignored.", i + 1));
+        } else if rule.is_regex
+            && let Err(e) = regex::Regex::new(&rule.pattern)
+        {
+            ui.colored_label(
+                c(theme::ORANGE),
+                format!("Rule {}: invalid regex, never matches ({e})", i + 1),
+            );
+        }
+    }
     if ui.button("+ scope rule").clicked() {
         rules.push(net::ScopeRule::include("", false));
     }
@@ -3710,9 +3727,12 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                 ..Default::default()
             };
             let json = webprobe_core::burp_config::export_project_options(&listener);
-            match std::fs::write(
-                opts_path.trim(),
-                serde_json::to_string_pretty(&json).unwrap_or_default(),
+            // The file holds the REST API keys: private from the first write.
+            match webprobe_core::util::write_private(
+                std::path::Path::new(opts_path.trim()),
+                serde_json::to_string_pretty(&json)
+                    .unwrap_or_default()
+                    .as_bytes(),
             ) {
                 Ok(()) => toast(
                     Level::Success,
@@ -3781,9 +3801,12 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
         if ui.button("Save user options").clicked() {
             let api = app.shared.api_config.lock().unwrap().clone();
             let json = webprobe_core::burp_config::export_user_options(&api);
-            match std::fs::write(
-                opts_path.trim(),
-                serde_json::to_string_pretty(&json).unwrap_or_default(),
+            // The file holds the REST API keys: private from the first write.
+            match webprobe_core::util::write_private(
+                std::path::Path::new(opts_path.trim()),
+                serde_json::to_string_pretty(&json)
+                    .unwrap_or_default()
+                    .as_bytes(),
             ) {
                 Ok(()) => toast(
                     Level::Success,
