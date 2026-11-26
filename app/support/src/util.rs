@@ -858,21 +858,25 @@ pub fn rnd_id(n: usize) -> String {
 
 /// Write a file only its owner can read, replacing any existing file
 /// atomically. For files that hold credentials (API keys). On Unix the mode
-/// is 0600 from creation; an existing file's looser mode is not kept.
+/// is 0600 from creation; an existing file's looser mode is not kept. The
+/// temporary file is created exclusively; if its name is taken the write
+/// fails and nothing is touched.
 pub fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(format!(".tmp-{}", std::process::id()));
     let tmp = path.with_file_name(name);
+    // Exclusive create: a name someone else planted (a symlink, say) is
+    // never opened, followed or truncated.
     let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
+    let mut file = options.open(&tmp)?;
     let result = (|| {
-        let mut file = options.open(&tmp)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

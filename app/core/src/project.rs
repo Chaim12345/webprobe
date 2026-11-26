@@ -1463,7 +1463,14 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), ProjectError> {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+                if let Err(source) = file.set_permissions(std::fs::Permissions::from_mode(0o600)) {
+                    drop(file);
+                    let _ = std::fs::remove_file(&temporary);
+                    return Err(ProjectError::CreateTemporary {
+                        path: temporary.clone(),
+                        source,
+                    });
+                }
             }
         }
     }

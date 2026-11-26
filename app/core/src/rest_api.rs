@@ -173,9 +173,11 @@ pub fn start(
     // Decided on the actual socket, including an address override. An
     // options file (imported in the UI or given at startup) must not be able
     // to open a scan-control endpoint to the network with no credential.
-    if api.keys.is_empty() && !bound.ip().is_loopback() {
+    // insecure_mode skips the key check on every request, so it is refused
+    // too, even when keys are configured.
+    if (api.insecure_mode || api.keys.is_empty()) && !bound.ip().is_loopback() {
         return Err(format!(
-            "REST API refused: {bound} is not a loopback address and no API key is configured (insecure_mode only applies to loopback); add a key or listen on loopback"
+            "REST API refused: {bound} is not a loopback address and requests would not be authenticated (insecure_mode is on or no API key is configured); turn insecure_mode off and add a key, or listen on loopback"
         ));
     }
     let state = Arc::new(Mutex::new(ApiState { tasks: Vec::new() }));
@@ -372,7 +374,7 @@ fn scan_status(
     drop(st);
     let events: Vec<Value> = {
         let issues = shared.issues.lock().unwrap();
-        let end = end_issue.unwrap_or(issues.len()).min(issues.len());
+        let end = end_issue.map_or(issues.len(), |end| end.min(issues.len()));
         let start = first_issue.min(end);
         issues[start..end]
             .iter()
