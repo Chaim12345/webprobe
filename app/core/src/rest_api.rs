@@ -42,6 +42,26 @@ struct ApiTask {
     status: String,
     /// shared.issues is append-only: this task's issues start here.
     first_issue: usize,
+    /// Set when the task finishes: issues appended later are not its own.
+    end_issue: Option<usize>,
+    /// Hosts of the URLs the task was asked to scan (lowercase). The issue
+    /// list is process-wide; while the task runs, only issues on these hosts
+    /// are reported as its findings.
+    hosts: Vec<String>,
+}
+
+/// The host of a URL or of an issue's host field (scheme, port, path and
+/// userinfo removed), lowercase.
+fn host_only(s: &str) -> String {
+    let rest = s.split_once("://").map_or(s, |(_, r)| r);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let host = if let Some(v6) = host.strip_prefix('[') {
+        v6.split(']').next().unwrap_or("")
+    } else {
+        host.split(':').next().unwrap_or("")
+    };
+    host.to_ascii_lowercase()
 }
 
 struct ApiState {
@@ -59,7 +79,11 @@ enum TaskAdmissionError {
     HistoryFull,
 }
 
-fn reserve_task(state: &mut ApiState, first_issue: usize) -> Result<usize, TaskAdmissionError> {
+fn reserve_task(
+    state: &mut ApiState,
+    first_issue: usize,
+    hosts: Vec<String>,
+) -> Result<usize, TaskAdmissionError> {
     if state.tasks.iter().any(|task| task.status == "running") {
         return Err(TaskAdmissionError::ScanAlreadyRunning);
     }
@@ -70,6 +94,8 @@ fn reserve_task(state: &mut ApiState, first_issue: usize) -> Result<usize, TaskA
     state.tasks.push(ApiTask {
         status: "running".to_string(),
         first_issue,
+        end_issue: None,
+        hosts,
     });
     Ok(id)
 }
@@ -125,7 +151,8 @@ impl Drop for ClientSlot {
 
 /// Start the REST API from the user options. Returns the actual bound socket
 /// address so callers do not guess the interface from listen_mode.
-/// Refuses to start when a key is required but none is configured: Burp
+/// Refuses to start without a key on a non-loopback address, whatever
+/// insecure_mode says, and when a key is required but none is configured: Burp
 /// shows the generated key in its UI; a headless process has nowhere safe
 /// to show it, and the key is never logged.
 pub fn start(
@@ -143,11 +170,13 @@ pub fn start(
     let listener = TcpListener::bind(address)
         .map_err(|e| format!("REST API cannot listen on {address}: {e}"))?;
     let bound = listener.local_addr().map_err(|e| e.to_string())?;
-    if api.insecure_mode && !bound.ip().is_loopback() {
-        // Warn based on the actual socket, including an address override.
-        eprintln!(
-            "webprobe: REST API is bound to {bound} with insecure_mode (no API key); any host that can reach the port can drive it"
-        );
+    // Decided on the actual socket, including an address override. An
+    // options file (imported in the UI or given at startup) must not be able
+    // to open a scan-control endpoint to the network with no credential.
+    if api.keys.is_empty() && !bound.ip().is_loopback() {
+        return Err(format!(
+            "REST API refused: {bound} is not a loopback address and no API key is configured (insecure_mode only applies to loopback); add a key or listen on loopback"
+        ));
     }
     let state = Arc::new(Mutex::new(ApiState { tasks: Vec::new() }));
     let shared = shared.clone();
@@ -274,7 +303,10 @@ fn start_scan(
     let first_issue = shared.issues.lock().unwrap().len();
     let id = {
         let mut st = state.lock().unwrap();
-        match reserve_task(&mut st, first_issue) {
+        let mut hosts: Vec<String> = urls.iter().map(|u| host_only(u)).collect();
+        hosts.sort();
+        hosts.dedup();
+        match reserve_task(&mut st, first_issue, hosts) {
             Ok(id) => id,
             Err(TaskAdmissionError::ScanAlreadyRunning) => {
                 return respond(
@@ -301,7 +333,9 @@ fn start_scan(
             scan::crawl_and_audit(&shared2, &urls, true);
             shared2.scan.wait_idle(None);
         }));
+        let end_issue = shared2.issues.lock().unwrap().len();
         let mut st = state2.lock().unwrap();
+        st.tasks[id].end_issue = Some(end_issue);
         st.tasks[id].status = if result.is_ok() {
             "succeeded".to_string()
         } else {
@@ -333,14 +367,22 @@ fn scan_status(
     };
     let status = task.status.clone();
     let first_issue = task.first_issue;
+    let end_issue = task.end_issue;
+    let hosts = task.hosts.clone();
     drop(st);
     let events: Vec<Value> = {
         let issues = shared.issues.lock().unwrap();
-        issues[first_issue.min(issues.len())..]
+        let end = end_issue.unwrap_or(issues.len()).min(issues.len());
+        let start = first_issue.min(end);
+        issues[start..end]
             .iter()
             .enumerate()
+            // Issues on other hosts come from other activity (live proxy
+            // audit, manual findings) that shares the process-wide list.
+            .filter(|(_, issue)| hosts.contains(&host_only(&issue.host)))
+            // The position in the append-only list: stable across polls.
             .map(|(i, issue)| {
-                json!({"serial_number": i, "type": "issue_found", "issue": issue_json(issue)})
+                json!({"serial_number": start + i, "type": "issue_found", "issue": issue_json(issue)})
             })
             .collect()
     };
@@ -511,19 +553,19 @@ mod tests {
         assert!(acquire_client_slot(&active));
 
         let mut state = ApiState { tasks: Vec::new() };
-        assert_eq!(reserve_task(&mut state, 0), Ok(0));
+        assert_eq!(reserve_task(&mut state, 0, Vec::new()), Ok(0));
         assert_eq!(
-            reserve_task(&mut state, 0),
+            reserve_task(&mut state, 0, Vec::new()),
             Err(TaskAdmissionError::ScanAlreadyRunning)
         );
         state.tasks[0].status = "succeeded".to_string();
         for _ in 1..MAX_API_TASKS {
-            assert!(reserve_task(&mut state, 0).is_ok());
+            assert!(reserve_task(&mut state, 0, Vec::new()).is_ok());
             let last = state.tasks.last_mut().unwrap();
             last.status = "succeeded".to_string();
         }
         assert_eq!(
-            reserve_task(&mut state, 0),
+            reserve_task(&mut state, 0, Vec::new()),
             Err(TaskAdmissionError::HistoryFull)
         );
     }

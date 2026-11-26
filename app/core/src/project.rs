@@ -1453,8 +1453,19 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), ProjectError> {
 
     // The replacement keeps the project's permissions: a file the user made
     // private (0600) must not become world-readable on the next save.
-    if let Ok(meta) = std::fs::metadata(path) {
-        let _ = file.set_permissions(meta.permissions());
+    // A new project is private from its first save: it holds captured
+    // traffic, cookies and findings.
+    match std::fs::metadata(path) {
+        Ok(meta) => {
+            let _ = file.set_permissions(meta.permissions());
+        }
+        Err(_) => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+            }
+        }
     }
     // Streamed: the document is never held in memory as a whole (bodies
     // are written from their handles one history item at a time).
