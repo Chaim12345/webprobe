@@ -531,7 +531,7 @@ impl eframe::App for App {
         webprobe_core::net::intercept_release_all(&self.shared, false);
         tools::close_launched_browsers(&self.shared);
         if autosave_enabled() && autosave_signature(self) != (0, 0, 0) {
-            tools::save_project(self, true);
+            let _ = tools::save_project(self, true);
         }
         recovery::shutdown(self);
     }
