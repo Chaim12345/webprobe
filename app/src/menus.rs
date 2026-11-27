@@ -41,7 +41,7 @@ pub fn save_project_copy(app: &mut App) {
     let original = app.project_path.clone();
     app.project_path = copy_path(&original);
     let target = app.project_path.clone();
-    crate::tools::save_project(app, true);
+    let _ = crate::tools::save_project(app, true);
     app.project_path = original;
     if std::path::Path::new(&target).exists() {
         feedback::toast(Level::Success, format!("Project copy saved to {target}"));
