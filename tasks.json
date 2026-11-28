@@ -1372,7 +1372,7 @@
       "acceptance": "The 48 DOM-based issue types and client-side prototype pollution: source-to-sink tracking in the embedded Chromium crawl; a location.hash -> innerHTML fixture is reported as 'Cross-site scripting (DOM-based)'.",
       "effort": "L",
       "status": "todo",
-      "evidence": "Landed 2026-11-23/24 via #186/#188/#200/#205: one instrumented Chromium probe per URL per run, 14 wrapped families plus addition-only prototype pollution (`docs/specs/R-13-dom-coverage-matrix.md`). Not complete: stored-token submissions are disabled by default, several sinks (e.g. document.URL/referrer/name, storage reads) are explicitly uncovered (jQuery.parseJSON and jQuery.parseXML were added 2026-11-25 with a live lab), and stored DOM tests are ignored. Keep open for the remaining 48-type boundary."
+      "evidence": "Landed 2026-11-23/24 via #186/#188/#200/#205: one instrumented Chromium probe per URL per run, 14 wrapped families plus addition-only prototype pollution (`docs/specs/R-13-dom-coverage-matrix.md`). Not complete: stored-token submissions are disabled by default, several sinks (e.g. document.URL/referrer/name, storage reads) are explicitly uncovered (jQuery.parseJSON and jQuery.parseXML were added 2026-11-25 with a live lab), and stored DOM tests are ignored. Keep open for the remaining 48-type boundary. 2026-11-28 (#294, #295, #302): sources window.name and document.referrer; sinks iframe.srcdoc, setAttribute srcdoc, jQuery wrapAll, wrapInner and init. Open: storage reads as sources, stored variants, custom setters."
     },
     {
       "id": "R-14",
@@ -1442,7 +1442,7 @@
       "acceptance": "Extension payload generation off the UI thread; WebSocket 'to be sent' handlers run after the user's intercept edit; WebSocket send/close and websockets().createWebSocket; scanner startAudit / startCrawl / generateReport / registerAuditIssueHandler; http response analyzers; organizer status; hotkey handlers; burpSuite export/import of options once WebProbe speaks Burp's settings JSON (R-15). Ten more popular BApps (not JWT tools) loaded unmodified, each result recorded in docs/MONTOYA-COVERAGE.md.",
       "effort": "M",
       "status": "todo",
-      "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait."
+      "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait. 2026-11-28: Scanner.registerAuditIssueHandler (#297), Scanner.generateReport (#303) and a real OrganizerItem.status() (#299) landed. Open: WebSocket send/close/createWebSocket, startAudit, startCrawl, hotkeys, options export/import, the ten-BApp check."
     },
     {
       "id": "AR-01",
@@ -1463,7 +1463,7 @@
       "acceptance": "F1: Collaborator pool and matching, project capture/restore mapping, Logger feed and extension tool sends live in webprobe-core; headless scans get Collaborator ids and headless project saves are complete. Unlocks R-15.",
       "effort": "M",
       "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
+      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section. 2026-11-28: webprobe-headless scan and proxy take --collaborator (#289); project::capture_engine gives headless saves the site map, links, WebSocket history and cookie jar, and scan takes --project (#307). Open: the desktop's Collaborator pump, project mapping, Logger feed and extension tool sends are still in the app crate."
     },
     {
       "id": "AR-03",
@@ -1534,7 +1534,7 @@
       "acceptance": "F10: Repeater, Intruder and intercept keep requests as bytes; editing a binary body does not corrupt it.",
       "effort": "M",
       "status": "todo",
-      "evidence": "Partly done 2026-11-28 (#285): a captured non-UTF-8 body is remembered when a request becomes editor text and put back on send, so Repeater and Intruder send an unedited binary body byte-for-byte with a correct Content-Length (app/support/src/util.rs remember_binary_body/restore_binary_body). Still open (#240): the bytes are in memory only (lost on restart), no hex editing, text-only Intruder payloads, Comparer and copy actions use the lossy text."
+      "evidence": "Partly done 2026-11-28 (#285): a captured non-UTF-8 body is remembered when a request becomes editor text and put back on send, so Repeater and Intruder send an unedited binary body byte-for-byte with a correct Content-Length (app/support/src/util.rs remember_binary_body/restore_binary_body). Still open (#240): the bytes are in memory only (lost on restart), no hex editing, text-only Intruder payloads, Comparer and copy actions use the lossy text. 2026-11-28 (#305): the captured bytes are stored with the Repeater tab in the project file and restored on load. Open: a hex editor, binary Intruder payloads, Comparer and copy actions."
     },
     {
       "id": "AR-10",
@@ -1577,7 +1577,7 @@
       "acceptance": "A Bambda can be a scan check, active or passive, with the library, editor and test run Burp offers for custom scan checks; its issues carry type 0x09008000 (\"Bambda generated issue\").",
       "effort": "L",
       "status": "todo",
-      "evidence": "In progress 2026-11-25: branch feat/s03-bambda-scan-checks-20261125. Not started. The Java Bambda backend (core/src/bambda.rs) compiles filters and columns only. Burp: Zcot.BAMBDA_GENERATED, registered in burp.Zcug:277-281; UI strings \"Custom scan checks\", \"Selected bambda scan checks\" (burp.Zgfu)."
+      "evidence": "In progress 2026-11-25: branch feat/s03-bambda-scan-checks-20261125. Not started. The Java Bambda backend (core/src/bambda.rs) compiles filters and columns only. Burp: Zcot.BAMBDA_GENERATED, registered in burp.Zcug:277-281; UI strings \"Custom scan checks\", \"Selected bambda scan checks\" (burp.Zgfu). Passive half landed 2026-11-28 (#296): a SCAN_CHECK_PASSIVE_PER_REQUEST Bambda returns an AuditResult and its issues carry type 0x09008000, from the desktop Bambda library, webprobe-headless proxy --bambda-check and scan --bambda-check. Open: active checks, automatic runs during a desktop scan, the api variable."
     },
     {
       "id": "S-04",
@@ -1587,7 +1587,7 @@
       "acceptance": "DOM-based issue types are also found without running the page, as Burp's static analysis does (task burp.Zwqm, JsAnalysisCheck); client-side SQL injection and local file path manipulation (three variants each) become reportable.",
       "effort": "XL",
       "status": "todo",
-      "evidence": "In progress 2026-11-25: branch feat/static-js-analysis-s0s2-20261125 (stages S0 to S2: script extraction, parsing, taint with Burp's tables). Not started. Research in progress 2026-11-24 (docs/specs/R-13-static-js-analysis.research.md, branch docs/static-js-analysis-research-20261124). No dynamic sink leads to local file path manipulation in Burp, and webdatabase.executeSql is gone from current Chromium, so the dynamic probe cannot reach these six types."
+      "evidence": "In progress 2026-11-25: branch feat/static-js-analysis-s0s2-20261125 (stages S0 to S2: script extraction, parsing, taint with Burp's tables). Not started. Research in progress 2026-11-24 (docs/specs/R-13-static-js-analysis.research.md, branch docs/static-js-analysis-research-20261124). No dynamic sink leads to local file path manipulation in Burp, and webdatabase.executeSql is gone from current Chromium, so the dynamic probe cannot reach these six types. 2026-11-28 (#306): the three local file path manipulation types are reported by observing the file-system calls at run time, so no issue type depends on the static analyser any more. The analyser itself is not started."
     },
     {
       "id": "S-05",
