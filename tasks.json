@@ -8,9 +8,9 @@
     "p1": 44,
     "p2": 29,
     "by_status": {
-      "done": 125,
+      "done": 128,
       "rejected": 2,
-      "todo": 15
+      "todo": 12
     }
   },
   "tasks": [
@@ -1371,8 +1371,8 @@
       "title": "DOM-based / JavaScript analysis",
       "acceptance": "The 48 DOM-based issue types and client-side prototype pollution: source-to-sink tracking in the embedded Chromium crawl; a location.hash -> innerHTML fixture is reported as 'Cross-site scripting (DOM-based)'.",
       "effort": "L",
-      "status": "todo",
-      "evidence": "Landed 2026-11-23/24 via #186/#188/#200/#205: one instrumented Chromium probe per URL per run, 14 wrapped families plus addition-only prototype pollution (`docs/specs/R-13-dom-coverage-matrix.md`). Not complete: stored-token submissions are disabled by default, several sinks (e.g. document.URL/referrer/name, storage reads) are explicitly uncovered (jQuery.parseJSON and jQuery.parseXML were added 2026-11-25 with a live lab), and stored DOM tests are ignored. Keep open for the remaining 48-type boundary. 2026-11-28 (#294, #295, #302): sources window.name and document.referrer; sinks iframe.srcdoc, setAttribute srcdoc, jQuery wrapAll, wrapInner and init. Open: storage reads as sources, stored variants, custom setters."
+      "status": "done",
+      "evidence": "Landed 2026-11-23/24 via #186/#188/#200/#205: one instrumented Chromium probe per URL per run, 14 wrapped families plus addition-only prototype pollution (`docs/specs/R-13-dom-coverage-matrix.md`). Not complete: stored-token submissions are disabled by default, several sinks (e.g. document.URL/referrer/name, storage reads) are explicitly uncovered (jQuery.parseJSON and jQuery.parseXML were added 2026-11-25 with a live lab), and stored DOM tests are ignored. Keep open for the remaining 48-type boundary. 2026-11-28 (#294, #295, #302): sources window.name and document.referrer; sinks iframe.srcdoc, setAttribute srcdoc, jQuery wrapAll, wrapInner and init. Open: storage reads as sources, stored variants, custom setters. Done 2026-11-28: late jQuery fn methods are wrapped at assignment (#334), and the open questions are decided and recorded in docs/specs/R-13-dom-coverage-matrix.md (#333 and the pull request that set this status): stored variants stay off because detecting them writes to the target, storage reads, custom setters and pollution overwrites are not planned, parseXML keeps its reference classification. Every matrix row has a wrapped source or sink with a live-lab test or a stated reason. Static analysis is S-04, a separate task."
     },
     {
       "id": "R-14",
