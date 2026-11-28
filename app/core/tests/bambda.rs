@@ -480,3 +480,42 @@ fn apply_gives_a_cell_per_row_and_an_error_cell_for_a_throwing_row() {
     );
     assert_eq!(outcome.row_errors, 1);
 }
+
+/// S-03: a passive scan check returns an AuditResult; each issue in it is
+/// reported as "Bambda generated issue" on the exchange it was raised for.
+#[test]
+#[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
+fn passive_check_raises_bambda_generated_issues_for_matching_exchanges() {
+    let (java, api) = runtime();
+    let script = r#"if (!requestResponse.hasResponse()) return null;
+        if (!requestResponse.response().hasHeader("X-Debug")) return AuditResult.auditResult();
+        return AuditResult.auditResult(AuditIssue.auditIssue("Debug header", "Header <b>X-Debug</b> seen.",
+            null, requestResponse.request().url(), AuditIssueSeverity.MEDIUM, AuditIssueConfidence.CERTAIN,
+            null, null, AuditIssueSeverity.MEDIUM));"#;
+    let p = Program::compile(&java, &api, Kind::PassiveCheck, script, LIMIT).unwrap();
+    let entries = [
+        history_entry(
+            31,
+            "/debug",
+            Some(b"HTTP/1.1 200 OK\r\nX-Debug: 1\r\nContent-Length: 0\r\n\r\n"),
+        ),
+        history_entry(
+            32,
+            "/plain",
+            Some(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"),
+        ),
+        history_entry(33, "/pending", None),
+    ];
+    let report = webprobe_core::bambda_scan::run_passive(&p, &entries, LIMIT).unwrap();
+    assert_eq!(report.row_errors, 0);
+    assert_eq!(report.issues.len(), 1);
+    let issue = &report.issues[0];
+    assert_eq!(issue.name, "Bambda generated issue");
+    assert_eq!(issue.path, "/debug");
+    assert_eq!(issue.sev, "medium");
+    assert_eq!(issue.confidence, "Certain");
+    assert!(issue.detail.contains("Debug header"), "{}", issue.detail);
+    assert_eq!(issue.evidence.len(), 1);
+    // A check that returns the wrong type does not compile.
+    assert!(Program::compile(&java, &api, Kind::PassiveCheck, "return true;", LIMIT).is_err());
+}

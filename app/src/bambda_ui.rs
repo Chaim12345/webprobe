@@ -11,6 +11,7 @@ use webprobe_core::{
 };
 
 const FILTER: &str = "if (!requestResponse.hasResponse()) return false;\nreturn requestResponse.response().statusCode() >= 400;";
+const CHECK: &str = "if (!requestResponse.hasResponse()) return null;\nif (!requestResponse.response().hasHeader(\"X-Debug\")) return null;\nreturn AuditResult.auditResult(AuditIssue.auditIssue(\"Debug header in response\", \"The response carries an X-Debug header.\", null, requestResponse.request().url(), AuditIssueSeverity.LOW, AuditIssueConfidence.CERTAIN, null, null, AuditIssueSeverity.LOW));";
 const COLUMN: &str = "if (!requestResponse.hasResponse()) return \"\";\nreturn requestResponse.response().headerValue(\"Server\");";
 
 /// The public result-state seam: failed jobs never replace a good snapshot.
@@ -59,6 +60,8 @@ pub struct State {
 struct Job {
     label: String,
     result: Result<(Vec<RowResult>, usize), String>,
+    /// S-03: issues a reported passive-check run added to the issue list.
+    reported: Option<usize>,
 }
 
 fn store() -> Store {
@@ -98,6 +101,11 @@ impl State {
         let result = self.pending.as_ref().map(|rx| rx.try_recv());
         match result {
             Some(Ok(job)) => {
+                if let Some(n) = job.reported {
+                    self.status = format!(
+                        "The check raised {n} issue(s) on the previewed exchanges; new ones are in the issue list as \"Bambda generated issue\"."
+                    );
+                }
                 self.preview.complete(job.label, job.result);
                 self.pending = None;
                 if let Some(worker) = self.worker.take() {
@@ -114,7 +122,10 @@ impl State {
             _ => {}
         }
     }
-    fn preview(&mut self, shared: Arc<net::Shared>, ctx: egui::Context) {
+    /// Compile the editor's script and run it over recent HTTP history.
+    /// `report`: for a passive scan check, also add what it raises to the
+    /// issue list (S-03).
+    fn preview(&mut self, shared: Arc<net::Shared>, ctx: egui::Context, report: bool) {
         self.cancelled
             .store(false, std::sync::atomic::Ordering::Relaxed);
         let cancelled = self.cancelled.clone();
@@ -141,7 +152,12 @@ impl State {
                     let history = shared.history.snapshot();
                     let mut rows = Vec::new();
                     let mut skipped = 0;
-                    for entry in history.iter().rev().take(20) {
+                    let cap = if report {
+                        webprobe_core::bambda::MAX_TABLE_ROWS
+                    } else {
+                        20
+                    };
+                    for entry in history.iter().rev().take(cap) {
                         let size = entry
                             .req_raw
                             .len()
@@ -163,11 +179,47 @@ impl State {
                     let results = program
                         .evaluate_chunked(&rows, Duration::from_secs(10))
                         .map_err(|e| e.to_string())?;
-                    Ok((results.rows, skipped + results.skipped_ids.len()))
+                    let skipped = skipped + results.skipped_ids.len();
+                    if !report || script.function != Function::ScanCheckPassive {
+                        return Ok((results.rows, skipped, None));
+                    }
+                    // The same results, read as a check's verdicts.
+                    let copy: Vec<RowResult> = results
+                        .rows
+                        .iter()
+                        .map(|r| RowResult {
+                            id: r.id,
+                            value: r.value.clone(),
+                            error: r.error.clone(),
+                        })
+                        .collect();
+                    let outcome = webprobe_core::bambda::Outcome::interpret(
+                        webprobe_core::bambda::Kind::PassiveCheck,
+                        copy,
+                        Vec::new(),
+                    );
+                    let mut issues = Vec::new();
+                    for (id, found) in &outcome.issues {
+                        if let Some(entry) = history.iter().find(|e| e.id == *id) {
+                            issues.extend(
+                                found
+                                    .iter()
+                                    .map(|f| webprobe_core::bambda_scan::issue(entry, f)),
+                            );
+                        }
+                    }
+                    let raised = issues.len();
+                    webprobe_core::scan::add_passive_issues(&shared, issues);
+                    Ok((results.rows, skipped, Some(raised)))
                 })();
+                let (result, reported) = match result {
+                    Ok((rows, skipped, reported)) => (Ok((rows, skipped)), reported),
+                    Err(e) => (Err(e), None),
+                };
                 let _ = tx.send(Job {
                     label: script.name,
                     result,
+                    reported,
                 });
                 ctx.request_repaint();
             },
@@ -208,6 +260,7 @@ pub fn show(app: &mut crate::App, ui: &mut Ui) {
             ui.horizontal(|ui| {
                 if ui.add_enabled(allow_switch, egui::Button::new("New filter")).clicked() { state.select(Script::new("Untitled filter".into(), Function::ViewFilter, FILTER.into())); }
                 if ui.add_enabled(allow_switch, egui::Button::new("New custom column")).clicked() { state.select(Script::new("Untitled column".into(), Function::CustomColumn, COLUMN.into())); }
+                if ui.add_enabled(allow_switch, egui::Button::new("New passive scan check")).clicked() { let mut script = Script::new("Untitled scan check".into(), Function::ScanCheckPassive, CHECK.into()); script.location = webprobe_core::bambda_library::Location::Scanner; state.select(script); }
                 if ui.button("Reload library").clicked() { state.reload(); }
                 ui.label(format!("{} saved scripts", state.scripts.len()));
             });
@@ -240,6 +293,7 @@ pub fn show(app: &mut crate::App, ui: &mut Ui) {
                     egui::ComboBox::from_id_salt("bambda_function").selected_text(script.function.label()).show_ui(ui, |ui| {
                         ui.selectable_value(&mut script.function, Function::ViewFilter, "View filter");
                         ui.selectable_value(&mut script.function, Function::CustomColumn, "Custom column");
+                        ui.selectable_value(&mut script.function, Function::ScanCheckPassive, "Passive scan check");
                     });
                 });
                 ui.label(RichText::new(format!("ID: {}   Location: HTTP history", script.id)).small());
@@ -279,7 +333,10 @@ pub fn show(app: &mut crate::App, ui: &mut Ui) {
             ui.separator();
             if state.editor.is_some() {
                 ui.checkbox(&mut state.trusted, "I trust this Java code to access my files and network");
-                if ui.add_enabled(state.trusted, egui::Button::new("Compile and preview recent HTTP history")).clicked() { state.preview(shared.clone(), ui.ctx().clone()); }
+                if ui.add_enabled(state.trusted, egui::Button::new("Compile and preview recent HTTP history")).clicked() { state.preview(shared.clone(), ui.ctx().clone(), false); }
+                if state.editor.as_ref().is_some_and(|s| s.function == Function::ScanCheckPassive)
+                    && ui.add_enabled(state.trusted, egui::Button::new("Run check on HTTP history and report issues")).on_hover_text("Runs the check on the newest 200 exchanges and adds what it raises to the issue list as \"Bambda generated issue\".").clicked()
+                { state.preview(shared.clone(), ui.ctx().clone(), true); }
             }
         });
         if busy { if ui.button("Cancel preview").clicked() { state.cancelled.store(true, std::sync::atomic::Ordering::Relaxed); } ui.horizontal(|ui| { ui.spinner(); ui.label("Compiling/evaluating in a worker. At most 20 recent exchanges, 5 rows / 1 MiB per batch; 15s compile + 10s per batch."); }); }

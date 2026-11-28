@@ -71,6 +71,14 @@ public final class BambdaRunner {
                 Object value = method.invoke(null, exchange(row), Utils.utilities());
                 String json;
                 if (value == null) json = "null";
+                else if (value instanceof burp.api.montoya.scanner.AuditResult result) {
+                    // S-03: a passive scan check's result, one object per issue.
+                    StringBuilder b = new StringBuilder("{\"issues\":[");
+                    List<burp.api.montoya.scanner.audit.issues.AuditIssue> found = result.auditIssues() == null ? List.of() : result.auditIssues();
+                    if (found.size() > 100) throw new IllegalArgumentException("a check may raise at most 100 issues per exchange");
+                    for (int k = 0; k < found.size(); k++) b.append(k > 0 ? "," : "").append(Engine.issueJson(found.get(k)));
+                    json = b.append("]}").toString();
+                }
                 else if (value instanceof Boolean || value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long) json = value.toString();
                 else if (value instanceof Double d && Double.isFinite(d) || value instanceof Float f && Float.isFinite(f)) json = value.toString();
                 else {

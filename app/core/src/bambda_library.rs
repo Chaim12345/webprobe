@@ -9,18 +9,23 @@ pub enum Function {
     ViewFilter,
     #[serde(rename = "CUSTOM_COLUMN")]
     CustomColumn,
+    /// S-03: a passive scan check, run once per audited exchange.
+    #[serde(rename = "SCAN_CHECK_PASSIVE_PER_REQUEST")]
+    ScanCheckPassive,
 }
 impl Function {
     pub fn kind(self) -> crate::bambda::Kind {
         match self {
             Self::ViewFilter => crate::bambda::Kind::Filter,
             Self::CustomColumn => crate::bambda::Kind::Column,
+            Self::ScanCheckPassive => crate::bambda::Kind::PassiveCheck,
         }
     }
     pub fn label(self) -> &'static str {
         match self {
             Self::ViewFilter => "View filter",
             Self::CustomColumn => "Custom column",
+            Self::ScanCheckPassive => "Passive scan check",
         }
     }
 }
@@ -28,6 +33,9 @@ impl Function {
 pub enum Location {
     #[serde(rename = "PROXY_HTTP_HISTORY")]
     ProxyHttpHistory,
+    /// Where Burp files scan-check Bambdas.
+    #[serde(rename = "SCANNER")]
+    Scanner,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
