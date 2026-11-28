@@ -1,6 +1,6 @@
 //! Public Bambda compilation/evaluation contract, with a real JVM.
 use std::{path::PathBuf, time::Duration};
-use webprobe_core::bambda::{Exchange, Kind, Program};
+use webprobe_core::bambda::{Cell, Exchange, Kind, Program, Verdict};
 
 fn runtime() -> (PathBuf, PathBuf) {
     let java = std::env::var_os("WEBPROBE_BAMBDA_TEST_JAVA")
@@ -370,4 +370,113 @@ fn parent_loss_watchdog_stops_an_orphaned_looping_jvm() {
         std::thread::sleep(Duration::from_millis(20));
     }
     cleanup.java_pid = None;
+}
+
+fn history_entry(id: u64, path: &str, response: Option<&[u8]>) -> webprobe_core::net::HistEntry {
+    let request = format!("GET {path} HTTP/1.1\r\nHost: example.test\r\n\r\n");
+    webprobe_core::net::HistEntry {
+        id,
+        ts: 1_700_000_000_000 + id,
+        method: "GET".into(),
+        host: "example.test".into(),
+        port: 443,
+        https: true,
+        path: path.into(),
+        status: if response.is_some() {
+            "200".into()
+        } else {
+            String::new()
+        },
+        resp_len: response.map_or(0, <[u8]>::len),
+        req_raw: request.as_bytes().to_vec().into(),
+        resp_raw: response.map(|b| b.to_vec().into()),
+        ..Default::default()
+    }
+}
+
+/// R-16: the History table's chain is `ProxyHistory` -> `history_snapshot` ->
+/// `Program::apply`, so this covers the table wiring against a real JVM rather
+/// than the per-row `evaluate` contract the other tests use.
+#[test]
+#[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
+fn apply_folds_a_history_snapshot_into_one_verdict_per_row() {
+    let (java, api) = runtime();
+    let history = webprobe_core::history::ProxyHistory::default();
+    history.push(history_entry(
+        11,
+        "/private/one",
+        Some(b"HTTP/1.1 200 OK\r\n\r\n"),
+    ));
+    history.push(history_entry(
+        12,
+        "/public/two",
+        Some(b"HTTP/1.1 200 OK\r\n\r\n"),
+    ));
+    // Pending exchange: the script must see it and say what to do with it.
+    history.push(history_entry(13, "/private/pending", None));
+    let snapshot = webprobe_core::bambda_rows::history_snapshot(
+        &history,
+        webprobe_core::bambda::MAX_TABLE_ROWS,
+    );
+    assert_eq!(snapshot.rows.len(), 3);
+    assert!(snapshot.skipped.is_empty());
+
+    let script = r#"return requestResponse.request().url().contains("/private");"#;
+    let program = Program::compile(&java, &api, Kind::Filter, script, LIMIT).unwrap();
+    let outcome = program.apply(Kind::Filter, &snapshot.rows, LIMIT).unwrap();
+
+    let verdict = |id: u64| {
+        outcome
+            .verdicts
+            .iter()
+            .find(|(row, _)| *row == id)
+            .map(|(_, v)| *v)
+            .unwrap_or_else(|| panic!("no verdict for row {id}: {:?}", outcome.verdicts))
+    };
+    assert_eq!(verdict(11), Verdict::Pass);
+    assert_eq!(verdict(12), Verdict::Hide);
+    assert_eq!(verdict(13), Verdict::Pass);
+    assert_eq!(outcome.row_errors, 0, "{outcome:?}");
+}
+
+/// R-16: a custom column gives one cell per row, and a row whose script throws
+/// is an error cell, not a failed run: the table keeps the other rows.
+#[test]
+#[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
+fn apply_gives_a_cell_per_row_and_an_error_cell_for_a_throwing_row() {
+    let (java, api) = runtime();
+    let rows = vec![
+        Exchange {
+            id: 21,
+            host: "example.test".into(),
+            port: 443,
+            secure: true,
+            request: b"GET /a HTTP/1.1\r\nHost: example.test\r\n\r\n".to_vec(),
+            response: Some(
+                b"HTTP/1.1 200 OK\r\nServer: fixture\r\nContent-Length: 0\r\n\r\n".to_vec(),
+            ),
+        },
+        Exchange {
+            id: 22,
+            host: "example.test".into(),
+            port: 443,
+            secure: true,
+            request: b"GET /b HTTP/1.1\r\nHost: example.test\r\n\r\n".to_vec(),
+            response: Some(b"HTTP/1.1 500 Server Error\r\nContent-Length: 0\r\n\r\n".to_vec()),
+        },
+    ];
+    let script = r#"if (requestResponse.response().statusCode() == 500) throw new RuntimeException("no server header");
+        return requestResponse.response().headerValue("Server");"#;
+    let program = Program::compile(&java, &api, Kind::Column, script, LIMIT).unwrap();
+    let outcome = program.apply(Kind::Column, &rows, LIMIT).unwrap();
+    assert_eq!(outcome.cells.len(), 2);
+    assert!(
+        matches!(&outcome.cells[0], (21, Cell::Text(text)) if text == "fixture"),
+        "{outcome:?}"
+    );
+    assert!(
+        matches!(&outcome.cells[1], (22, Cell::Failed(_))),
+        "{outcome:?}"
+    );
+    assert_eq!(outcome.row_errors, 1);
 }

@@ -571,7 +571,16 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
             ui.label("Save to");
             ui.add(egui::TextEdit::singleline(&mut app.eng.log_export_path).desired_width(320.0));
             if ui.button("Export as CSV").clicked() {
-                let rows: Vec<crate::logger::LogEntry> = app.logger.filter(&app.log_filter).into_iter().rev().cloned().collect();
+                // L-04/R-16: the export writes the rows the table shows, so a
+                // Bambda filter applies here too.
+                let rows: Vec<crate::logger::LogEntry> = app
+                    .logger
+                    .filter(&app.log_filter)
+                    .into_iter()
+                    .rev()
+                    .filter(|e| app.bambdas.tables.logger.keeps(e.id))
+                    .cloned()
+                    .collect();
                 let csv = crate::logger::to_csv(&rows, history_time);
                 match std::fs::write(&app.eng.log_export_path, csv) {
                     Ok(()) => feedback::toast(feedback::Level::Success, format!("Exported {} row(s) to {}", rows.len(), app.eng.log_export_path)),
@@ -582,11 +591,39 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         });
     });
     ui.add_space(6.0);
+    // R-16: a Bambda filter or custom column for the Logger table.
+    app.bambdas.ensure_loaded();
+    {
+        let shared = app.shared.clone();
+        let logger = &app.logger;
+        let stamp = webprobe_core::bambda_rows::Stamp {
+            rows: logger.len(),
+            last_id: logger.next_id.saturating_sub(1),
+        };
+        let crate::bambda_ui::State {
+            scripts, tables, ..
+        } = &mut app.bambdas;
+        crate::bambda_tables::bar(
+            ui,
+            crate::bambda_tables::Table::Logger,
+            &mut tables.logger,
+            scripts,
+            stamp,
+            || {
+                webprobe_core::bambda_rows::log_snapshot(
+                    logger,
+                    &shared.history,
+                    webprobe_core::bambda::MAX_TABLE_ROWS,
+                )
+            },
+        );
+    }
     let mut rows: Vec<crate::logger::LogEntry> = app
         .logger
         .filter(&app.log_filter)
         .into_iter()
         .rev()
+        .filter(|e| app.bambdas.tables.logger.keeps(e.id))
         .cloned()
         .collect();
     table::sort_rows(&mut rows, &app.log_table, |e, col| match col {
@@ -601,6 +638,16 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         _ => e.mime.clone(),
     });
     if rows.is_empty() {
+        if !app.logger.is_empty() {
+            // Filtered out, not empty: the log still holds rows.
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new("No Logger rows match the filter.")
+                    .size(12.5)
+                    .color(theme::ink_hint()),
+            );
+            return;
+        }
         ui.add_space(ui.available_height() * 0.25);
         ui.vertical_centered(|ui| {
             ui.label(RichText::new(theme::icon::LIST_BULLETS).size(52.0).color(c(0x26649D)));
@@ -611,7 +658,7 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         });
         return;
     }
-    let cols = [
+    let mut cols = vec![
         table::Column::new("#", 50.0),
         table::Column::new("Time", 150.0),
         table::Column::new("Tool", 70.0),
@@ -622,6 +669,11 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         table::Column::new("Length", 70.0),
         table::Column::new("MIME type", 90.0),
     ];
+    let bambda_run = app.bambdas.tables.logger.column_run();
+    let bambda_column = bambda_run.as_ref().map(|applied| {
+        cols.push(table::Column::new(applied.label.clone(), 160.0));
+        cols.len() - 1
+    });
     let full = ui.available_height();
     egui_extras::StripBuilder::new(ui)
         .size(egui_extras::Size::relative(0.45))
@@ -651,22 +703,32 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                         }
                         let row = ui
                             .horizontal(|ui| {
+                                let mut cells = vec![
+                                    (0, e.id.to_string(), None),
+                                    (1, history_time(e.ts), None),
+                                    (2, e.tool.clone(), None),
+                                    (3, e.method.clone(), None),
+                                    (4, e.host.clone(), None),
+                                    (5, e.path.clone(), None),
+                                    (6, e.status.clone(), None),
+                                    (7, e.resp_len.to_string(), None),
+                                    (8, e.mime.clone(), None),
+                                ];
+                                if let Some(index) = bambda_column {
+                                    cells.push((
+                                        index,
+                                        crate::bambda_tables::cell_text(
+                                            bambda_run.as_deref().and_then(|a| a.cell(e.id)),
+                                        ),
+                                        None,
+                                    ));
+                                }
                                 table::cells(
                                     ui,
                                     &cols,
                                     &table::TableState::default(),
                                     19.0,
-                                    &[
-                                        (0, e.id.to_string(), None),
-                                        (1, history_time(e.ts), None),
-                                        (2, e.tool.clone(), None),
-                                        (3, e.method.clone(), None),
-                                        (4, e.host.clone(), None),
-                                        (5, e.path.clone(), None),
-                                        (6, e.status.clone(), None),
-                                        (7, e.resp_len.to_string(), None),
-                                        (8, e.mime.clone(), None),
-                                    ],
+                                    &cells,
                                 );
                             })
                             .response

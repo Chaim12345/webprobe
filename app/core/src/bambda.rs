@@ -21,10 +21,102 @@ const MAX_SOURCE: usize = 128 * 1024;
 /// Maximum aggregate raw bytes passed to one JVM batch.
 pub const MAX_RAW_BATCH_BYTES: usize = 1024 * 1024;
 
-#[derive(Clone, Copy, Debug)]
+/// Rows one table application covers, newest first. The evaluator starts a
+/// fresh JVM per batch, so a run over a whole 50,000-row history would keep a
+/// worker busy for minutes; the tables say which rows the script saw.
+pub const MAX_TABLE_ROWS: usize = 200;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Filter,
     Column,
+}
+
+/// One filter's verdict for one row. `Failed` covers a row exception and a
+/// value that is not a boolean: the row stays visible and the run reports it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verdict {
+    Pass,
+    Hide,
+    Failed,
+}
+
+/// One custom-column result for one row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Cell {
+    Text(String),
+    Failed(String),
+}
+
+/// A table application: one verdict or one cell per evaluated row.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Outcome {
+    /// Filters: newest-first row verdicts. Columns leave this empty.
+    pub verdicts: Vec<(u64, Verdict)>,
+    /// Columns: newest-first cell values. Filters leave this empty.
+    pub cells: Vec<(u64, Cell)>,
+    /// Rows never handed to the script (too large for one batch).
+    pub skipped: Vec<u64>,
+    /// Rows whose script threw, or whose value had the wrong type.
+    pub row_errors: usize,
+}
+
+/// Text shown in a custom column. Booleans, numbers and nested values keep
+/// their JSON form; null is an empty cell. A long string is cut for display.
+fn cell_text(value: &serde_json::Value) -> String {
+    let text = match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
+    };
+    text.chars().take(4_096).collect()
+}
+
+impl Outcome {
+    /// Fold raw row results into a table outcome. Interpreting here, not in the
+    /// worker, keeps the rules testable without a JVM.
+    pub fn interpret(kind: Kind, results: Vec<RowResult>, skipped: Vec<u64>) -> Self {
+        let mut out = Self {
+            skipped,
+            ..Self::default()
+        };
+        for row in results {
+            match kind {
+                Kind::Filter => {
+                    let verdict = if row.error.is_some() {
+                        Verdict::Failed
+                    } else {
+                        match row.value {
+                            Some(serde_json::Value::Bool(true)) => Verdict::Pass,
+                            Some(serde_json::Value::Bool(false)) => Verdict::Hide,
+                            // A filter must return a boolean; anything else is a
+                            // script defect, reported per row.
+                            _ => Verdict::Failed,
+                        }
+                    };
+                    if verdict == Verdict::Failed {
+                        out.row_errors += 1;
+                    }
+                    out.verdicts.push((row.id, verdict));
+                }
+                Kind::Column => {
+                    let cell = match (row.error, row.value) {
+                        (Some(error), _) => {
+                            out.row_errors += 1;
+                            Cell::Failed(error)
+                        }
+                        (None, Some(value)) => Cell::Text(cell_text(&value)),
+                        (None, None) => {
+                            out.row_errors += 1;
+                            Cell::Failed("the script returned no value".into())
+                        }
+                    };
+                    out.cells.push((row.id, cell));
+                }
+            }
+        }
+        out
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -117,11 +209,17 @@ impl Drop for Scratch {
 pub struct Program {
     java: PathBuf,
     classpath: std::ffi::OsString,
+    kind: Kind,
     _classes: Scratch,
     cancelled: Arc<AtomicBool>,
 }
 
 impl Program {
+    /// What this program was compiled for: a filter or a custom column.
+    pub fn kind(&self) -> Kind {
+        self.kind
+    }
+
     /// Compile once per source change. Compilation errors include javac's
     /// diagnostics. No script is run by this operation.
     pub fn compile(
@@ -204,9 +302,23 @@ impl Program {
         Ok(Self {
             java,
             classpath,
+            kind,
             _classes: classes,
             cancelled,
         })
+    }
+
+    /// Compile and run one table snapshot, interpreting the results by kind.
+    /// Any failed batch fails the whole application: a table never shows a
+    /// half-evaluated filter.
+    pub fn apply(
+        &self,
+        kind: Kind,
+        rows: &[Exchange],
+        deadline: Duration,
+    ) -> Result<Outcome, Error> {
+        let results = self.evaluate_chunked(rows, deadline)?;
+        Ok(Outcome::interpret(kind, results.rows, results.skipped_ids))
     }
 
     /// Evaluate at most five rows / 1 MiB per JVM batch. The deadline is per
@@ -386,4 +498,111 @@ fn run(
     let _ = child.kill();
     let _ = child.wait();
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(id: u64, value: serde_json::Value) -> RowResult {
+        RowResult {
+            id,
+            value: Some(value),
+            error: None,
+        }
+    }
+
+    #[test]
+    fn a_filter_verdict_is_true_false_or_a_reported_row_error() {
+        let outcome = Outcome::interpret(
+            Kind::Filter,
+            vec![
+                row(3, serde_json::json!(true)),
+                row(2, serde_json::json!(false)),
+                RowResult {
+                    id: 1,
+                    value: None,
+                    error: Some("fixture failure".into()),
+                },
+                // A filter that returns a number is a script defect, not a no.
+                row(0, serde_json::json!(1)),
+            ],
+            vec![9],
+        );
+        assert_eq!(
+            outcome.verdicts,
+            vec![
+                (3, Verdict::Pass),
+                (2, Verdict::Hide),
+                (1, Verdict::Failed),
+                (0, Verdict::Failed),
+            ]
+        );
+        assert_eq!(outcome.row_errors, 2);
+        assert_eq!(outcome.skipped, vec![9]);
+        assert!(outcome.cells.is_empty());
+    }
+
+    #[test]
+    fn a_column_keeps_typed_text_and_reports_each_row_error() {
+        let outcome = Outcome::interpret(
+            Kind::Column,
+            vec![
+                row(4, serde_json::json!("fixture")),
+                row(3, serde_json::json!(7)),
+                row(2, serde_json::json!(null)),
+                row(1, serde_json::json!(true)),
+                RowResult {
+                    id: 0,
+                    value: None,
+                    error: Some("boom".into()),
+                },
+            ],
+            Vec::new(),
+        );
+        assert_eq!(
+            outcome.cells,
+            vec![
+                (4, Cell::Text("fixture".into())),
+                (3, Cell::Text("7".into())),
+                // Null is an empty cell, not an error.
+                (2, Cell::Text(String::new())),
+                (1, Cell::Text("true".into())),
+                (0, Cell::Failed("boom".into())),
+            ]
+        );
+        assert_eq!(outcome.row_errors, 1);
+        assert!(outcome.verdicts.is_empty());
+    }
+
+    #[test]
+    fn a_missing_column_value_is_a_row_error() {
+        let outcome = Outcome::interpret(
+            Kind::Column,
+            vec![RowResult {
+                id: 1,
+                value: None,
+                error: None,
+            }],
+            Vec::new(),
+        );
+        assert!(matches!(
+            &outcome.cells[0].1,
+            Cell::Failed(message) if message.contains("no value")
+        ));
+        assert_eq!(outcome.row_errors, 1);
+    }
+
+    #[test]
+    fn a_long_column_value_is_cut_for_display() {
+        let outcome = Outcome::interpret(
+            Kind::Column,
+            vec![row(1, serde_json::json!("x".repeat(5_000)))],
+            Vec::new(),
+        );
+        match &outcome.cells[0].1 {
+            Cell::Text(text) => assert_eq!(text.chars().count(), 4_096),
+            other => panic!("{other:?}"),
+        }
+    }
 }
