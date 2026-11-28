@@ -511,6 +511,11 @@ fn proxy(mut args: Vec<String>) {
         let _ = until.send(Instant::now() + Duration::from_secs(2));
         let _ = pump.join();
     }
+    // AR-05: live audits run on their own thread; let the last ones finish
+    // before the issues are listed and saved.
+    if !shared.passive.wait_idle(Duration::from_secs(10)) {
+        eprintln!("some passive audits were still running after 10 s; their issues are not listed");
+    }
     let issues = shared.issues.lock().clone();
     for i in &issues {
         eprintln!("issue: {}", issue_json(i));

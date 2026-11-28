@@ -265,11 +265,55 @@ pub fn record_entry_verbatim(
                 false
             }
         };
-        if within_scope && within_cap {
+        // AR-05: with a worker running the audit is queued, so a slow
+        // passive check does not hold this proxy connection. Without one
+        // (a direct caller, a full queue) it runs here, as before.
+        if within_scope && within_cap && !shared.passive.enqueue(&e) {
             let issues = hooks.passive_check_live(shared, &e);
             hooks.add_passive_issues(shared, issues);
         }
     }
+}
+
+/// AR-05: start the worker that runs live passive audits off the proxy
+/// connection threads. One worker, so stateful checks still see exchanges
+/// in the order they were recorded. Idempotent. The worker holds only a
+/// weak handle and ends when the engine is dropped.
+pub fn start_passive_worker(shared: &Arc<Shared>) {
+    let (tx, rx) = std::sync::mpsc::sync_channel(crate::passive_state::LIVE_AUDIT_QUEUE);
+    if !shared.passive.install_queue(tx) {
+        return;
+    }
+    let weak = Arc::downgrade(shared);
+    crate::util::spawn_contained("passive-audit", move || {
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                Ok(entry) => {
+                    let Some(shared) = weak.upgrade() else { break };
+                    // A panicking check must not leave `wait_idle` waiting.
+                    let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if let Some(hooks) = scan_hooks() {
+                            let issues = hooks.passive_check_live(&shared, &entry);
+                            hooks.add_passive_issues(&shared, issues);
+                        }
+                    }));
+                    shared.passive.finished_one();
+                    if done.is_err() {
+                        crate::notice::toast(
+                            crate::notice::Level::Warn,
+                            "a live passive check panicked on one exchange; auditing continues",
+                        );
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if weak.strong_count() == 0 {
+                        break;
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+    });
 }
 
 /// `/show/<id>`: the stored response verbatim. `/repeat/<id>`: make the
