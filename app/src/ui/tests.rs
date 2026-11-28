@@ -399,11 +399,12 @@ mod suite {
             &history,
             |e| e.host.contains("old.example"),
             &TableState::new(),
+            None,
         );
         assert_eq!(rows.iter().map(|row| row.id).collect::<Vec<_>>(), [1]);
         assert!(!truncated);
         // No cap: all 1500 rows, newest first.
-        let (rows, truncated) = history_view(&history, |_| true, &TableState::new());
+        let (rows, truncated) = history_view(&history, |_| true, &TableState::new(), None);
         assert_eq!(rows.len(), 1500);
         assert!(!truncated);
         assert_eq!(
@@ -418,8 +419,8 @@ mod suite {
         );
         let keep = |e: &crate::net::HistEntry| e.host.contains("old.example");
         let mut incremental = history_new_rows(&grown, history.len(), keep);
-        incremental.extend(history_view(&history, keep, &TableState::new()).0);
-        let full = history_view(&grown, keep, &TableState::new()).0;
+        incremental.extend(history_view(&history, keep, &TableState::new(), None).0);
+        let full = history_view(&grown, keep, &TableState::new(), None).0;
         assert_eq!(
             incremental.iter().map(|r| r.id).collect::<Vec<_>>(),
             full.iter().map(|r| r.id).collect::<Vec<_>>()
@@ -438,10 +439,30 @@ mod suite {
         let mut state = TableState::new();
         state.sort_col = 2; // Method (Burp column order: #, Host, Method, ...)
         state.sort_asc = true;
-        let (rows, _) = history_view(&history, |_| true, &state);
+        let (rows, _) = history_view(&history, |_| true, &state, None);
         // Ascending by method: GET rows keep newest-first order, POST sorts last.
         assert_eq!(rows[0].method, "GET");
         assert_eq!(rows[4].method, "POST");
+    }
+
+    /// R-16: the Bambda custom column is the last column and sorts on the
+    /// text the script returned, not on the recorded message.
+    #[test]
+    fn history_sorts_by_the_bambda_custom_column() {
+        let history: Vec<_> = (1..=3).map(|id| entry(id, "example.test")).collect();
+        let mut state = TableState::new();
+        state.sort_col = 18; // the custom column is appended after the 18 built-in ones
+        state.sort_asc = true;
+        let custom = |e: &crate::net::HistEntry| match e.id {
+            1 => "c".to_string(),
+            2 => "a".to_string(),
+            _ => "b".to_string(),
+        };
+        let (rows, _) = history_view(&history, |_| true, &state, Some(&custom));
+        assert_eq!(rows.iter().map(|e| e.id).collect::<Vec<_>>(), [2, 3, 1]);
+        // Without a run the column sorts as an empty string, so nothing moves.
+        let (rows, _) = history_view(&history, |_| true, &state, None);
+        assert_eq!(rows.iter().map(|e| e.id).collect::<Vec<_>>(), [3, 2, 1]);
     }
 
     #[test]
@@ -496,7 +517,7 @@ mod suite {
         let mut state = TableState::new();
         state.sort_col = 2; // Method
         state.sort_asc = false; // POST first
-        let (rows, truncated) = history_view(&history, |_| true, &state);
+        let (rows, truncated) = history_view(&history, |_| true, &state, None);
         assert!(!truncated);
         assert_eq!(rows.len(), 1500);
         assert_eq!(rows[0].id, 1, "the sort must see the whole list");

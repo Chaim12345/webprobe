@@ -2337,6 +2337,7 @@ pub fn intercept_table(ui: &mut Ui, st: &mut State, rows: &[HeldRow], height: f3
 pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
     let shared = app.shared.clone();
     let history = &shared.ws_history;
+    app.bambdas.ensure_loaded();
     let scope = |host: &str| {
         burp_in_scope(&shared, &format!("http://{host}/"))
             || burp_in_scope(&shared, &format!("https://{host}/"))
@@ -2399,12 +2400,38 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
                 });
             });
     }
+    // R-16: a Bambda filter or custom column for this table. Drawn before the
+    // row cache below, so a run that finishes now is reflected in this frame.
+    {
+        let bambda_stamp = webprobe_core::bambda_rows::Stamp {
+            rows: history.len(),
+            last_id: history.stamp(),
+        };
+        let crate::bambda_ui::State {
+            scripts, tables, ..
+        } = &mut app.bambdas;
+        crate::bambda_tables::bar(
+            ui,
+            crate::bambda_tables::Table::Websocket,
+            &mut tables.websocket,
+            scripts,
+            bambda_stamp,
+            || {
+                webprobe_core::bambda_rows::websocket_snapshot(
+                    history,
+                    webprobe_core::bambda::MAX_TABLE_ROWS,
+                )
+            },
+        );
+    }
     ui.add_space(2.0);
     // The rows passing the filter, redone only when history or filter changed.
+    // A new Bambda verdict is a filter change (R-16).
     let filter_key = {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         st.ws_filter.hash(&mut h);
+        app.bambdas.tables.websocket.filter_version().hash(&mut h);
         h.finish()
     };
     let stamp = history.stamp();
@@ -2413,12 +2440,16 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         st.ws_rows = (
             stamp,
             filter_key,
-            history.positions(|e| e.direction != "handshake" && ws_row_visible(&f, e, scope)),
+            history.positions(|e| {
+                e.direction != "handshake"
+                    && ws_row_visible(&f, e, scope)
+                    && app.bambdas.tables.websocket.keeps(e.id)
+            }),
         );
     }
     let total = st.ws_rows.2.len();
     let table_h = (ui.available_height() * 0.5).max(120.0);
-    let header = [
+    let mut header = vec![
         "#",
         "URL",
         "Direction",
@@ -2427,10 +2458,16 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         "Opcode",
         "Time",
     ];
-    let widths = [56.0, 260.0, 110.0, 60.0, 70.0, 70.0, 80.0];
+    let mut widths = vec![56.0, 260.0, 110.0, 60.0, 70.0, 70.0, 80.0];
+    let bambda_column = app.bambdas.tables.websocket.column_label().map(|label| {
+        header.push(label);
+        widths.push(160.0);
+        header.len() - 1
+    });
+    let bambda_cells = &app.bambdas.tables.websocket;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        for (h, w) in header.iter().zip(widths) {
+        for (h, w) in header.iter().zip(widths.iter().copied()) {
             let (r, _) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::hover());
             ui.painter().rect_filled(r, 0.0, theme::header_bg());
             ui.painter().text(
@@ -2464,7 +2501,7 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
             let edited = shared.ws_edited.lock().unwrap();
             for (k, e) in range.zip(window.iter()) {
                 let sel = st.ws_sel == Some(e.id);
-                let cells = [
+                let mut cells = vec![
                     e.id.to_string(),
                     e.host.clone(),
                     ws_direction_label(&e.direction).to_string(),
@@ -2477,10 +2514,14 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
                     e.opcode.clone(),
                     crate::ui::time_of_day(e.ts),
                 ];
+                if let Some(index) = bambda_column {
+                    debug_assert_eq!(index, cells.len());
+                    cells.push(crate::bambda_tables::cell_text(bambda_cells.cell(e.id)));
+                }
                 let resp = ui
                     .horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
-                        for (i, (t, w)) in cells.iter().zip(widths).enumerate() {
+                        for (i, (t, w)) in cells.iter().zip(widths.iter().copied()).enumerate() {
                             let (r, _) =
                                 ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::hover());
                             if sel {

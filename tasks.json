@@ -8,9 +8,9 @@
     "p1": 44,
     "p2": 29,
     "by_status": {
-      "done": 124,
+      "done": 125,
       "rejected": 2,
-      "todo": 16
+      "todo": 15
     }
   },
   "tasks": [
@@ -1401,8 +1401,8 @@
       "title": "Bambda-style filters and custom columns",
       "acceptance": "History/Logger/WebSocket filters and custom columns by script, as Burp's Bambda mode (scripting language decided in the task).",
       "effort": "M",
-      "status": "todo",
-      "evidence": "In progress 2026-11-25: branch feat/r16-bambda-filters-20261125 (wiring the filters and custom columns). Checked 2026-11-24: the Java Bambda backend (core/src/bambda.rs: compile and run filter and column batches), the library (core/src/bambda_library.rs) and a preview pane (src/bambda_ui.rs) exist and CI runs the real-Java Bambda tests, but nothing in the History, Logger or WebSocket filters or in the table columns calls them yet. The wiring is the open part. Earlier note: deferred 2026-11-18 by the user's instruction."
+      "status": "done",
+      "evidence": "Done 2026-11-28 (#253, branch feat/r16-bambda-filters-20261125): the HTTP history, Logger and WebSockets history tables each carry a Bambda row (filter picker, custom-column picker, Apply, Cancel, status and errors) in src/bambda_tables.rs; a run compiles and evaluates one saved script over the newest 200 rows in a worker thread (core/src/bambda.rs Program::apply + Outcome::interpret, core/src/bambda_rows.rs snapshots) and never touches the UI or proxy thread. The custom column is added as the last column of each table, Logger CSV export honours the filter, and a WebSocket message reaches a script as a synthetic POST /websocket request carrying X-Webprobe-Direction and X-Webprobe-Opcode. A compile or row error shows under the bar and the last good run stays applied. Headless proxy mode gained --bambda-filter and --bambda-column. Bambda scan checks were left out of scope (#254)."
     },
     {
       "id": "R-17",
