@@ -27,7 +27,10 @@ not reported.
 | both tokens in one value | **covered** | Tentative (mixed provenance) |
 | token present but part not attributable (single-token probe) | reported as source `unknown` | Tentative (inconclusive, never guessed) |
 | stored token (submitted in an earlier request, re-embedded by the application) | **not enabled in production** - no stored-token submission is sent; fixture-only classification remains | - |
-| `document.URL`, `document.referrer`, `window.name` reads, `localStorage`/`sessionStorage` reads | not covered - no instrumentation emits them as sources | - |
+| `window.name` | covered - a run-owned token is written to `window.name` before page scripts run; a sink value carrying it is attributed to `window.name` | `window_name_and_referrer_are_attributed_sources_against_live_browser` |
+| `document.referrer` | covered - the probe navigates with a same-origin Referer carrying its own token | same test |
+| `document.URL` | covered as `location.hash` / `location.search`: it carries the same tokens, and attribution is by token, not by the property read | - |
+| `localStorage`/`sessionStorage` reads | not covered - nothing seeds storage before the page runs | - |
 
 ## Families and sinks (burp.Zcwh dynamic decoder, docs/specs/R-13 section 6)
 

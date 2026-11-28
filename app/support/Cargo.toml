@@ -18,18 +18,18 @@ test-ca = []
 [dependencies]
 tracing.workspace = true
 tracing-subscriber.workspace = true
-base64 = "0.22"
-flate2 = "1"
-memmap2 = "0.9"
-rand = "0.8"
-rcgen = { version = "0.13", features = ["x509-parser"] }
-regex = "1"
-ring = "0.17"
-rsa = "0.10"
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
+base64.workspace = true
+flate2.workspace = true
+memmap2.workspace = true
+rand.workspace = true
+rcgen.workspace = true
+regex.workspace = true
+ring.workspace = true
+rsa.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 # Decoder Hash menu parity (Burp 2026.11.2, 82 entries).
 blake2 = "0.10"
 blake3 = "1"
@@ -48,9 +48,9 @@ tiger = "0.2"
 tiny-keccak = { version = "2", features = ["keccak", "cshake", "tuple_hash", "parallel_hash", "sp800"] }
 whirlpool = "0.10"
 keccak = "0.1"
-time = "0.3"
-webpki-roots = "0.26"
-x509-parser = { version = "0.16", features = ["verify"] }
+time.workspace = true
+webpki-roots.workspace = true
+x509-parser.workspace = true
 
 # poll(2) with POLLRDHUP: the only way to see a peer's FIN behind unread
 # bytes (a TLS close_notify) without consuming them.

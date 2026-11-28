@@ -25,26 +25,26 @@ flate2.workspace = true
 hpack = { package = "hpack-patched", version = "=0.3.0" }
 regex.workspace = true
 # x509-parser: read an imported CA certificate (Proxy settings > Import).
-rcgen = { version = "0.13", features = ["x509-parser"] }
-x509-parser = { version = "0.16", features = ["verify"] }
+rcgen.workspace = true
+x509-parser.workspace = true
 rand.workspace = true
-rsa = "0.10"
+rsa.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # N-06: history bodies in mapped, unlinked segment files (core/src/body.rs).
-memmap2 = "0.9"
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+memmap2.workspace = true
+rustls.workspace = true
 time.workspace = true
-webpki-roots = "0.26"
+webpki-roots.workspace = true
 # interactsh client (Collaborator on a public OAST host): RSA-OAEP-SHA256
 # key unwrap + AES-CTR message decryption (verified live against oast.pro:
 # CFB decrypts only the first block, CTR all of it).
-sha2 = "0.10"
+sha2.workspace = true
 # JWT checks: RS256 signing with WebProbe's test key (already in Cargo.lock via rustls).
-ring = "0.17"
+ring.workspace = true
 aes = "0.8"
 ctr = "0.9"
-base64 = "0.22"
+base64.workspace = true
 # Browser-driven crawl: Chrome DevTools Protocol over WebSocket.
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 yaml_serde = "0.10.7"
