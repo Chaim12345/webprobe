@@ -2795,16 +2795,19 @@ fn tab_of(name: &str) -> Option<crate::ui::Tab> {
 /// back the history. WebProbe does the same with its project file: it is
 /// restored at startup when present (main.rs) and saved every minute while
 /// something changed, and on exit (App::on_exit).
-/// Save the project and wait until it is on disk.
-pub fn save_project(app: &mut App, quiet: bool) {
-    save_project_with(app, quiet, false);
+/// Save the project and wait until it is on disk. The returned result
+/// belongs to this call: it is this save's own write outcome, never
+/// inferred from the shared results queue.
+pub fn save_project(app: &mut App, quiet: bool) -> Result<(), String> {
+    save_project_with(app, quiet, false)
 }
 
 /// Autosave: queue the save and return; the UI thread only takes the
 /// snapshot (message bodies are shared handles), the project-save worker
 /// writes it. Its result shows up through [`drain_save_results`].
 pub fn autosave_project(app: &mut App) {
-    save_project_with(app, true, true);
+    // Queued; the result shows up through drain_save_results.
+    let _ = save_project_with(app, true, true);
 }
 
 type SaveResult = (
@@ -2848,24 +2851,36 @@ pub fn drain_tool_sends(app: &mut App) {
     }
 }
 
+/// Report one finished save (status line, toasts). Used both for queued
+/// background saves drained each frame and for blocking saves, whose caller
+/// owns the result.
+fn report_save_result(
+    app: &mut App,
+    target: &str,
+    quiet: bool,
+    result: &Result<(), webprobe_core::project::ProjectError>,
+) {
+    match result {
+        Ok(()) => {
+            app.project_status = format!("saved {target}");
+            if !quiet {
+                crate::feedback::toast(
+                    crate::feedback::Level::Success,
+                    format!("Project saved to {target}"),
+                );
+            }
+        }
+        Err(e) => {
+            app.project_status = format!("save failed: {e}");
+            crate::feedback::toast(crate::feedback::Level::Error, format!("Save failed: {e}"));
+        }
+    }
+}
+
 pub fn drain_save_results(app: &mut App) {
     let done = std::mem::take(&mut *save_results().lock().unwrap());
     for (target, quiet, result) in done {
-        match result {
-            Ok(()) => {
-                app.project_status = format!("saved {target}");
-                if !quiet {
-                    crate::feedback::toast(
-                        crate::feedback::Level::Success,
-                        format!("Project saved to {target}"),
-                    );
-                }
-            }
-            Err(e) => {
-                app.project_status = format!("save failed: {e}");
-                crate::feedback::toast(crate::feedback::Level::Error, format!("Save failed: {e}"));
-            }
-        }
+        report_save_result(app, &target, quiet, &result);
     }
 }
 
@@ -3049,6 +3064,11 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         tls_pass_through: app.shared.tls_bypass.lock().unwrap().clone(),
         streaming_responses: app.shared.streaming.lock().unwrap().clone(),
         listener_http2: app.shared.listener_http2.load(Ordering::SeqCst),
+        http2_enabled: webprobe_core::scan_config::shared_config(&app.shared)
+            .lock()
+            .unwrap()
+            .http
+            .http2_enabled,
         ws_match_replace_rules: app.shared.ws_rules.lock().unwrap().clone(),
         ws_match_replace_disable_out_of_scope: app
             .shared
@@ -3188,9 +3208,13 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     }
 }
 
-/// Every save goes through the single project-save worker, in order, so an
-/// older snapshot can never land after a newer one.
-fn save_project_with(app: &mut App, quiet: bool, background: bool) {
+/// Every background save goes through the single project-save worker, in
+/// order, so an older snapshot can never land after a newer one. A blocking
+/// save first lets the queued snapshots land, then writes inline: its
+/// completion is the write's own return value. It must not wait on a worker
+/// callback, because the worker may replace a still-waiting same-path
+/// snapshot and drop its `done` (see project::save_in_background).
+fn save_project_with(app: &mut App, quiet: bool, background: bool) -> Result<(), String> {
     // J-02: while the crash-recovery prompt is open, autosave (and the save
     // on exit) must not overwrite the project the user may want back; the
     // new session goes to a per-process temporary file instead.
@@ -3202,21 +3226,30 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) {
         app.project_path.clone()
     };
     let data = project_snapshot(app);
-    let reported = target.clone();
-    project::save_in_background(
-        std::path::PathBuf::from(&target),
-        data,
-        Box::new(move |result| {
-            save_results()
-                .lock()
-                .unwrap()
-                .push((reported, quiet, result))
-        }),
-    );
-    if !background {
-        project::wait_for_saves();
-        drain_save_results(app);
+    if background {
+        let reported = target.clone();
+        project::save_in_background(
+            std::path::PathBuf::from(&target),
+            data,
+            Box::new(move |result| {
+                save_results()
+                    .lock()
+                    .unwrap()
+                    .push((reported, quiet, result))
+            }),
+        );
+        return Ok(());
     }
+    // Older queued snapshots land first, then this save writes inline. The
+    // UI already blocked in wait_for_saves until the write finished, so the
+    // blocking window is unchanged; only the thread the write runs on moves.
+    project::wait_for_saves();
+    let path = std::path::PathBuf::from(&target);
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| project::save(&path, &data)))
+            .unwrap_or_else(|_| Err(project::ProjectError::SavePanicked { path: path.clone() }));
+    report_save_result(app, &target, quiet, &result);
+    result.map_err(|e| e.to_string())
 }
 
 /// Put loaded project data into the running app. With `content` false
@@ -3476,6 +3509,11 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.shared
         .listener_http2
         .store(data.proxy.listener_http2, Ordering::SeqCst);
+    webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap()
+        .http
+        .http2_enabled = data.proxy.http2_enabled;
     *app.shared.ws_rules.lock().unwrap() = data.proxy.ws_match_replace_rules.clone();
     app.shared.ws_rules_in_scope_only.store(
         data.proxy.ws_match_replace_disable_out_of_scope,
@@ -3683,7 +3721,7 @@ pub fn project_controls(app: &mut App, ui: &mut Ui) {
                 .font(egui::TextStyle::Monospace),
         );
         if ui.button("Save project").clicked() {
-            save_project(app, false);
+            let _ = save_project(app, false);
         }
         if ui.button("Restore project").clicked() {
             restore_project(app, false);
@@ -3726,7 +3764,10 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                 running: app.shared.listener_running.load(Ordering::SeqCst),
                 ..Default::default()
             };
-            let json = webprobe_core::burp_config::export_project_options(&listener);
+            let http = webprobe_core::burp_config::HttpOptions {
+                http2_enabled: webprobe_core::scan_config::shared_config(&app.shared).lock().unwrap().http.http2_enabled,
+            };
+            let json = webprobe_core::burp_config::export_project_options(&listener, &http);
             // The file holds the REST API keys: private from the first write.
             match webprobe_core::util::write_private(
                 std::path::Path::new(opts_path.trim()),
@@ -3752,13 +3793,20 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
             match loaded {
                 Ok((text, json)) => {
                     let mut listener = webprobe_core::burp_config::ProxyListener::default();
+                    let mut http = webprobe_core::burp_config::HttpOptions::default();
                     let mut notes = Vec::new();
                     webprobe_core::burp_config::apply_project_options(
                         &json,
                         &mut listener,
+                        &mut http,
                         &mut notes,
                     );
                     app.shared.proxy_port.store(listener.port, Ordering::SeqCst);
+                    webprobe_core::scan_config::shared_config(&app.shared)
+                        .lock()
+                        .unwrap()
+                        .http
+                        .http2_enabled = http.http2_enabled;
                     if let Ok(mut cfg) = webprobe_core::scan_library::parse_config(
                         opts_path.trim(),
                         text.as_bytes(),
@@ -4104,7 +4152,7 @@ mod save_restore_tests {
                 .disabled_insertion
                 .insert("cookie".into());
             app.collab_state.set_poll_secs(9);
-            save_project(&mut app, true);
+            save_project(&mut app, true).unwrap();
             let saved = project::load(std::path::Path::new(&app.project_path)).unwrap();
             assert_eq!(
                 saved.ca_fingerprint.as_deref(),
@@ -4138,6 +4186,43 @@ mod save_restore_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// S-05: Burp's upstream HTTP/2 setting is saved with the project and
+    /// restored with it.
+    #[test]
+    fn project_http2_setting_round_trips() {
+        let dir = std::env::temp_dir().join(format!("wp-http2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json").to_string_lossy().into_owned();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let mut app = crate::App::new(net::Shared::new());
+            app.project_path = p2;
+            webprobe_core::scan_config::shared_config(&app.shared)
+                .lock()
+                .unwrap()
+                .http
+                .http2_enabled = false;
+            save_project(&mut app, true).expect("project saves");
+            let mut fresh = crate::App::new(net::Shared::new());
+            fresh.project_path = app.project_path.clone();
+            restore_project(&mut fresh, true);
+            let _ = tx.send((
+                webprobe_core::scan_config::shared_config(&fresh.shared)
+                    .lock()
+                    .unwrap()
+                    .http
+                    .http2_enabled,
+                fresh.project_status.clone(),
+            ));
+        });
+        let (on, status) = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("save/restore finished");
+        assert!(!on, "http.http2.enable_http2 restored off ({status})");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Organizer collections and their items survive a save/restore round
     /// trip (review finding: no round-trip test covered them).
     #[test]
@@ -4159,7 +4244,7 @@ mod save_restore_tests {
                 org.move_item(moved, coll);
                 (coll, kept, moved)
             };
-            save_project(&mut app, true);
+            save_project(&mut app, true).unwrap();
             let mut fresh = crate::App::new(net::Shared::new());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
@@ -4211,7 +4296,7 @@ mod save_restore_tests {
                 assert_eq!(org.get(id).unwrap().collection, 0);
                 id
             };
-            save_project(&mut app, true);
+            save_project(&mut app, true).unwrap();
             let mut fresh = crate::App::new(net::Shared::new());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);

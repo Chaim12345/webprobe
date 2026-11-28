@@ -531,7 +531,7 @@ impl eframe::App for App {
         webprobe_core::net::intercept_release_all(&self.shared, false);
         tools::close_launched_browsers(&self.shared);
         if autosave_enabled() && autosave_signature(self) != (0, 0, 0) {
-            tools::save_project(self, true);
+            let _ = tools::save_project(self, true);
         }
         recovery::shutdown(self);
     }
@@ -1163,6 +1163,7 @@ fn main() {
     // API keys are never logged). Scan-configuration keys go through R-11's
     // model: each --config-file is one library entry, overlaid in order.
     let mut listener = burp_config::ProxyListener::default();
+    let mut http = burp_config::HttpOptions::default();
     let mut api = burp_config::ApiConfig::default();
     let mut scan_configs: Vec<webprobe_core::scan_library::LibraryConfig> = Vec::new();
     let read_config = |path: &str| -> String {
@@ -1171,14 +1172,18 @@ fn main() {
             std::process::exit(1);
         })
     };
+    // Whether a --config-file named http.http2.enable_http2: only then does
+    // it override the value a restored project saved.
+    let mut http_explicit = false;
     for f in &config_files {
         let text = read_config(f);
         let json: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|e| {
             eprintln!("{f}: not a JSON object: {e}");
             std::process::exit(1);
         });
+        http_explicit |= json.pointer("/http/http2/enable_http2").is_some();
         let mut notes = Vec::new();
-        burp_config::apply_project_options(&json, &mut listener, &mut notes);
+        burp_config::apply_project_options(&json, &mut listener, &mut http, &mut notes);
         for n in notes {
             eprintln!("{f}: {n}");
         }
@@ -1225,6 +1230,11 @@ fn main() {
     // listener toggle is the UI for it.
     if !config_files.is_empty() {
         shared.proxy_port.store(listener.port, Ordering::SeqCst);
+        webprobe_core::scan_config::shared_config(&shared)
+            .lock()
+            .unwrap()
+            .http
+            .http2_enabled = http.http2_enabled;
         if !listener.running {
             eprintln!("note: proxy listener disabled by configuration");
         }
@@ -1439,6 +1449,15 @@ fn main() {
     // J-02: an unclean previous exit asks first (recovery::startup).
     if autosave_enabled() && recovery::startup(&mut app) {
         tools::restore_project(&mut app, true);
+        // The command line is the later, explicit source: it wins over the
+        // setting the project was saved with.
+        if http_explicit {
+            webprobe_core::scan_config::shared_config(&app.shared)
+                .lock()
+                .unwrap()
+                .http
+                .http2_enabled = http.http2_enabled;
+        }
         app.autosave_sig = autosave_signature(&app);
     }
     // Burp opens on its project chooser. Not when a recovery prompt is

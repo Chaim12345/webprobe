@@ -8,9 +8,9 @@
     "p1": 44,
     "p2": 29,
     "by_status": {
-      "done": 123,
+      "done": 124,
       "rejected": 2,
-      "todo": 17
+      "todo": 16
     }
   },
   "tasks": [
@@ -1594,11 +1594,9 @@
       "title": "An HTTP/2 enable setting that gates Hidden HTTP/2",
       "acceptance": "WebProbe has Burp's project setting for upstream HTTP/2 (project_options.http.http2.enable_http2); with it off the Hidden HTTP/2 check does not run.",
       "effort": "S",
-      "status": "todo",
-      "depends_on": [
-        "AR-03"
-      ],
-      "evidence": "PR #222 ported the check without the gate: there is no such setting, and adding one needs a field on net::Shared, which waits for the settings snapshot (ADR 0002 phase 3)."
+      "status": "done",
+      "completed": "2026-11-26",
+      "evidence": "core/src/burp_config.rs: HttpOptions models project_options.http.http2.enable_http2 (default on), read and written by apply_project_options/export_project_options. The live value sits in ScanConfig::http (the Shared::tool_state slot, so no new net::Shared field, ADR 0002 rule 2). ProjectProxy.http2_enabled saves it with the project; the Settings > Proxy HTTP/2 checkbox, --config-file and Load project options all set it. HiddenHttp2 skips when cx.http2_enabled is off. Tests: hidden_http2_is_skipped_when_the_project_http2_setting_is_off, http2_enable_setting_is_read_from_project_options, project_options_round_trip, project_http2_setting_round_trips, http2_is_on_until_the_project_turns_it_off."
     }
   ],
   "order_note": "2026-11-18 (user): core features before deferrable extension work. Order after R-05/R-06: R-07, R-09, R-10, R-11, R-12, R-17, R-15, R-13, R-18, R-19, D-12, R-01 remainder; then the deferred extension items R-20, R-14, R-16."

@@ -28,28 +28,88 @@ fn after_switch(app: &mut App, path: &str, what: &str) {
     feedback::toast(Level::Success, format!("{what}: {path}"));
 }
 
-/// Save the session being left, when it has somewhere to go.
-fn save_current(app: &mut App) {
-    if std::env::var_os("WEBPROBE_NO_AUTOSAVE").is_none() {
-        crate::tools::save_project(app, true);
+/// Save the session being left, when it has somewhere to go. A failed save
+/// fails the switch: the current project keeps its contents and path.
+/// WEBPROBE_NO_AUTOSAVE stays a deliberate opt-out and never blocks a switch.
+fn save_current(app: &mut App) -> Result<(), String> {
+    if std::env::var_os("WEBPROBE_NO_AUTOSAVE").is_some() {
+        return Ok(());
     }
+    crate::tools::save_project(app, true)
+        .map_err(|e| format!("the current project could not be saved ({e})"))
 }
 
 /// Open an existing project after checking it. A damaged file is refused and
-/// the current session is left as it was.
+/// the current session is left as it was. The destination is loaded into
+/// memory before anything about the running session changes; only an open
+/// that checked, saved and loaded successfully switches over. The save runs
+/// before the load so that opening the file that is already current loads
+/// what the save just wrote, not the older on-disk state.
 pub fn open(app: &mut App, path: &str) -> Result<(), String> {
     let p = std::path::Path::new(path);
     project_files::check(p)?;
-    save_current(app);
+    save_current(app)?;
+    let data = webprobe_core::project::load(p).map_err(|e| format!("{path}: {e}"))?;
     app.project_path = path.to_string();
-    crate::tools::restore_project(app, true);
+    crate::tools::apply_project(app, &data, true);
     after_switch(app, path, "Opened project");
     Ok(())
 }
 
+/// Something is at `path`, a dangling symlink included (a save would write
+/// through it).
+fn taken(path: &str) -> bool {
+    std::fs::symlink_metadata(path).is_ok()
+}
+
+/// `path` as an absolute path with its directory resolved, for comparing two
+/// spellings of one file whether or not the file exists.
+fn resolved(path: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(path);
+    let abs = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::env::current_dir().unwrap_or_default().join(p)
+    };
+    if let Ok(full) = abs.canonicalize() {
+        return full;
+    }
+    match (abs.parent(), abs.file_name()) {
+        (Some(dir), Some(name)) => dir
+            .canonicalize()
+            .unwrap_or_else(|_| dir.to_path_buf())
+            .join(name),
+        _ => abs,
+    }
+}
+
 /// Start an empty project saved at `path` (or a temporary one when `None`).
+/// The destination is checked and the current session saved before anything
+/// is replaced; a refused path or a failed save leaves the running session
+/// as it is (contents and path).
 pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
-    save_current(app);
+    if let Some(p) = path {
+        // Compared as resolved paths: "./x.json" and "x.json" are one file,
+        // also when it does not exist yet.
+        if resolved(p) == resolved(&app.project_path) {
+            return Err(format!("{p} is the current project"));
+        }
+        if taken(p) {
+            return Err(format!(
+                "{p} already exists: open it instead, or choose another name"
+            ));
+        }
+    }
+    save_current(app)?;
+    // Saving the outgoing session may have created the destination (an
+    // unseen alias of the current path, or another process in between).
+    if let Some(p) = path
+        && taken(p)
+    {
+        return Err(format!(
+            "{p} already exists: open it instead, or choose another name"
+        ));
+    }
     let target = match path {
         Some(p) => p.to_string(),
         None => std::env::temp_dir()
@@ -61,11 +121,6 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
             .display()
             .to_string(),
     };
-    if path.is_some() && std::path::Path::new(&target).exists() {
-        return Err(format!(
-            "{target} already exists: open it instead, or choose another name"
-        ));
-    }
     // A new project replaces the session, unlike settings import/defaults,
     // which deliberately keep traffic and tool contents.
     crate::tools::apply_project(app, &webprobe_core::project::ProjectData::default(), true);
@@ -73,7 +128,9 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
     app.shared.passive.clear();
     app.project_path = target.clone();
     if path.is_some() {
-        crate::tools::save_project(app, true);
+        // The switch has happened, so a failed first save can only be
+        // reported, not aborted.
+        let _ = crate::tools::save_project(app, true);
         after_switch(app, &target, "New project");
     } else {
         app.hist_cache_key.clear();
@@ -339,6 +396,93 @@ mod tests {
         project::save(&target, &project::ProjectData::default()).unwrap();
         open(&mut app, target.to_str().unwrap()).unwrap();
         assert_empty_session(&app);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A path `save` cannot write: its parent is a regular file, so the
+    /// temporary file cannot be created.
+    fn unsaveable_path(dir: &std::path::Path) -> String {
+        let blocker = dir.join("blocker");
+        std::fs::write(&blocker, b"not a directory").unwrap();
+        blocker.join("original.json").display().to_string()
+    }
+
+    #[test]
+    fn new_project_aborts_when_current_session_cannot_be_saved() {
+        let (mut app, dir) = session_with_traffic("new-abort");
+        let target = dir.join("new.json");
+        app.project_path = unsaveable_path(&dir);
+        let err = new_project(&mut app, Some(target.to_str().unwrap())).unwrap_err();
+        assert!(
+            err.contains("could not be saved"),
+            "unexpected error: {err}"
+        );
+        assert!(app.project_path.ends_with("original.json"));
+        assert_eq!(
+            app.shared.history.snapshot().len(),
+            1,
+            "session contents changed after the refused switch"
+        );
+        assert!(!target.exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn open_aborts_when_current_session_cannot_be_saved() {
+        let (mut app, dir) = session_with_traffic("open-abort");
+        let target = dir.join("empty.json");
+        project::save(&target, &project::ProjectData::default()).unwrap();
+        app.project_path = unsaveable_path(&dir);
+        let err = open(&mut app, target.to_str().unwrap()).unwrap_err();
+        assert!(
+            err.contains("could not be saved"),
+            "unexpected error: {err}"
+        );
+        assert!(app.project_path.ends_with("original.json"));
+        assert_eq!(
+            app.shared.history.snapshot().len(),
+            1,
+            "session contents changed after the refused switch"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn new_project_refuses_existing_destination_before_saving() {
+        let (mut app, dir) = session_with_traffic("new-exists");
+        let target = dir.join("new.json");
+        project::save(&target, &project::ProjectData::default()).unwrap();
+        let err = new_project(&mut app, Some(target.to_str().unwrap())).unwrap_err();
+        assert!(err.contains("already exists"), "unexpected error: {err}");
+        // The refusal happens before the leaving-save: the current project
+        // file was never written.
+        assert!(
+            !std::path::Path::new(&app.project_path).exists(),
+            "a refused switch still saved the session"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn new_project_checks_destination_before_attempting_save() {
+        let (mut app, dir) = session_with_traffic("new-exists-unsaveable");
+        let target = dir.join("new.json");
+        project::save(&target, &project::ProjectData::default()).unwrap();
+        // The current session cannot be saved, so the refusal proves the
+        // destination check runs before the save attempt.
+        app.project_path = unsaveable_path(&dir);
+        let err = new_project(&mut app, Some(target.to_str().unwrap())).unwrap_err();
+        assert!(err.contains("already exists"), "unexpected error: {err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn new_project_refuses_the_current_path() {
+        let (mut app, dir) = session_with_traffic("new-same");
+        let current = app.project_path.clone();
+        let err = new_project(&mut app, Some(&current)).unwrap_err();
+        assert!(err.contains("current project"), "unexpected error: {err}");
+        assert_eq!(app.shared.history.snapshot().len(), 1);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

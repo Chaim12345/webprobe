@@ -55,6 +55,8 @@ pub(crate) struct ScanCtx {
     pub item: usize,
     /// "Input returned in response (stored)" is reported (scan config).
     pub stored_report: bool,
+    /// Project option `http.http2.enable_http2`, read once for this request.
+    pub http2_enabled: bool,
     pub(crate) host_scope: Arc<crate::host_probe_state::AttemptScope>,
 }
 
@@ -82,6 +84,11 @@ impl ScanCtx {
             .unwrap()
             .check_enabled(STORED_INPUT_ID);
         let host_hdr = util::get_header(&parts.headers, "Host").unwrap_or_default();
+        let http2_enabled = crate::scan_config::shared_config(&shared)
+            .lock()
+            .unwrap()
+            .http
+            .http2_enabled;
         let mut cx = ScanCtx {
             shared,
             entry,
@@ -100,6 +107,7 @@ impl ScanCtx {
             smtp,
             item,
             stored_report,
+            http2_enabled,
             host_scope,
         };
         // The baseline request runs here, not on the caller's (UI) thread: a

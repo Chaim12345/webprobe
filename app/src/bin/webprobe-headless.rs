@@ -95,10 +95,12 @@ fn load_burp_configs(
     flags: &BurpFlags,
 ) -> (
     burp_config::ProxyListener,
+    burp_config::HttpOptions,
     burp_config::ApiConfig,
     Vec<scan_library::LibraryConfig>,
 ) {
     let mut listener = burp_config::ProxyListener::default();
+    let mut http = burp_config::HttpOptions::default();
     let mut api = burp_config::ApiConfig::default();
     let mut configs = Vec::new();
     let read = |path: &str| -> String {
@@ -114,7 +116,7 @@ fn load_burp_configs(
             std::process::exit(1);
         });
         let mut notes = Vec::new();
-        burp_config::apply_project_options(&json, &mut listener, &mut notes);
+        burp_config::apply_project_options(&json, &mut listener, &mut http, &mut notes);
         for n in notes {
             eprintln!("{f}: {n}");
         }
@@ -139,7 +141,7 @@ fn load_burp_configs(
             eprintln!("{f}: {n}");
         }
     }
-    (listener, api, configs)
+    (listener, http, api, configs)
 }
 
 /// Overlay the loaded scan configurations on the shared scan settings
@@ -241,7 +243,7 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
 
 fn proxy(mut args: Vec<String>) {
     let flags = take_burp_flags(&mut args);
-    let (listener, api, scan_configs) = load_burp_configs(&flags);
+    let (listener, http, api, scan_configs) = load_burp_configs(&flags);
     // Without a --config-file the headless default stays 8090; with one,
     // the config's listener port applies and an explicit --port beats it.
     let default_port = if flags.config_files.is_empty() {
@@ -264,6 +266,11 @@ fn proxy(mut args: Vec<String>) {
         usage();
     }
     let shared = net::Shared::new();
+    webprobe_core::scan_config::shared_config(&shared)
+        .lock()
+        .unwrap()
+        .http
+        .http2_enabled = http.http2_enabled;
     apply_scan_configs(&shared, &scan_configs);
     if api.enabled {
         // Burp serves the REST API from the running app; for the headless
@@ -360,7 +367,7 @@ fn proxy(mut args: Vec<String>) {
 
 fn scan_urls(mut args: Vec<String>) {
     let flags = take_burp_flags(&mut args);
-    let (_listener, _api, scan_configs) = load_burp_configs(&flags);
+    let (_listener, http, _api, scan_configs) = load_burp_configs(&flags);
     let crawl = take_flag(&mut args, "--crawl");
     let report_file = take_opt(&mut args, "--report");
     let speed = match take_opt(&mut args, "--speed").as_deref() {
@@ -374,6 +381,13 @@ fn scan_urls(mut args: Vec<String>) {
     }
     let shared = net::Shared::new();
     shared.scan_speed.store(speed, Ordering::SeqCst);
+    // A --config-file's http.http2.enable_http2 gates Hidden HTTP/2 here
+    // too, not only in proxy mode.
+    webprobe_core::scan_config::shared_config(&shared)
+        .lock()
+        .unwrap()
+        .http
+        .http2_enabled = http.http2_enabled;
     apply_scan_configs(&shared, &scan_configs);
     let started = Instant::now();
     scan::crawl_and_audit(&shared, &args, !crawl);
@@ -520,7 +534,7 @@ mod tests {
         .unwrap();
         let mut args = strings(&["--config-file", f.to_str().unwrap()]);
         let flags = take_burp_flags(&mut args);
-        let (listener, _api, configs) = load_burp_configs(&flags);
+        let (listener, _http, _api, configs) = load_burp_configs(&flags);
         assert_eq!(listener.port, 9091);
         assert_eq!(configs.len(), 1);
         assert!(configs[0].tree.get("proxy").is_none());

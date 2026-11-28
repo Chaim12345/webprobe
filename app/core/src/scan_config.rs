@@ -123,7 +123,7 @@ pub const INSERTION_TYPES: [(&str, &str); 8] = [
 pub const NESTED_KEY: &str = "nested";
 pub const NESTED_LABEL: &str = "Use nested insertion points";
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct ScanConfig {
     /// Check ids (see `scan::check_catalogue`) that do not run.
     pub disabled_checks: BTreeSet<String>,
@@ -134,6 +134,9 @@ pub struct ScanConfig {
     /// "Issues reported" from the scan configuration library (R-11); None
     /// runs every check, as before the library existed.
     pub issues: Option<webprobe_support::scan_filter::IssueFilter>,
+    /// Burp's project HTTP options (`http.http2.enable_http2`), kept in
+    /// this slot so `net::Shared` does not grow a field (ADR 0002 rule 2).
+    pub http: crate::burp_config::HttpOptions,
     /// BCheck definition sources loaded in the Extensions tab (R-14);
     /// parsed and validated when a scan starts. Every request a loaded
     /// check sends is scope-gated to the audited origin, but a check's
@@ -233,6 +236,7 @@ impl ScanConfig {
                     &serde_json::json!({"scanner": {"issues_reported": ir}}),
                 )
             }),
+            http: crate::burp_config::HttpOptions::default(),
             bchecks: s.bchecks.clone(),
         }
     }
@@ -339,6 +343,16 @@ pub fn config_to_tree(c: &ScanConfig, speed: u8, accuracy: u8) -> serde_json::Va
 mod tests {
     use super::*;
     use ProjectScanner;
+
+    #[test]
+    fn http2_is_on_until_the_project_turns_it_off() {
+        let shared = crate::net::Shared::new();
+        let http2 =
+            |shared: &crate::net::Shared| shared_config(shared).lock().unwrap().http.http2_enabled;
+        assert!(http2(&shared), "Burp's default is on");
+        shared_config(&shared).lock().unwrap().http.http2_enabled = false;
+        assert!(!http2(&shared));
+    }
 
     #[test]
     fn round_trips_through_a_project_file() {
