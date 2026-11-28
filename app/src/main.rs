@@ -814,6 +814,7 @@ impl App {
             hist_table: table::TableState {
                 sort_col: 0,
                 sort_asc: false,
+                sortable: true,
                 ..Default::default()
             },
             hist_filter: history_filter::HistoryFilter::default(),
@@ -821,7 +822,7 @@ impl App {
             hist_cache_len: 0,
             hist_cache_key: String::new(),
             hist_cache_truncated: false,
-            scan_table: table::TableState::new(),
+            scan_table: table::TableState::sorted(),
             intr_table: table::TableState::new(),
             target_table: table::TableState::new(),
             toasts: feedback::Toasts::new(),

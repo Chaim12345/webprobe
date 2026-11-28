@@ -38,6 +38,10 @@ impl Column {
 pub struct TableState {
     pub sort_col: usize,
     pub sort_asc: bool,
+    /// The owner applies `sort_rows` to this table. Without it a header
+    /// click does nothing and no arrow is drawn: a header that moves an
+    /// arrow over unsorted rows claims an order that is not there.
+    pub sortable: bool,
     pub filter: String,
     /// Per-column widths, overriding `Column::width` once the user has dragged a
     /// divider. Empty means "use the defaults".
@@ -53,6 +57,7 @@ impl Default for TableState {
         Self {
             sort_col: usize::MAX,
             sort_asc: false,
+            sortable: false,
             filter: String::new(),
             widths: Vec::new(),
             hidden: Vec::new(),
@@ -64,6 +69,13 @@ impl Default for TableState {
 impl TableState {
     pub fn new() -> Self {
         Self::default()
+    }
+    /// State for a table whose owner sorts its rows with `sort_rows`.
+    pub fn sorted() -> Self {
+        Self {
+            sortable: true,
+            ..Self::default()
+        }
     }
 
     pub fn width_of(&self, columns: &[Column], idx: usize) -> f32 {
@@ -271,7 +283,7 @@ fn table_body_inner<R, F>(
                 for i in visible {
                     let col = &columns[i];
                     let width = state.width_of(columns, i);
-                    let label = if state.sort_col == i {
+                    let label = if state.sortable && state.sort_col == i {
                         let arrow = if state.sort_asc {
                             " \u{2191}"
                         } else {
@@ -300,7 +312,7 @@ fn table_body_inner<R, F>(
                         egui::FontId::proportional(12.5),
                         theme::ink(),
                     );
-                    if resp.clicked() {
+                    if resp.clicked() && state.sortable {
                         if state.sort_col == i {
                             state.sort_asc = !state.sort_asc;
                         } else {
