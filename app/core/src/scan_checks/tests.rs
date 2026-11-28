@@ -372,6 +372,11 @@ fn registry_order_is_pinned() {
                 Some(BURP_GROUP)
             ),
             (
+                "active.dom-local-file-path",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
                 "active.dom-xpath-injection",
                 Scope::Request,
                 Some(BURP_GROUP)
@@ -1514,6 +1519,57 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
                 && c == "Tentative"),
         "jQuery sink: {got:?}"
     );
+}
+
+/// S-04, the dynamic part: a page that passes location.hash as the name of
+/// a file-system entry is Local file path manipulation (DOM-based). The
+/// calls fail (no directory behind them), which is after the sink is seen.
+#[test]
+fn dom_local_file_path_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/opfs") {
+            r#"<html><body><script>
+var name = decodeURIComponent(location.hash.slice(1));
+try { var p = FileSystemDirectoryHandle.prototype.getFileHandle.call({}, name); if (p && p.catch) { p.catch(function () {}); } } catch (e) {}
+</script></body></html>"#
+        } else if path.starts_with("/entry") {
+            r#"<html><body><script>
+var name = decodeURIComponent(location.hash.slice(1));
+try {
+  webkitRequestFileSystem(0, 1024, function (fs) {
+    fs.root.getFile(name, { create: false }, function () {}, function () {});
+  }, function () { document.title = "no file system"; });
+} catch (e) {}
+</script></body></html>"#
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    });
+    let host = format!("127.0.0.1:{port}");
+    for path in ["/opfs", "/entry"] {
+        let got = lab_scan(
+            port,
+            &["active.dom-local-file-path"],
+            "GET",
+            path,
+            format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == "Local file path manipulation (DOM-based)"
+                    && s == "high"
+                    && c == "Firm"),
+            "{path}: {got:?}"
+        );
+    }
 }
 
 /// #242: markup handed to the jQuery constructor (the receiver of appendTo

@@ -2406,6 +2406,50 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
   wrapSetter(Document.prototype, "title", "document.title");
   wrapSetter(HTMLScriptElement.prototype, "text", "script.text");
   wrapSetter(HTMLIFrameElement.prototype, "srcdoc", "iframe.srcdoc");
+  // File-handling APIs that take a path or name (Burp's root.getFile and
+  // root.getDirectory sinks, and their origin-private file system
+  // successors). Burp reaches these by static analysis only; here the call
+  // itself is observed.
+  // Chromium does not expose the legacy directory-entry interface by name:
+  // its prototype is reachable only from a file system object, so it is
+  // patched the first time webkitRequestFileSystem hands one over.
+  try {
+    var patchFsEntry = function (entry) {
+      try {
+        var proto = entry && Object.getPrototypeOf(entry);
+        if (!proto || proto.__wpFsPatched) { return; }
+        Object.defineProperty(proto, "__wpFsPatched", { value: true });
+        if (typeof proto.getFile === "function") {
+          var origGetFile = proto.getFile;
+          proto.getFile = function (p) { record("FileSystemDirectoryEntry.getFile", p); return origGetFile.apply(this, arguments); };
+        }
+        if (typeof proto.getDirectory === "function") {
+          var origGetDirectory = proto.getDirectory;
+          proto.getDirectory = function (p) { record("FileSystemDirectoryEntry.getDirectory", p); return origGetDirectory.apply(this, arguments); };
+        }
+      } catch (e) {}
+    };
+    if (typeof window.webkitRequestFileSystem === "function") {
+      var origRequestFs = window.webkitRequestFileSystem;
+      window.webkitRequestFileSystem = function (type, size, ok, err) {
+        return origRequestFs.call(window, type, size, function (fs) {
+          patchFsEntry(fs && fs.root);
+          if (typeof ok === "function") { ok(fs); }
+        }, err);
+      };
+    }
+  } catch (e) {}
+  try {
+    var fsHandle = window.FileSystemDirectoryHandle && window.FileSystemDirectoryHandle.prototype;
+    if (fsHandle && typeof fsHandle.getFileHandle === "function") {
+      var origGetFileHandle = fsHandle.getFileHandle;
+      fsHandle.getFileHandle = function (p) { record("FileSystemDirectoryHandle.getFileHandle", p); return origGetFileHandle.apply(this, arguments); };
+    }
+    if (fsHandle && typeof fsHandle.getDirectoryHandle === "function") {
+      var origGetDirectoryHandle = fsHandle.getDirectoryHandle;
+      fsHandle.getDirectoryHandle = function (p) { record("FileSystemDirectoryHandle.getDirectoryHandle", p); return origGetDirectoryHandle.apply(this, arguments); };
+    }
+  } catch (e) {}
   wrapSetter(HTMLAnchorElement.prototype, "target", "anchor.target");
   wrapSetter(HTMLFormElement.prototype, "action", "form.action");
   wrapSetter(HTMLAnchorElement.prototype, "href", "anchor.href");
