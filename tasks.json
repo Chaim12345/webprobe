@@ -1442,7 +1442,7 @@
       "acceptance": "Extension payload generation off the UI thread; WebSocket 'to be sent' handlers run after the user's intercept edit; WebSocket send/close and websockets().createWebSocket; scanner startAudit / startCrawl / generateReport / registerAuditIssueHandler; http response analyzers; organizer status; hotkey handlers; burpSuite export/import of options once WebProbe speaks Burp's settings JSON (R-15). Ten more popular BApps (not JWT tools) loaded unmodified, each result recorded in docs/MONTOYA-COVERAGE.md.",
       "effort": "M",
       "status": "todo",
-      "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait. 2026-11-28: Scanner.registerAuditIssueHandler (#297), Scanner.generateReport (#303) and a real OrganizerItem.status() (#299) landed. Open: WebSocket send/close/createWebSocket, startAudit, startCrawl, hotkeys, options export/import, the ten-BApp check."
+      "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait. 2026-11-28: Scanner.registerAuditIssueHandler (#297), Scanner.generateReport (#303) and a real OrganizerItem.status() (#299) landed. Open: WebSocket send/close/createWebSocket, startAudit, startCrawl, hotkeys, options export/import, the ten-BApp check. Later on 2026-11-28: createWebSocket (#312), send/close on proxied WebSockets (#314), project options export (#315), startCrawl (#327), startAudit (#328); hotkey registration accepted but not bound and project() added (#311). A static survey of 13 BApps is in docs/MONTOYA-COVERAGE.md. Open: the BApp load check on a developer machine, options import."
     },
     {
       "id": "AR-01",
@@ -1493,7 +1493,7 @@
       "acceptance": "F8: bounded worker pool for active checks (respecting resource pools, stop/pause, progress), passive checks moved off the proxy connection thread onto a bounded queue. Needed by R-13.",
       "effort": "L",
       "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
+      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section. 2026-11-28 (#324, #326): live passive audits run on one worker fed by a bounded queue (net::live_audit); headless and the desktop save wait for it. Open: the bounded worker pool for active checks."
     },
     {
       "id": "AR-06",
@@ -1534,7 +1534,7 @@
       "acceptance": "F10: Repeater, Intruder and intercept keep requests as bytes; editing a binary body does not corrupt it.",
       "effort": "M",
       "status": "todo",
-      "evidence": "Partly done 2026-11-28 (#285): a captured non-UTF-8 body is remembered when a request becomes editor text and put back on send, so Repeater and Intruder send an unedited binary body byte-for-byte with a correct Content-Length (app/support/src/util.rs remember_binary_body/restore_binary_body). Still open (#240): the bytes are in memory only (lost on restart), no hex editing, text-only Intruder payloads, Comparer and copy actions use the lossy text. 2026-11-28 (#305): the captured bytes are stored with the Repeater tab in the project file and restored on load. Open: a hex editor, binary Intruder payloads, Comparer and copy actions."
+      "evidence": "Partly done 2026-11-28 (#285): a captured non-UTF-8 body is remembered when a request becomes editor text and put back on send, so Repeater and Intruder send an unedited binary body byte-for-byte with a correct Content-Length (app/support/src/util.rs remember_binary_body/restore_binary_body). Still open (#240): the bytes are in memory only (lost on restart), no hex editing, text-only Intruder payloads, Comparer and copy actions use the lossy text. 2026-11-28 (#305): the captured bytes are stored with the Repeater tab in the project file and restored on load. Open: a hex editor, binary Intruder payloads, Comparer and copy actions. Later on 2026-11-28: binary Intruder payloads (#317) and a byte-true Hex tab for bodies (#318). Tool state is still text with the bytes kept beside it, so the acceptance is met in behaviour for bodies, not in structure."
     },
     {
       "id": "AR-10",
@@ -1577,7 +1577,7 @@
       "acceptance": "A Bambda can be a scan check, active or passive, with the library, editor and test run Burp offers for custom scan checks; its issues carry type 0x09008000 (\"Bambda generated issue\").",
       "effort": "L",
       "status": "todo",
-      "evidence": "In progress 2026-11-25: branch feat/s03-bambda-scan-checks-20261125. Not started. The Java Bambda backend (core/src/bambda.rs) compiles filters and columns only. Burp: Zcot.BAMBDA_GENERATED, registered in burp.Zcug:277-281; UI strings \"Custom scan checks\", \"Selected bambda scan checks\" (burp.Zgfu). Passive half landed 2026-11-28 (#296): a SCAN_CHECK_PASSIVE_PER_REQUEST Bambda returns an AuditResult and its issues carry type 0x09008000, from the desktop Bambda library, webprobe-headless proxy --bambda-check and scan --bambda-check. Open: active checks, automatic runs during a desktop scan, the api variable."
+      "evidence": "In progress 2026-11-25: branch feat/s03-bambda-scan-checks-20261125. Not started. The Java Bambda backend (core/src/bambda.rs) compiles filters and columns only. Burp: Zcot.BAMBDA_GENERATED, registered in burp.Zcug:277-281; UI strings \"Custom scan checks\", \"Selected bambda scan checks\" (burp.Zgfu). Passive half landed 2026-11-28 (#296): a SCAN_CHECK_PASSIVE_PER_REQUEST Bambda returns an AuditResult and its issues carry type 0x09008000, from the desktop Bambda library, webprobe-headless proxy --bambda-check and scan --bambda-check. Open: active checks, automatic runs during a desktop scan, the api variable. Later on 2026-11-28: checks get the api variable (#310) and a saved check can be ticked to run after every scan, the tick tied to the SHA-256 of its source (#325). Only active checks are open."
     },
     {
       "id": "S-04",
