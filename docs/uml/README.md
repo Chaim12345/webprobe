@@ -14,14 +14,25 @@ Mermaid diagrams; GitHub renders them in place.
 | [core-bcheck.md](core-bcheck.md) | BCheck parser and runner | generated |
 | [desktop-ui.md](desktop-ui.md) | Desktop UI view types | generated |
 
+Each file holds one or more Mermaid blocks, which GitHub draws in place. The
+same diagrams are in [`img/`](img/) as SVG files, one per block
+(`core-net-3.svg` is the third block of `core-net.md`), for viewers that do
+not draw Mermaid.
+
 ## Regenerating
 
 ```sh
 cargo install auto-uml
-scripts/gen-uml.sh
+scripts/gen-uml.sh            # Markdown with Mermaid blocks
+node scripts/render-uml.js    # SVG files in docs/uml/img/ (needs playwright)
 ```
 
 The generated files are overwritten; `flows.md` and this file are not.
+
+A directory's types are split into parts of at most nine classes
+(`scripts/uml-split.py`): Mermaid lays unrelated classes out in one row, so a
+single diagram of a large directory is too wide to read. Classes linked to
+each other stay in the same part.
 
 ## Reading the class diagrams
 
