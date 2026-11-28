@@ -505,7 +505,7 @@ fn send_once(
     let exts = ext_host::active_hooks(shared);
     let svc = HttpService::new(&service.host, service.port, service.https);
     let mut ann = Annotations::default();
-    let mut bytes = req.as_bytes().to_vec();
+    let mut bytes = webprobe_core::util::restore_binary_body(req.as_bytes());
     if !ext_host::run_http_request_hooks(&exts, "Repeater", &svc, &mut bytes, &mut ann) {
         return net::Upstream {
             resp: None,
