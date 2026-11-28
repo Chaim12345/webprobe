@@ -28,8 +28,41 @@ pub fn load() -> Vec<Installed> {
     store_file().map(|f| load_from(&f)).unwrap_or_default()
 }
 
-pub fn save(list: &[Installed]) -> Result<(), String> {
-    save_to(&store_file().ok_or("no config directory")?, list)
+/// Why the list of installed extensions could not be saved.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum StoreError {
+    #[error("no config directory")]
+    NoConfigDir,
+    /// The directory or file could not be written.
+    #[error("{0}")]
+    Io(String),
+    /// The list could not be encoded.
+    #[error("{0}")]
+    Encode(String),
+}
+
+/// Why an extension did not start.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum StartError {
+    /// The Java sidecar did not load the extension.
+    #[error("{0}")]
+    Java(String),
+    /// The process extension did not start or register.
+    #[error(transparent)]
+    Process(#[from] crate::ext_process::ProcessError),
+    #[error("empty command")]
+    EmptyCommand,
+}
+
+/// Callers that still carry errors as text keep working with `?`.
+impl From<StartError> for String {
+    fn from(e: StartError) -> String {
+        e.to_string()
+    }
+}
+
+pub fn save(list: &[Installed]) -> Result<(), StoreError> {
+    save_to(&store_file().ok_or(StoreError::NoConfigDir)?, list)
 }
 
 pub fn load_from(f: &std::path::Path) -> Vec<Installed> {
@@ -39,12 +72,12 @@ pub fn load_from(f: &std::path::Path) -> Vec<Installed> {
         .unwrap_or_default()
 }
 
-pub fn save_to(f: &std::path::Path, list: &[Installed]) -> Result<(), String> {
+pub fn save_to(f: &std::path::Path, list: &[Installed]) -> Result<(), StoreError> {
     if let Some(d) = f.parent() {
-        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(d).map_err(|e| StoreError::Io(e.to_string()))?;
     }
-    let json = serde_json::to_vec_pretty(list).map_err(|e| e.to_string())?;
-    std::fs::write(f, json).map_err(|e| format!("{}: {e}", f.display()))
+    let json = serde_json::to_vec_pretty(list).map_err(|e| StoreError::Encode(e.to_string()))?;
+    std::fs::write(f, json).map_err(|e| StoreError::Io(format!("{}: {e}", f.display())))
 }
 
 /// Split a command line into words: whitespace separates, single or double
@@ -115,7 +148,7 @@ pub fn start(
     item: &Installed,
     shared: &Arc<Shared>,
     startup: bool,
-) -> Result<LoadedExtension, String> {
+) -> Result<LoadedExtension, StartError> {
     let mut loaded = match item.kind {
         Kind::Java => {
             let data = crate::ext_host::with_host(shared, |h| {
@@ -126,15 +159,18 @@ pub fn start(
                 data,
                 ..crate::ext_host::SidecarOptions::for_this_session()
             };
-            LoadedExtension::new(crate::ext_host::JavaSidecar::spawn_opts(
-                item.source.trim(),
-                Some(crate::ext_calls::host_link(shared)),
-                opts,
-            )?)
+            LoadedExtension::new(
+                crate::ext_host::JavaSidecar::spawn_opts(
+                    item.source.trim(),
+                    Some(crate::ext_calls::host_link(shared)),
+                    opts,
+                )
+                .map_err(StartError::Java)?,
+            )
         }
         Kind::Process => {
             let words = absolutize(split_command(&item.source));
-            let (program, args) = words.split_first().ok_or("empty command")?;
+            let (program, args) = words.split_first().ok_or(StartError::EmptyCommand)?;
             LoadedExtension::new(crate::ext_process::ProcessExtension::spawn(
                 program,
                 args,
@@ -178,7 +214,7 @@ pub fn start_in_background(
             )),
         }
         shared.wake();
-        done(result);
+        done(result.map_err(|e| e.to_string()));
     });
 }
 
