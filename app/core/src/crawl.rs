@@ -2556,10 +2556,28 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       jq.fn.init = init;
     }
     ["html", "append", "prepend", "before", "after", "wrap", "wrapAll", "wrapInner", "replaceWith"].forEach(function (m) {
+      var wrapFn = function (orig) {
+        if (jqWrapped(orig)) { return orig; }
+        return jqTag(function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); });
+      };
       if (!jqWrapped(jq.fn[m])) {
-        var orig = jq.fn[m];
-        jq.fn[m] = jqTag(function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); });
+        jq.fn[m] = wrapFn(jq.fn[m]);
+        return;
       }
+      // Not there yet (a plugin or a late build step adds it): an accessor
+      // wraps it when it is assigned, so a call in the same task is seen
+      // without waiting for the next poll.
+      try {
+        if (typeof jq.fn[m] === "undefined" && !Object.getOwnPropertyDescriptor(jq.fn, m)) {
+          var late;
+          Object.defineProperty(jq.fn, m, {
+            configurable: true,
+            enumerable: true,
+            get: function () { return late; },
+            set: function (v) { late = wrapFn(v); }
+          });
+        }
+      } catch (e) {}
     });
     if (!jqWrapped(jq.parseHTML)) {
       var origPh = jq.parseHTML;

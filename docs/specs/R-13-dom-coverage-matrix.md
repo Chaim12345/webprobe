@@ -181,10 +181,11 @@ follow-up issue.
   page.
 - **Storage reads as sources are not planned** (see the sources table).
 
-Still open, with no decision needed: custom setters as sinks, an
-assignment-time hook for jQuery `fn` methods attached late (they are picked up
-on the next poll tick), and the prototype-pollution gaps listed in its row
-(overwrites of existing properties, additions missed between polls).
+Still open, with no decision needed: custom setters as sinks, and the
+prototype-pollution gaps listed in its row (overwrites of existing properties,
+additions missed between polls). jQuery `fn` methods attached after the
+library is published are wrapped when they are assigned, so a call in the same
+task is seen.
 
 ## Current inconsistency (2026-11-24)
 
