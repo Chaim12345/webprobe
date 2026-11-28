@@ -108,6 +108,12 @@ final class Factory {
                     return want.equals(id) || want.startsWith(id + ".");
                 }).as(burp.api.montoya.collaborator.InteractionFilter.class);
             }
+            // HotKey.hotKey(name, keys): a plain value object.
+            case "hotKey": case "hotkey": {
+                Object[] k = a;
+                return Api.obj().on("name", x -> k.length > 0 ? k[0] : null).on("hotkey", x -> k.length > 1 ? k[1] : null)
+                        .text("HotKey " + (k.length > 0 ? k[0] : "")).as(burp.api.montoya.ui.hotkey.HotKey.class);
+            }
             case "auditResult": {
                 List<Object> issues = new ArrayList<>(Messages.many(a.length == 0 ? new Object[0] : new Object[] { a[0] }));
                 return Api.obj().on("auditIssues", x -> issues).as(burp.api.montoya.scanner.AuditResult.class);

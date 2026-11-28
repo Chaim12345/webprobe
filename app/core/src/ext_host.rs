@@ -1611,6 +1611,110 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// R-20: an extension that registers hotkeys or asks for the project
+    /// loads. The hotkeys are accepted, not bound.
+    #[test]
+    fn montoya_hotkey_registration_and_project() {
+        let Some(dir) = stage_extension("HotKeyProjectExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("hotkey extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("hotkey and project regression passed")),
+            "hotkey and project checks did not finish: {log:#?}"
+        );
+        assert!(
+            !log.iter().any(|line| line.contains("is not supported")),
+            "{log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// R-20, the wider BApp check: load each jar named in
+    /// `WEBPROBE_BAPP_JARS` (paths separated by `:`) unmodified, headless,
+    /// and print what it registered and every unsupported call it made
+    /// while loading. A survey, not an assertion: run it with
+    /// `--ignored --nocapture` and record the lines in
+    /// docs/MONTOYA-COVERAGE.md.
+    #[test]
+    #[ignore = "needs WEBPROBE_BAPP_JARS, a JDK and the Montoya API jar"]
+    fn bapp_compat_survey() {
+        let jars = std::env::var("WEBPROBE_BAPP_JARS").expect("set WEBPROBE_BAPP_JARS");
+        for jar in jars.split(':').filter(|j| !j.is_empty()) {
+            let file = std::path::Path::new(jar)
+                .file_name()
+                .map_or_else(|| jar.to_string(), |n| n.to_string_lossy().into_owned());
+            let shared = crate::net::Shared::new();
+            let opts = SidecarOptions {
+                headless: true,
+                startup: true,
+                data: None,
+                prefs_dir: Some(std::env::temp_dir().join("wp-prefs-bapp-survey")),
+            };
+            let sc = match JavaSidecar::spawn_opts(
+                jar,
+                Some(crate::ext_calls::host_link(&shared)),
+                opts,
+            ) {
+                Ok(sc) => sc,
+                Err(e) => {
+                    println!("BAPP {file} | LOAD FAILED | {}", e.replace('\n', " / "));
+                    continue;
+                }
+            };
+            // Extensions register on their own threads after initialize().
+            std::thread::sleep(std::time::Duration::from_secs(4));
+            let ui = sc.ui().unwrap_or_default();
+            let log = sc.errors();
+            let unsupported: std::collections::BTreeSet<String> = log
+                .iter()
+                .filter(|l| l.contains("is not supported by WebProbe"))
+                .map(|l| {
+                    l.split(" is not supported")
+                        .next()
+                        .unwrap_or(l)
+                        .rsplit(' ')
+                        .next()
+                        .unwrap_or(l)
+                        .to_string()
+                })
+                .collect();
+            let other: Vec<&String> = log
+                .iter()
+                .filter(|l| {
+                    !l.contains("is not supported by WebProbe")
+                        && (l.contains("Exception") || l.contains("Error"))
+                })
+                .take(3)
+                .collect();
+            println!(
+                "BAPP {file} | loaded, healthy={} | tabs={:?} menus={} editors={}/{} checks={}/{} generators={} processors={} ws={} session={} | unsupported={:?} | errors={:?}",
+                sc.healthy(),
+                ui.tabs,
+                ui.menu_providers,
+                ui.request_editors,
+                ui.response_editors,
+                ui.active_checks,
+                ui.passive_checks,
+                ui.generators.len(),
+                ui.processors.len(),
+                ui.ws_handlers,
+                ui.session_actions.len(),
+                unsupported,
+                other
+            );
+            sc.unload();
+        }
+    }
+
     /// R-20: Scanner.generateReport writes the given issues as XML (the
     /// element names of Burp's issue export) and as HTML; the extension
     /// parses the XML back and asserts on it.

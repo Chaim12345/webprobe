@@ -23,13 +23,13 @@ so WebProbe does not ship it.
 | logging | full | |
 | organizer | full | |
 | persistence | full | |
-| project | unsupported | |
+| project | partial | `name` is fixed and `id` is new for each session: the sidecar is not told which project is open |
 | proxy | full | WebSocket `send*` / `close` |
 | repeater | full | |
 | scanner | partial | `startAudit`, `startCrawl`, `bChecks`; `generateReport` writes the issues it is given without their requests and responses; an audit issue handler hears of a new issue within about a second (the issue list is polled) |
 | scope | full | the change handler fires only for changes made through the API |
 | siteMap | full | |
-| userInterface | partial | `registerHotKeyHandler`; WebSocket message editors are accepted but not shown; Swing shows in the extension's own window, not inside WebProbe's |
+| userInterface | partial | `registerHotKeyHandler` is accepted but the hotkey is never bound, so it does not fire; WebSocket message editors are accepted but not shown; Swing shows in the extension's own window, not inside WebProbe's |
 | utilities | partial | `rankingUtils`, `shellUtils`, Brotli |
 | websockets | partial | `createWebSocket` |
 
@@ -50,6 +50,32 @@ can force or skip it), "to be sent" handlers after the user's edit. Calls into a
 | MCP Server | Loads with no unsupported call and listens on 127.0.0.1:9876; its tools were not exercised |
 
 The sample is four BApps, three of them JWT tools. Other BApps may hit the unsupported calls above.
+
+## Static survey of 13 more BApps (2026-11-28)
+
+Not a load test. Each BApp was downloaded from the BApp Store and its bytecode read with `javap` for
+the Montoya interface methods it references (`scripts/bapp_montoya_survey.py` does the same for one
+jar). Nothing was run, so this says which unsupported calls a BApp can reach, not whether it loads or
+works. Loading them unmodified is still to do.
+
+| BApp (store version) | `MontoyaApi` accessors used | Unsupported calls it references |
+|---|---|---|
+| Reshaper (28) | comparer decoder extension http intruder logging organizer persistence proxy repeater scope siteMap userInterface utilities websockets | WebSocket `sendTextMessage` / `sendBinaryMessage` (proxy and created sockets) |
+| Hackvertor (68) | ai burpSuite http intruder logging persistence repeater userInterface utilities websockets | `ai` (reports itself switched off); hotkey registration (accepted, not bound) |
+| InQL (27) | burpSuite extension http intruder logging persistence proxy repeater scanner userInterface | `burpSuite().exportProjectOptionsAsJson` |
+| Param Miner (39) | burpSuite http logging organizer scope userInterface utilities websockets | `exportProjectOptionsAsJson`, `importProjectOptionsFromJson`, `websockets().createWebSocket`; hotkey registration (accepted, not bound) |
+| Turbo Intruder (69) | collaborator http organizer userInterface utilities | `utilities().rankingUtils`; hotkey registration (accepted, not bound) |
+| HTTP Request Smuggler (52) | burpSuite http organizer scanner scope siteMap userInterface utilities websockets | `websockets().createWebSocket` |
+| Stepper (10) | burpSuite extension http intruder logging persistence project repeater userInterface | none known (`project()` now answers) |
+| Backslash Powered Scanner (29) | http organizer scope userInterface utilities websockets | `websockets().createWebSocket` |
+| Sharpener (45) | burpSuite extension http logging persistence proxy userInterface | none known |
+| WebSocket Turbo Intruder (5) | ai extension logging organizer persistence userInterface websockets | `ai`, `websockets().createWebSocket` |
+| SAML Raider (29) | collaborator extension http logging userInterface utilities | none known |
+| Collaborator Everywhere (11), Bypass Bot Detection (2) | not read: their classes sit under a package the survey skips | not known |
+
+"None known" means none of the calls listed as missing in the table above; a call missing from that
+table would not show here. The most common gap is `websockets().createWebSocket` (4 of 11), then the
+options export (2).
 
 ## R-20 keyword analysis slice (2026-11-22)
 

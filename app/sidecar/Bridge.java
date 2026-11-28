@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 final class Bridge {
+    static final String PROJECT_ID = java.util.UUID.randomUUID().toString();
     private Bridge() {}
 
     static volatile String name = "";
@@ -89,6 +90,9 @@ final class Bridge {
                 .on("ai", a -> Api.obj().on("isEnabled", x -> false).as(burp.api.montoya.ai.Ai.class))
                 .on("scanner", a -> { Api.Obj o = Api.obj(); Engine.scannerApi(o); return o.as(burp.api.montoya.scanner.Scanner.class); })
                 .on("utilities", a -> Utils.utilities())
+                // WebProbe does not tell the sidecar which project is open:
+                // the name is fixed and the id is new for each session.
+                .on("project", a -> Api.obj().on("name", x -> "WebProbe project").on("id", x -> PROJECT_ID).text("WebProbe project").as(burp.api.montoya.project.Project.class))
                 .text("WebProbe MontoyaApi")
                 .as(MontoyaApi.class);
     }
