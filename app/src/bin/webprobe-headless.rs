@@ -37,7 +37,7 @@ use webprobe_core::bambda::{Cell, Kind, Program, Verdict};
 use webprobe_core::{burp_config, net, project, rest_api, scan, scan_config, scan_library};
 use webprobe_report::report;
 
-const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N] [--bambda-filter FILE] [--bambda-column FILE]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
+const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N] [--daemon] [--collaborator SERVER] [--bambda-filter FILE] [--bambda-column FILE]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
 
 fn usage() -> ! {
     eprintln!("{USAGE}");
@@ -407,6 +407,12 @@ fn proxy(mut args: Vec<String>) {
         take_opt(&mut args, "--seconds").map(|s| s.parse().unwrap_or_else(|_| usage()));
     // R-16: the headless entry point applies the same Bambda filter and custom
     // column the desktop tables do.
+    // Run as a service: with no terminal, standard input is closed (or
+    // /dev/null) from the start, and "stop on end of input" would end the
+    // proxy at once. --daemon stops only on SIGINT / SIGTERM (or --seconds).
+    let daemon = take_flag(&mut args, "--daemon");
+    // Scans started over the REST API in this mode need payloads too.
+    let collaborator = take_opt(&mut args, "--collaborator");
     let bambda_filter = take_opt(&mut args, "--bambda-filter");
     let bambda_column = take_opt(&mut args, "--bambda-column");
     if !args.is_empty() {
@@ -418,6 +424,7 @@ fn proxy(mut args: Vec<String>) {
         .http
         .http2_enabled = http.http2_enabled;
     apply_scan_configs(&shared, &scan_configs);
+    let collab_pump = collaborator.map(|server| start_collaborator(&shared, &server));
     if api.enabled {
         // Burp serves the REST API from the running app; for the headless
         // binary that is the long-lived proxy mode. The key is never
@@ -453,7 +460,7 @@ fn proxy(mut args: Vec<String>) {
     for sig in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
         let _ = signal_hook::flag::register(sig, stdin_closed.clone());
     }
-    if seconds.is_none() {
+    if seconds.is_none() && !daemon {
         let flag = stdin_closed.clone();
         webprobe_core::util::spawn_contained("webprobe-headless", move || {
             for _ in std::io::stdin().lock().lines() {}
@@ -481,6 +488,11 @@ fn proxy(mut args: Vec<String>) {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
+    if let Some((until, pump)) = collab_pump {
+        // One last poll and match before the issues are listed and saved.
+        let _ = until.send(Instant::now() + Duration::from_secs(2));
+        let _ = pump.join();
+    }
     let issues = shared.issues.lock().clone();
     for i in &issues {
         eprintln!("issue: {}", issue_json(i));
@@ -497,6 +509,64 @@ fn proxy(mut args: Vec<String>) {
             }
         }
     }
+}
+
+/// AR-02: register with an interactsh server and run the worker that keeps
+/// the engine's Collaborator payload pool stocked and raises the issues
+/// interactions prove (the desktop frame loop's job in the GUI). Sending a
+/// deadline on the returned channel makes the worker poll until then and
+/// exit; dropping the sender ends it at once. Exits the process when the
+/// server cannot be registered with.
+fn start_collaborator(
+    shared: &Arc<net::Shared>,
+    server: &str,
+) -> (
+    std::sync::mpsc::Sender<Instant>,
+    std::thread::JoinHandle<()>,
+) {
+    let mut state = webprobe_core::collaborator::CollaboratorState::new();
+    let route = webprobe_core::interactsh::parse_server(server)
+        .map(|(host, _)| shared.upstream_for(&host))
+        .unwrap_or_else(|e| {
+            eprintln!("--collaborator {server}: {e}");
+            std::process::exit(1);
+        });
+    match state.start_remote(server, &route) {
+        Ok(domain) => eprintln!("Collaborator payloads use {domain}"),
+        Err(e) => {
+            eprintln!("--collaborator {server}: {e}");
+            std::process::exit(1);
+        }
+    }
+    let (until_tx, until_rx) = std::sync::mpsc::channel::<Instant>();
+    let shared = shared.clone();
+    let pump = webprobe_core::util::spawn_contained("collaborator-pump", move || {
+        let mut until: Option<Instant> = None;
+        let mut last_poll = Instant::now();
+        loop {
+            match until_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(deadline) => until = Some(deadline),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+            if shared.oob.is_wanted() {
+                shared.oob.refill(200, 500, || {
+                    let p = state.generate_payload();
+                    (p.token, p.dns_name)
+                });
+            }
+            // Interactions arrive after the request that caused them.
+            if until.is_some() && last_poll.elapsed() >= Duration::from_secs(1) {
+                state.poll_now();
+                last_poll = Instant::now();
+            }
+            scan::match_new_interactions(&shared, &state);
+            if until.is_some_and(|deadline| Instant::now() >= deadline) {
+                break;
+            }
+        }
+    });
+    (until_tx, pump)
 }
 
 fn scan_urls(mut args: Vec<String>) {
@@ -528,65 +598,14 @@ fn scan_urls(mut args: Vec<String>) {
         .http
         .http2_enabled = http.http2_enabled;
     apply_scan_configs(&shared, &scan_configs);
-    let collab = collaborator.map(|server| {
-        let mut state = webprobe_core::collaborator::CollaboratorState::new();
-        let route = webprobe_core::interactsh::parse_server(&server)
-            .map(|(host, _)| shared.upstream_for(&host))
-            .unwrap_or_else(|e| {
-                eprintln!("--collaborator {server}: {e}");
-                std::process::exit(1);
-            });
-        match state.start_remote(&server, &route) {
-            Ok(domain) => eprintln!("Collaborator payloads use {domain}"),
-            Err(e) => {
-                eprintln!("--collaborator {server}: {e}");
-                std::process::exit(1);
-            }
-        }
-        Arc::new(std::sync::Mutex::new(state))
-    });
-    // One worker stocks the engine's payload pool while the scan asks for
-    // payloads and raises the issues interactions prove, as the desktop
-    // frame loop does. It ticks on its channel: a message is the time until
-    // which to keep polling once the scan itself has finished.
-    let (pump_until, pump_rx) = std::sync::mpsc::channel::<Instant>();
-    let pump = collab.clone().map(|collab| {
-        let shared = shared.clone();
-        webprobe_core::util::spawn_contained("collaborator-pump", move || {
-            let mut until: Option<Instant> = None;
-            let mut last_poll = Instant::now();
-            loop {
-                match pump_rx.recv_timeout(Duration::from_millis(100)) {
-                    Ok(deadline) => until = Some(deadline),
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-                }
-                let mut state = collab.lock().unwrap_or_else(|e| e.into_inner());
-                if shared.oob.is_wanted() {
-                    shared.oob.refill(200, 500, || {
-                        let p = state.generate_payload();
-                        (p.token, p.dns_name)
-                    });
-                }
-                // Interactions arrive after the request that caused them.
-                if until.is_some() && last_poll.elapsed() >= Duration::from_secs(1) {
-                    state.poll_now();
-                    last_poll = Instant::now();
-                }
-                scan::match_new_interactions(&shared, &state);
-                if until.is_some_and(|deadline| Instant::now() >= deadline) {
-                    break;
-                }
-            }
-        })
-    });
+    let pump = collaborator.map(|server| start_collaborator(&shared, &server));
     let started = Instant::now();
     scan::crawl_and_audit(&shared, &args, !crawl);
     // crawl_and_audit returns once the last item's audit has finished.
     shared.scan.wait_idle(None);
-    if let Some(pump) = pump {
+    if let Some((until, pump)) = pump {
         eprintln!("waiting {collaborator_wait} s for Collaborator interactions");
-        let _ = pump_until.send(Instant::now() + Duration::from_secs(collaborator_wait));
+        let _ = until.send(Instant::now() + Duration::from_secs(collaborator_wait));
         let _ = pump.join();
     }
     let issues = shared.issues.lock().clone();
