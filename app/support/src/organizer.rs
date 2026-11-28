@@ -54,6 +54,33 @@ impl Status {
     }
 }
 
+/// The items as CSV with a header line, CRLF-terminated, in the order given:
+/// the columns of the Organizer table plus the request line and the
+/// response status line. `time` formats the Time column like the table does.
+pub fn to_csv(items: &[&OrganizerItem], time: impl Fn(u64) -> String) -> String {
+    let mut out = String::from("#,Time,Item,Status,Notes,Request,Response\r\n");
+    for item in items {
+        let cells = [
+            item.id.to_string(),
+            time(item.created),
+            item.name.clone(),
+            item.status.label().to_string(),
+            item.note.clone(),
+            item.request.lines().next().unwrap_or_default().to_string(),
+            item.response.lines().next().unwrap_or_default().to_string(),
+        ];
+        out.push_str(
+            &cells
+                .iter()
+                .map(|c| crate::logger::csv_field(c))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        out.push_str("\r\n");
+    }
+    out
+}
+
 /// One saved request/response pair with user metadata.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrganizerItem {
@@ -366,6 +393,18 @@ impl Organizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn csv_has_the_table_columns_and_the_first_line_of_each_message() {
+        let mut o = org();
+        let id = o.list()[0].id;
+        o.set_status(id, Status::Done);
+        let csv = to_csv(&o.list()[..1], |t| format!("t{t}"));
+        assert_eq!(
+            csv,
+            "#,Time,Item,Status,Notes,Request,Response\r\n1,t10,Login,Done,auth flow,GET /login HTTP/1.1,200 OK\r\n"
+        );
+    }
 
     #[test]
     fn status_and_highlight_are_set_by_id_and_follow_a_copy() {

@@ -1072,6 +1072,11 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     Some((n, _)) => (n.clone(), false),
                     None => ("Inbox".to_string(), true),
                 };
+                // #271: the status filter lives in egui's memory, not in an
+                // `App` field (ADR 0002).
+                let org_status_id = egui::Id::unique("org_status_filter_value");
+                let mut org_status_filter: Option<crate::organizer::Status> =
+                    ui.data_mut(|d| d.get_temp(org_status_id)).flatten();
                 ui.horizontal(|ui| {
                     ui.add_space(10.0);
                     let icon = if is_inbox {
@@ -1087,6 +1092,50 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(8.0);
+                        // #271: export the items shown (collection, search and
+                        // status filter applied) as CSV.
+                        egui::menu::MenuButton::new("Export").config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)).ui(ui, |ui| {
+                            let path_id = egui::Id::unique("org_export_path");
+                            let mut path = ui.data_mut(|d| d.get_temp::<String>(path_id)).unwrap_or_else(|| {
+                                std::env::current_dir()
+                                    .map(|d| d.join("webprobe-organizer.csv").display().to_string())
+                                    .unwrap_or_else(|_| "webprobe-organizer.csv".into())
+                            });
+                            ui.label("Save to");
+                            ui.add(egui::TextEdit::singleline(&mut path).desired_width(320.0));
+                            ui.data_mut(|d| d.insert_temp(path_id, path.clone()));
+                            if ui.button("Export as CSV").clicked() {
+                                let q = app.org_search.to_ascii_lowercase();
+                                let org = app.shared.organizer.lock();
+                                let shown: Vec<&crate::organizer::OrganizerItem> = org
+                                    .list()
+                                    .into_iter()
+                                    .filter(|i| i.collection == app.org_coll)
+                                    .filter(|i| org_status_filter.is_none_or(|s| i.status == s))
+                                    .filter(|i| q.is_empty() || i.name.to_ascii_lowercase().contains(&q) || i.note.to_ascii_lowercase().contains(&q))
+                                    .collect();
+                                let csv = crate::organizer::to_csv(&shown, history_time);
+                                match std::fs::write(&path, csv) {
+                                    Ok(()) => feedback::toast(feedback::Level::Success, format!("Exported {} item(s) to {path}", shown.len())),
+                                    Err(e) => feedback::toast(feedback::Level::Error, format!("Export failed: {e}")),
+                                }
+                                ui.close();
+                            }
+                        });
+                        let mut picked = org_status_filter;
+                        egui::ComboBox::from_id_salt("org_status_filter")
+                            .width(100.0)
+                            .selected_text(picked.map_or("Any status", |s| s.label()))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut picked, None, "Any status");
+                                for status in crate::organizer::Status::ALL {
+                                    ui.selectable_value(&mut picked, Some(status), status.label());
+                                }
+                            });
+                        if picked != org_status_filter {
+                            org_status_filter = picked;
+                            ui.data_mut(|d| d.insert_temp(org_status_id, picked));
+                        }
                         if !is_inbox
                             && ui
                                 .button(format!("{} Share", theme::icon::SHARE))
@@ -1152,6 +1201,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     .list()
                     .into_iter()
                     .filter(|i| i.collection == app.org_coll)
+                    .filter(|i| org_status_filter.is_none_or(|s| i.status == s))
                     .filter(|i| {
                         q.is_empty()
                             || i.name.to_ascii_lowercase().contains(&q)
