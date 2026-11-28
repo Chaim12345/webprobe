@@ -17,7 +17,7 @@
 //!         error to stderr and the run continues unfiltered.
 //!
 //!     webprobe-headless scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--bambda-check FILE] [--speed fast|normal|thorough]
-//!                           [--report FILE.html|FILE.xml]
+//!                           [--report FILE.html|FILE.xml] [--project FILE]
 //!         Audit the given URLs (crawl first with --crawl) and print every
 //!         issue as one JSON object per line. --report also writes Burp's
 //!         HTML report or XML issue export, by the file's extension.
@@ -41,7 +41,7 @@ use webprobe_core::bambda::{Cell, Kind, Program, Verdict};
 use webprobe_core::{burp_config, net, project, rest_api, scan, scan_config, scan_library};
 use webprobe_report::report;
 
-const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N] [--daemon] [--collaborator SERVER] [--bambda-filter FILE] [--bambda-column FILE] [--bambda-check FILE]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--bambda-check FILE] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
+const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N] [--daemon] [--collaborator SERVER] [--bambda-filter FILE] [--bambda-column FILE] [--bambda-check FILE]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--bambda-check FILE] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml] [--project FILE]\n  webprobe-headless --version | --help";
 
 fn usage() -> ! {
     eprintln!("{USAGE}");
@@ -233,21 +233,8 @@ fn issue_json(i: &scan::ScanIssue) -> String {
 }
 
 fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
-    let data = project::ProjectData {
-        history: shared
-            .history
-            .snapshot()
-            .iter()
-            .map(project::ProjectHistory::from_entry)
-            .collect(),
-        issues: shared
-            .issues
-            .lock()
-            .iter()
-            .map(project::ProjectIssue::from_issue)
-            .collect(),
-        ..Default::default()
-    };
+    // AR-02: everything the engine holds, not only history and issues.
+    let data = project::capture_engine(shared);
     project::save(std::path::Path::new(path), &data).map_err(String::from)
 }
 
@@ -612,6 +599,8 @@ fn scan_urls(mut args: Vec<String>) {
         .map(|s| s.parse().unwrap_or_else(|_| usage()))
         .unwrap_or(10);
     let bambda_check_file = take_opt(&mut args, "--bambda-check");
+    // AR-02: keep the scan as a project the desktop app can open.
+    let project_file = take_opt(&mut args, "--project");
     let speed = match take_opt(&mut args, "--speed").as_deref() {
         None | Some("normal") => 1,
         Some("fast") => 0,
@@ -655,6 +644,15 @@ fn scan_urls(mut args: Vec<String>) {
         issues.len(),
         started.elapsed().as_secs_f32()
     );
+    if let Some(path) = &project_file {
+        match save_project(&shared, path) {
+            Ok(()) => eprintln!("saved the scan to {path}"),
+            Err(e) => {
+                eprintln!("could not save {path}: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     if let Some(path) = report_file {
         let format = if path.to_ascii_lowercase().ends_with(".xml") {
             report::ReportFormat::Xml
