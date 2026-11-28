@@ -1122,7 +1122,9 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
             let mut passive = passive_check_for(shared, &e);
             // The same visibility rule add_passive_issues applies.
             if !shared.extra_checks.load(Ordering::SeqCst) {
-                passive.retain(|i| is_burp_issue(&i.name));
+                passive.retain(|i| {
+                    is_burp_issue(&i.name) || i.detail.contains("<p>Reported by the extension ")
+                });
             }
             shared.scan.collect(&passive);
             add_passive_issues(shared, passive);

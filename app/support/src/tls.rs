@@ -267,11 +267,15 @@ impl MitmAuthority {
         // Lock before checking for the file and retain the lock until the
         // newly generated authority is installed. Concurrent first launches
         // therefore load the same CA rather than replacing each other's key.
-        let _lock = dir
-            .as_ref()
-            .map(|d| lock_ca(d))
-            .transpose()
-            .map_err(|e| format!("cannot lock CA directory: {e}"))?;
+        // A directory that cannot hold the lock (read-only) is not fatal: an
+        // existing CA still loads, and a new one lives for this run only.
+        let _lock = dir.as_ref().and_then(|d| match lock_ca(d) {
+            Ok(lock) => Some(lock),
+            Err(_e) => {
+                tracing::warn!(target: "webprobe", event_code = "tls.ca.lock_failed", "Could not lock the CA directory; continuing without the lock");
+                None
+            }
+        });
         let file = dir.as_ref().map(|d| d.join("ca.json"));
         if let Some(f) = &file
             && let Ok(text) =
