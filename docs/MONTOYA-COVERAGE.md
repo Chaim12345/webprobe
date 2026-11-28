@@ -26,7 +26,7 @@ so WebProbe does not ship it.
 | project | partial | `name` is fixed and `id` is new for each session: the sidecar is not told which project is open |
 | proxy | full | a message an extension sends over a proxied WebSocket is written as given: it is not shown to message handlers, the intercept or WebSockets history |
 | repeater | full | |
-| scanner | partial | `startAudit`, `bChecks`; `startCrawl` crawls without auditing, reports items found as its request count, never reports errors, and `delete` forgets the task without stopping a running crawl; `generateReport` writes the issues it is given without their requests and responses; an audit issue handler hears of a new issue within about a second (the issue list is polled) |
+| scanner | partial | `bChecks`; `startAudit` queues each added request as an active-scan task under WebProbe's own scan settings (the built-in configuration and the ranges of `addRequest(request, ranges)` are ignored; request count is audited items; error and insertion-point counts are 0); `startCrawl` crawls without auditing, reports items found as its request count, never reports errors, and `delete` forgets the task without stopping a running crawl; `generateReport` writes the issues it is given without their requests and responses; an audit issue handler hears of a new issue within about a second (the issue list is polled) |
 | scope | full | the change handler fires only for changes made through the API |
 | siteMap | full | |
 | userInterface | partial | `registerHotKeyHandler` is accepted but the hotkey is never bound, so it does not fire; WebSocket message editors are accepted but not shown; Swing shows in the extension's own window, not inside WebProbe's |

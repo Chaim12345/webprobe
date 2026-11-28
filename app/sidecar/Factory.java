@@ -108,6 +108,12 @@ final class Factory {
                     return want.equals(id) || want.startsWith(id + ".");
                 }).as(burp.api.montoya.collaborator.InteractionFilter.class);
             }
+            // AuditConfiguration.auditConfiguration(builtIn): accepted, not
+            // applied (WebProbe audits with its own scan settings).
+            case "auditConfiguration": {
+                Object builtIn = a.length > 0 ? a[0] : null;
+                return Api.obj().text("AuditConfiguration " + builtIn).as(burp.api.montoya.scanner.AuditConfiguration.class);
+            }
             // CrawlConfiguration.crawlConfiguration(seedUrls...): a value object.
             case "crawlConfiguration": {
                 List<String> seeds = new java.util.ArrayList<>();
