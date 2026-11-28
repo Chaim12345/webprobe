@@ -123,7 +123,7 @@ pub const INSERTION_TYPES: [(&str, &str); 8] = [
 pub const NESTED_KEY: &str = "nested";
 pub const NESTED_LABEL: &str = "Use nested insertion points";
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct ScanConfig {
     /// Check ids (see `scan::check_catalogue`) that do not run.
     pub disabled_checks: BTreeSet<String>,
@@ -205,19 +205,6 @@ impl ScanConfig {
 
     pub fn insertion_enabled(&self, key: &str) -> bool {
         !self.disabled_insertion.contains(key)
-    }
-}
-
-impl Default for ScanConfig {
-    fn default() -> Self {
-        ScanConfig {
-            disabled_checks: BTreeSet::new(),
-            disabled_insertion: BTreeSet::new(),
-            crawl: CrawlLimits::default(),
-            issues: None,
-            http: crate::burp_config::HttpOptions::default(),
-            bchecks: Vec::new(),
-        }
     }
 }
 
@@ -360,9 +347,8 @@ mod tests {
     #[test]
     fn http2_is_on_until_the_project_turns_it_off() {
         let shared = crate::net::Shared::new();
-        let http2 = |shared: &crate::net::Shared| {
-            shared_config(shared).lock().unwrap().http.http2_enabled
-        };
+        let http2 =
+            |shared: &crate::net::Shared| shared_config(shared).lock().unwrap().http.http2_enabled;
         assert!(http2(&shared), "Burp's default is on");
         shared_config(&shared).lock().unwrap().http.http2_enabled = false;
         assert!(!http2(&shared));

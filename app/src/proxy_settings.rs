@@ -598,7 +598,11 @@ pub fn intercept_rules_table(app: &mut App, ui: &mut Ui) {
 /// still offer h2; this is the check's gate, not a transport switch.
 pub fn http2_setting(app: &mut App, ui: &mut Ui) {
     heading(ui, "HTTP/2");
-    let mut on = webprobe_core::scan_config::shared_config(&app.shared).lock().unwrap().http.http2_enabled;
+    let mut on = webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap()
+        .http
+        .http2_enabled;
     if ui
         .checkbox(&mut on, "Enable HTTP/2")
         .on_hover_text(

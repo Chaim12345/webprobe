@@ -56,22 +56,60 @@ pub fn open(app: &mut App, path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Something is at `path`, a dangling symlink included (a save would write
+/// through it).
+fn taken(path: &str) -> bool {
+    std::fs::symlink_metadata(path).is_ok()
+}
+
+/// `path` as an absolute path with its directory resolved, for comparing two
+/// spellings of one file whether or not the file exists.
+fn resolved(path: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(path);
+    let abs = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::env::current_dir().unwrap_or_default().join(p)
+    };
+    if let Ok(full) = abs.canonicalize() {
+        return full;
+    }
+    match (abs.parent(), abs.file_name()) {
+        (Some(dir), Some(name)) => dir
+            .canonicalize()
+            .unwrap_or_else(|_| dir.to_path_buf())
+            .join(name),
+        _ => abs,
+    }
+}
+
 /// Start an empty project saved at `path` (or a temporary one when `None`).
 /// The destination is checked and the current session saved before anything
 /// is replaced; a refused path or a failed save leaves the running session
 /// as it is (contents and path).
 pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
     if let Some(p) = path {
-        if p == app.project_path {
+        // Compared as resolved paths: "./x.json" and "x.json" are one file,
+        // also when it does not exist yet.
+        if resolved(p) == resolved(&app.project_path) {
             return Err(format!("{p} is the current project"));
         }
-        if std::path::Path::new(p).exists() {
+        if taken(p) {
             return Err(format!(
                 "{p} already exists: open it instead, or choose another name"
             ));
         }
     }
     save_current(app)?;
+    // Saving the outgoing session may have created the destination (an
+    // unseen alias of the current path, or another process in between).
+    if let Some(p) = path
+        && taken(p)
+    {
+        return Err(format!(
+            "{p} already exists: open it instead, or choose another name"
+        ));
+    }
     let target = match path {
         Some(p) => p.to_string(),
         None => std::env::temp_dir()

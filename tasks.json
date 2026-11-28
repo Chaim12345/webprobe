@@ -8,15 +8,15 @@
     "p1": 44,
     "p2": 29,
     "by_status": {
-      "done": 123,
+      "done": 124,
       "rejected": 2,
-      "todo": 17
+      "todo": 16
     }
   },
   "tasks": [
     {
       "id": "A-01",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "Decode `Transfer-Encoding: chunked` for requests and responses",
       "acceptance": "Chunked bodies are reassembled before storage/display; `Content-Length` and byte counts are correct; tests cover single/multi-chunk and trailers",
@@ -27,7 +27,7 @@
     },
     {
       "id": "A-02",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "Decode `Content-Encoding: gzip`, `deflate`, `br`",
       "acceptance": "Compressed response bodies are decoded for passive checks and display; original encoding kept for forwarding; tests per codec",
@@ -38,7 +38,7 @@
     },
     {
       "id": "A-03",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "Keep-alive and connection reuse",
       "acceptance": "Upstream connections are pooled per host; `Connection: close` is not forced; pipelining is off; tests assert socket reuse",
@@ -49,7 +49,7 @@
     },
     {
       "id": "A-04",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "Robust HTTP/1.x parsing",
       "acceptance": "Absolute-form, origin-form, header folding, duplicate headers, `Content-Length` + chunked conflict, 4 MiB+ bodies; malformed input never panics",
@@ -60,7 +60,7 @@
     },
     {
       "id": "A-05",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "HTTP/2 upstream and h2c",
       "acceptance": "Requests negotiate h2 over TLS via ALPN and h2c when offered; HTTP/2 responses are stored with a normalized HTTP/1.1 view; tests against a local h2 server",
@@ -71,7 +71,7 @@
     },
     {
       "id": "A-06",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "TLS pass-through and mTLS",
       "acceptance": "Host exclusion list bypasses MITM; client certificates can be configured per host; tests with a local TLS server",
@@ -82,7 +82,7 @@
     },
     {
       "id": "A-07",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "Proxy listener options",
       "acceptance": "Multiple listeners, bind address, port validation/restart without losing history; status shown in UI",
@@ -93,7 +93,7 @@
     },
     {
       "id": "A-08",
-      "epic": "A \u2014 HTTP engine correctness",
+      "epic": "A — HTTP engine correctness",
       "priority": "P0",
       "title": "Invisible proxying",
       "acceptance": "Reconstruct origin-form requests from absolute-form and Host; non-proxy clients work; tests for both forms",
@@ -104,7 +104,7 @@
     },
     {
       "id": "B-01",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "History table with filter/sort/columns",
       "acceptance": "Filter bar (text, regex, method, status, MIME, in-scope), sortable columns, column chooser, resizable widths, sticky header, virtualized rendering above 10k rows",
@@ -115,7 +115,7 @@
     },
     {
       "id": "B-02",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "Message editor",
       "acceptance": "Raw editor with syntax highlighting, line numbers, wrap toggle, font size, find-in-message, hex edit; request editable in place and sendable",
@@ -126,7 +126,7 @@
     },
     {
       "id": "B-03",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "Response views",
       "acceptance": "Raw / Params / Headers / Hex / Render (HTML) with correct entity decoding; JSON/XML pretty view; image preview",
@@ -137,7 +137,7 @@
     },
     {
       "id": "B-04",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "Context menus",
       "acceptance": "Right-click menus for history, site map, repeater, issues, decoder results; copy/save/send-to/add-to-scope",
@@ -149,7 +149,7 @@
     },
     {
       "id": "B-05",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "Resizable layout + status bar",
       "acceptance": "Splitters between every pane; status bar with listener, intercept, queue, scan/attack progress, last error; layout persisted",
@@ -160,7 +160,7 @@
     },
     {
       "id": "B-06",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "Site map tree",
       "acceptance": "Branch/leaf tree with method, URL, status, length, comment; expand/collapse, filter, scope colouring, annotations",
@@ -170,7 +170,7 @@
     },
     {
       "id": "B-07",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "Multi-select and bulk actions",
       "acceptance": "Select ranges with shift/ctrl; bulk send-to, export, add-to-scope, delete",
@@ -180,7 +180,7 @@
     },
     {
       "id": "B-08",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "Proxy options UI",
       "acceptance": "Listener, interception (request/response/WebSocket), match & replace import/export, upstream per-host rules, TLS/HTTP settings",
@@ -192,7 +192,7 @@
     },
     {
       "id": "B-09",
-      "epic": "B \u2014 Proxy UI and message editing",
+      "epic": "B — Proxy UI and message editing",
       "priority": "P0",
       "title": "WebSocket interception",
       "acceptance": "Hold, edit and forward frames; WebSocket history with filters and search; TLS WebSocket relay verified",
@@ -202,7 +202,7 @@
     },
     {
       "id": "C-01",
-      "epic": "C \u2014 Intruder parity",
+      "epic": "C — Intruder parity",
       "priority": "P0",
       "title": "Four attack types",
       "acceptance": "Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement",
@@ -213,18 +213,18 @@
     },
     {
       "id": "C-02",
-      "epic": "C \u2014 Intruder parity",
+      "epic": "C — Intruder parity",
       "priority": "P0",
       "title": "Payload positions",
       "acceptance": "Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request",
       "effort": "M",
       "status": "done",
-      "evidence": "intruder.rs add_marker/clear_markers/auto_mark (tests); editor highlights \u00a7 pairs (msgpane marker_line_job). GUI-verified 2026-11-17 over MCP: Auto \u00a7 marked the file parameter; selecting \"curl/8.22.0\" (set_text_selection) and Add \u00a7 made a second position; both highlighted, \"1 payload position\" counter updates.",
+      "evidence": "intruder.rs add_marker/clear_markers/auto_mark (tests); editor highlights § pairs (msgpane marker_line_job). GUI-verified 2026-11-17 over MCP: Auto § marked the file parameter; selecting \"curl/8.22.0\" (set_text_selection) and Add § made a second position; both highlighted, \"1 payload position\" counter updates.",
       "completed": "2026-11-17"
     },
     {
       "id": "C-03",
-      "epic": "C \u2014 Intruder parity",
+      "epic": "C — Intruder parity",
       "priority": "P0",
       "title": "Payload sets",
       "acceptance": "Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber",
@@ -235,7 +235,7 @@
     },
     {
       "id": "C-04",
-      "epic": "C \u2014 Intruder parity",
+      "epic": "C — Intruder parity",
       "priority": "P0",
       "title": "Payload processing",
       "acceptance": "Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline",
@@ -246,7 +246,7 @@
     },
     {
       "id": "C-05",
-      "epic": "C \u2014 Intruder parity",
+      "epic": "C — Intruder parity",
       "priority": "P0",
       "title": "Result analysis",
       "acceptance": "Grep match, grep extract, grep capture, grep payloads; configurable result columns; per-row detail",
@@ -258,7 +258,7 @@
     },
     {
       "id": "C-06",
-      "epic": "C \u2014 Intruder parity",
+      "epic": "C — Intruder parity",
       "priority": "P0",
       "title": "Attack control",
       "acceptance": "Pause/resume/stop, concurrency, throttle, resource pool, retry/backoff, progress",
@@ -270,7 +270,7 @@
     },
     {
       "id": "C-07",
-      "epic": "C \u2014 Intruder parity",
+      "epic": "C — Intruder parity",
       "priority": "P0",
       "title": "Results I/O",
       "acceptance": "Save/export results (CSV/XML), send row to Repeater/Comparer, copy as curl",
@@ -282,7 +282,7 @@
     },
     {
       "id": "D-01",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Crawl engine",
       "acceptance": "Follow links, forms, scripts, redirects; depth/location caps; scope rules; produce a site map; tests on a local multi-page fixture",
@@ -293,10 +293,10 @@
     },
     {
       "id": "D-02",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Audit check library",
-      "acceptance": "\u2265 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures",
+      "acceptance": "≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures",
       "effort": "L",
       "status": "done",
       "evidence": "Active check registry (scan_checks.rs POINT_CHECKS 20 + REQUEST_CHECKS 9, several families each) incl. PHP code injection (echo), stored XSS and client-side template injection (tests php_echo_check_needs_evaluation, stored_xss_needs_storage_and_a_breakout_in_the_later_page, csti_check_follows_zrmh), plus the passive library (35+ Burp KnowledgeBase issues); 400+ engine tests with positive/negative fixtures. Timing-based families are excluded by instruction. Correction 2026-11-18 (zoom-out review): the passive library has 37 checks, 19 under Burp issue names and 18 WebProbe-only ones hidden by default, not '35+ Burp KnowledgeBase issues'; the missing passive types and the registry are task R-04.",
@@ -305,7 +305,7 @@
     },
     {
       "id": "D-03",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Insertion points",
       "acceptance": "Query, body, headers, cookies, path segments, multipart; max 30 per base request; tests per point type",
@@ -316,7 +316,7 @@
     },
     {
       "id": "D-04",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Scan configuration",
       "acceptance": "Crawl/audit/optimization/insertion-point/speed settings; persisted; check selection",
@@ -328,7 +328,7 @@
     },
     {
       "id": "D-05",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Task queue",
       "acceptance": "New scan, pause/resume/cancel, per-task progress, live audit/crawl, queue persistence",
@@ -339,7 +339,7 @@
     },
     {
       "id": "D-06",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Issue activity",
       "acceptance": "Group by host/issue, filter by severity/confidence, evidence, detail view, false-positive marking",
@@ -349,7 +349,7 @@
     },
     {
       "id": "D-07",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Reporting",
       "acceptance": "Export HTML/CSV/XML; summary + detail; severity/confidence tables; remediation text",
@@ -361,7 +361,7 @@
     },
     {
       "id": "D-08",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P0",
       "title": "Collaborator integration",
       "acceptance": "Active checks generate OAST payloads and confirm interactions; blind SSRF/XXE/OOB findings",
@@ -372,7 +372,7 @@
     },
     {
       "id": "E-01",
-      "epic": "E \u2014 Repeater parity",
+      "epic": "E — Repeater parity",
       "priority": "P0",
       "title": "Request/response editors",
       "acceptance": "Raw, Params, Headers, Hex, Render; editable request; syntax highlighting; find",
@@ -383,7 +383,7 @@
     },
     {
       "id": "E-02",
-      "epic": "E \u2014 Repeater parity",
+      "epic": "E — Repeater parity",
       "priority": "P0",
       "title": "Follow redirects",
       "acceptance": "Never / on-site / always; \"follow and enumerate\"; redirect chain shown",
@@ -395,7 +395,7 @@
     },
     {
       "id": "E-03",
-      "epic": "E \u2014 Repeater parity",
+      "epic": "E — Repeater parity",
       "priority": "P0",
       "title": "Send-to and copy",
       "acceptance": "Send to Intruder, Comparer, Decoder, Scanner; copy as curl, Python requests, raw; save item",
@@ -405,7 +405,7 @@
     },
     {
       "id": "E-04",
-      "epic": "E \u2014 Repeater parity",
+      "epic": "E — Repeater parity",
       "priority": "P0",
       "title": "Tab management",
       "acceptance": "Rename, close, reorder, duplicate, persisted order and contents",
@@ -417,7 +417,7 @@
     },
     {
       "id": "E-05",
-      "epic": "E \u2014 Repeater parity",
+      "epic": "E — Repeater parity",
       "priority": "P0",
       "title": "Compare",
       "acceptance": "Diff current response against previous; request diff; send both sides to Comparer",
@@ -427,7 +427,7 @@
     },
     {
       "id": "E-06",
-      "epic": "E \u2014 Repeater parity",
+      "epic": "E — Repeater parity",
       "priority": "P0",
       "title": "Editing helpers",
       "acceptance": "Paste URL, change method, URL-encode as you type, content-type-aware body editing",
@@ -439,7 +439,7 @@
     },
     {
       "id": "F-01",
-      "epic": "F \u2014 Decoder and Comparer",
+      "epic": "F — Decoder and Comparer",
       "priority": "P1",
       "title": "Decoder operations",
       "acceptance": "Smart decode, MD5/SHA-1/SHA-256, ROT13, ASCII hex, URL/Base64/HTML/hex, construct",
@@ -450,7 +450,7 @@
     },
     {
       "id": "F-02",
-      "epic": "F \u2014 Decoder and Comparer",
+      "epic": "F — Decoder and Comparer",
       "priority": "P1",
       "title": "Decoder pipeline",
       "acceptance": "Multi-stage encode/decode chain with editable stages and live output",
@@ -461,7 +461,7 @@
     },
     {
       "id": "F-03",
-      "epic": "F \u2014 Decoder and Comparer",
+      "epic": "F — Decoder and Comparer",
       "priority": "P1",
       "title": "Comparer modes",
       "acceptance": "Word, byte and character diff; merge; export; three-way compare",
@@ -472,7 +472,7 @@
     },
     {
       "id": "G-01",
-      "epic": "G \u2014 Sequencer",
+      "epic": "G — Sequencer",
       "priority": "P1",
       "title": "Live capture",
       "acceptance": "Capture tokens over TLS and plain HTTP, auto-capture N samples, ignore-abnormal toggle",
@@ -483,7 +483,7 @@
     },
     {
       "id": "G-02",
-      "epic": "G \u2014 Sequencer",
+      "epic": "G — Sequencer",
       "priority": "P1",
       "title": "Analysis depth",
       "acceptance": "Character-level and bit-level entropy, FIPS-style tests, confidence rating, charts",
@@ -493,7 +493,7 @@
     },
     {
       "id": "G-03",
-      "epic": "G \u2014 Sequencer",
+      "epic": "G — Sequencer",
       "priority": "P1",
       "title": "Export",
       "acceptance": "Results to CSV/JSON; sample set save/load",
@@ -503,7 +503,7 @@
     },
     {
       "id": "H-01",
-      "epic": "H \u2014 Sessions and macros",
+      "epic": "H — Sessions and macros",
       "priority": "P1",
       "title": "Cookie jar",
       "acceptance": "Shared cookie store updated from responses and sent on matching requests; per-domain rules",
@@ -513,7 +513,7 @@
     },
     {
       "id": "H-02",
-      "epic": "H \u2014 Sessions and macros",
+      "epic": "H — Sessions and macros",
       "priority": "P1",
       "title": "Macro recorder",
       "acceptance": "Record a proxy-driven sequence, parameterize values, replay, save/load",
@@ -523,7 +523,7 @@
     },
     {
       "id": "H-03",
-      "epic": "H \u2014 Sessions and macros",
+      "epic": "H — Sessions and macros",
       "priority": "P1",
       "title": "Recorded login sequences",
       "acceptance": "Capture login, extract token, apply to session rules; validate session",
@@ -533,7 +533,7 @@
     },
     {
       "id": "H-04",
-      "epic": "H \u2014 Sessions and macros",
+      "epic": "H — Sessions and macros",
       "priority": "P1",
       "title": "Session rule actions",
       "acceptance": "Set header, set cookie, run macro, validate session, browser recovery, post-request match/replace",
@@ -545,7 +545,7 @@
     },
     {
       "id": "I-01",
-      "epic": "I \u2014 Collaborator / OAST",
+      "epic": "I — Collaborator / OAST",
       "priority": "P0",
       "title": "Payload generation",
       "acceptance": "HTTP, DNS and SMTP payloads with unique IDs; copy/insert into requests",
@@ -556,7 +556,7 @@
     },
     {
       "id": "I-02",
-      "epic": "I \u2014 Collaborator / OAST",
+      "epic": "I — Collaborator / OAST",
       "priority": "P0",
       "title": "Interaction polling",
       "acceptance": "Poll public relay or self-hosted server; list HTTP/DNS/SMTP interactions with source IP and timing",
@@ -567,7 +567,7 @@
     },
     {
       "id": "I-03",
-      "epic": "I \u2014 Collaborator / OAST",
+      "epic": "I — Collaborator / OAST",
       "priority": "P0",
       "title": "Scanner integration",
       "acceptance": "Blind checks use generated payloads and raise findings on interaction",
@@ -578,7 +578,7 @@
     },
     {
       "id": "I-04",
-      "epic": "I \u2014 Collaborator / OAST",
+      "epic": "I — Collaborator / OAST",
       "priority": "P0",
       "title": "Private instance",
       "acceptance": "Configurable server, polling interval, retention, secret; docs for self-hosting",
@@ -589,7 +589,7 @@
     },
     {
       "id": "J-01",
-      "epic": "J \u2014 Project, settings and state",
+      "epic": "J — Project, settings and state",
       "priority": "P1",
       "title": "Full-state project file",
       "acceptance": "Version 2 format: settings, proxy config, CA metadata, scanner config, task queue, UI layout, editor buffers",
@@ -601,7 +601,7 @@
     },
     {
       "id": "J-02",
-      "epic": "J \u2014 Project, settings and state",
+      "epic": "J — Project, settings and state",
       "priority": "P1",
       "title": "Autosave and recovery",
       "acceptance": "Periodic autosave, crash recovery prompt, temp project support",
@@ -613,7 +613,7 @@
     },
     {
       "id": "J-03",
-      "epic": "J \u2014 Project, settings and state",
+      "epic": "J — Project, settings and state",
       "priority": "P1",
       "title": "Settings UI",
       "acceptance": "Searchable settings with sections, import/export, restore defaults, per-setting reset",
@@ -625,7 +625,7 @@
     },
     {
       "id": "J-04",
-      "epic": "J \u2014 Project, settings and state",
+      "epic": "J — Project, settings and state",
       "priority": "P1",
       "title": "New/open project flow",
       "acceptance": "Start screen, recent projects, new temporary project, project integrity checks",
@@ -636,7 +636,7 @@
     },
     {
       "id": "K-01",
-      "epic": "K \u2014 Extensions",
+      "epic": "K — Extensions",
       "priority": "P2",
       "title": "Native extension API",
       "acceptance": "Stable Rust/WASM ABI for custom tabs, issue definitions, request/response hooks; example extension",
@@ -647,7 +647,7 @@
     },
     {
       "id": "K-02",
-      "epic": "K \u2014 Extensions",
+      "epic": "K — Extensions",
       "priority": "P2",
       "title": "JVM/Montoya host",
       "acceptance": "Embed a JVM (JNI) or a subprocess host; load a subset of Montoya API; sandbox and error reporting",
@@ -658,7 +658,7 @@
     },
     {
       "id": "K-03",
-      "epic": "K \u2014 Extensions",
+      "epic": "K — Extensions",
       "priority": "P2",
       "title": "Extension manager",
       "acceptance": "Install/enable/disable/remove, dependency view, BApp-like catalogue (no copied assets)",
@@ -669,7 +669,7 @@
     },
     {
       "id": "L-01",
-      "epic": "L \u2014 Engagement and utility features",
+      "epic": "L — Engagement and utility features",
       "priority": "P1",
       "title": "CSRF PoC generator",
       "acceptance": "Generate an HTML form PoC from a request; copy/download",
@@ -680,7 +680,7 @@
     },
     {
       "id": "L-02",
-      "epic": "L \u2014 Engagement and utility features",
+      "epic": "L — Engagement and utility features",
       "priority": "P1",
       "title": "Engagement tools",
       "acceptance": "Find comments, find scripts, find references, copy URLs, copy as curl",
@@ -692,7 +692,7 @@
     },
     {
       "id": "L-03",
-      "epic": "L \u2014 Engagement and utility features",
+      "epic": "L — Engagement and utility features",
       "priority": "P1",
       "title": "Content discovery",
       "acceptance": "Wordlist-based path discovery with extension set, recursion, scope, result table",
@@ -704,7 +704,7 @@
     },
     {
       "id": "L-04",
-      "epic": "L \u2014 Engagement and utility features",
+      "epic": "L — Engagement and utility features",
       "priority": "P1",
       "title": "Logger",
       "acceptance": "Global traffic log across tools with filters, search, export; independent of Proxy history",
@@ -715,7 +715,7 @@
     },
     {
       "id": "L-05",
-      "epic": "L \u2014 Engagement and utility features",
+      "epic": "L — Engagement and utility features",
       "priority": "P1",
       "title": "Embedded browser",
       "acceptance": "Launch a configured Chromium for proxy testing, or a documented \"use your browser\" flow",
@@ -726,18 +726,18 @@
     },
     {
       "id": "M-01",
-      "epic": "M \u2014 UI/UX system",
+      "epic": "M — UI/UX system",
       "priority": "P0",
       "title": "Design tokens",
       "acceptance": "One token module for colour, spacing, radius, typography, density; no ad-hoc hex in widgets",
       "effort": "M",
       "status": "done",
       "completed": "2026-11-12",
-      "evidence": "theme.rs: full token module \u2014 spacing (XS..XL), radius, typography scale (H1/H2/body/small/mono), named colors (URL_KEY/URL_VALUE/SELECTION_SUBTLE); all widget hex inlined colors replaced by tokens; widgets use theme constants"
+      "evidence": "theme.rs: full token module — spacing (XS..XL), radius, typography scale (H1/H2/body/small/mono), named colors (URL_KEY/URL_VALUE/SELECTION_SUBTLE); all widget hex inlined colors replaced by tokens; widgets use theme constants"
     },
     {
       "id": "M-02",
-      "epic": "M \u2014 UI/UX system",
+      "epic": "M — UI/UX system",
       "priority": "P0",
       "title": "Table component",
       "acceptance": "Shared sortable/filterable/virtualized table used by Proxy, Target, Scanner, Intruder, Collaborator",
@@ -748,7 +748,7 @@
     },
     {
       "id": "M-03",
-      "epic": "M \u2014 UI/UX system",
+      "epic": "M — UI/UX system",
       "priority": "P0",
       "title": "Editor component",
       "acceptance": "Shared message editor/view used by Proxy, Repeater, Intruder, Sequencer, Decoder",
@@ -759,7 +759,7 @@
     },
     {
       "id": "M-04",
-      "epic": "M \u2014 UI/UX system",
+      "epic": "M — UI/UX system",
       "priority": "P0",
       "title": "Feedback and errors",
       "acceptance": "Progress bars, cancel buttons, toasts, inline errors, retry actions, empty/loading states",
@@ -770,7 +770,7 @@
     },
     {
       "id": "M-05",
-      "epic": "M \u2014 UI/UX system",
+      "epic": "M — UI/UX system",
       "priority": "P0",
       "title": "Theming and density",
       "acceptance": "Dark/light/high-contrast, compact/comfortable, font size, persisted",
@@ -781,7 +781,7 @@
     },
     {
       "id": "M-06",
-      "epic": "M \u2014 UI/UX system",
+      "epic": "M — UI/UX system",
       "priority": "P0",
       "title": "Keyboard and accessibility",
       "acceptance": "Shortcut help overlay, customizable hotkeys, focus order, contrast, screen-reader labels",
@@ -792,7 +792,7 @@
     },
     {
       "id": "M-07",
-      "epic": "M \u2014 UI/UX system",
+      "epic": "M — UI/UX system",
       "priority": "P0",
       "title": "Onboarding",
       "acceptance": "First-run CA/proxy setup, verification checklist, sample traffic, docs links",
@@ -803,7 +803,7 @@
     },
     {
       "id": "N-01",
-      "epic": "N \u2014 Quality, performance and build",
+      "epic": "N — Quality, performance and build",
       "priority": "P0",
       "title": "Parser/engine tests",
       "acceptance": "Unit + integration tests for chunked, gzip, keep-alive, h2, TLS, proxy; run in CI",
@@ -815,7 +815,7 @@
     },
     {
       "id": "N-02",
-      "epic": "N \u2014 Quality, performance and build",
+      "epic": "N — Quality, performance and build",
       "priority": "P0",
       "title": "Performance",
       "acceptance": "10k history entries and 1k site-map nodes render at 60 fps; no per-frame full-list scans",
@@ -827,7 +827,7 @@
     },
     {
       "id": "N-03",
-      "epic": "N \u2014 Quality, performance and build",
+      "epic": "N — Quality, performance and build",
       "priority": "P0",
       "title": "Fuzzing",
       "acceptance": "Malformed HTTP/TLS/WebSocket inputs never panic or hang; fuzz targets in CI",
@@ -839,7 +839,7 @@
     },
     {
       "id": "N-04",
-      "epic": "N \u2014 Quality, performance and build",
+      "epic": "N — Quality, performance and build",
       "priority": "P0",
       "title": "Builder reliability",
       "acceptance": "Fix the `omp` model-routing 404s (glm-5.3 / kimi-k3.1) so rounds complete; add a working fallback",
@@ -850,7 +850,7 @@
     },
     {
       "id": "N-05",
-      "epic": "N \u2014 Quality, performance and build",
+      "epic": "N — Quality, performance and build",
       "priority": "P0",
       "title": "Release build",
       "acceptance": "`cargo build --release` under 3 minutes; binary starts in under 1 s; screenshot check passes",
@@ -861,7 +861,7 @@
     },
     {
       "id": "P-01",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P0",
       "title": "Top menu bar",
       "acceptance": "Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs",
@@ -872,7 +872,7 @@
     },
     {
       "id": "P-02",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P1",
       "title": "Tab bar and global controls parity",
       "acceptance": "Single tab row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Logger, Organizer, Extensions, Discover) with no 'More tools' overflow at 1440 px; top-right global search, settings gear and browser launcher; active tab shown with an underline",
@@ -883,7 +883,7 @@
     },
     {
       "id": "P-03",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P0",
       "title": "Settings dialog parity",
       "acceptance": "Searchable dialog with All/User/Project filter pills and a category tree (Tools: Proxy, Intruder, Repeater, Sequencer, Comparer; Project; Sessions; Network; User interface; Suite; Extensions; Configuration library); Proxy page has a listeners table (Running, Interface, Invisible, Redirect, Certificate, TLS protocols) with Add/Edit/Remove, CA import/export/regenerate, request-interception rules table with Up/Down",
@@ -899,7 +899,7 @@
     },
     {
       "id": "P-04",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P0",
       "title": "Repeater layout parity",
       "acceptance": "Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line",
@@ -914,7 +914,7 @@
     },
     {
       "id": "P-05",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P0",
       "title": "HTTP history columns and views",
       "acceptance": "Add Params, Edited, Extension and Title columns; Pretty and Renderer views in the message pane; column chooser exposes all of them",
@@ -929,7 +929,7 @@
     },
     {
       "id": "P-06",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P1",
       "title": "Intercept bar parity",
       "acceptance": "Intercept on/off toggle, Forward and Drop as split buttons with dropdown actions (forward all, drop all), Open browser, help and overflow menu; empty state text explaining intercept",
@@ -940,7 +940,7 @@
     },
     {
       "id": "P-07",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P1",
       "title": "Decoder layout and operations",
       "acceptance": "Text/Hex input toggle; 'Decode as', 'Encode as' and 'Hash' dropdowns; Smart decode; chained output panes",
@@ -955,7 +955,7 @@
     },
     {
       "id": "P-08",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P1",
       "title": "Comparer item tables",
       "acceptance": "Two item tables (# / Length / Data) with Paste, Load, Remove, Clear and Compare Words / Bytes buttons",
@@ -968,7 +968,7 @@
     },
     {
       "id": "P-09",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P1",
       "title": "Dashboard task model",
       "acceptance": "Task cards (live audit, live crawl, scans) with pause/resume, issue counters and Summary / Audit items / Issues / Event log / Logger / Audit log tabs; 'Task execution is paused' banner",
@@ -983,7 +983,7 @@
     },
     {
       "id": "P-10",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P0",
       "title": "Wire Intruder UI to intruder.rs",
       "acceptance": "Attack-type selector, Auto/Add/Clear position buttons with marker highlighting, one payload set per position, request count preview with the limit error shown, runner replaces net::start_attack; empty-state text 'To get started, send a request to Intruder from anywhere in Burp'",
@@ -993,12 +993,12 @@
         "C-01",
         "C-02"
       ],
-      "evidence": "ui.rs Intruder: attack-type selector, Auto/Add/Clear \u00a7, marker highlighting, one payload set per position, payload/request count preview, empty-state text; runs through intruder.rs; live attack verified 2026-11-16",
+      "evidence": "ui.rs Intruder: attack-type selector, Auto/Add/Clear §, marker highlighting, one payload set per position, payload/request count preview, empty-state text; runs through intruder.rs; live attack verified 2026-11-16",
       "completed": "2026-11-16"
     },
     {
       "id": "P-11",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P2",
       "title": "Light theme as the default option",
       "acceptance": "Light palette matches Burp's default look (flat white, orange underline accent) and is selectable in Settings; dark remains available",
@@ -1009,7 +1009,7 @@
     },
     {
       "id": "P-12",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P2",
       "title": "Known small defects",
       "acceptance": "Target scope header repeats its inner 'Scope' label; onboarding counts seeded history as real HTTPS traffic; selection stays on a row the filter hides; Burp history comparison needs a populated Burp table (listener answered but history stayed empty)",
@@ -1019,7 +1019,7 @@
     },
     {
       "id": "P-13",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P0",
       "title": "WSL2 rendering fix and live QA driver",
       "acceptance": "App opens a window on WSL2/Xvfb without env tweaks; QA driver clicks, types, scrolls and screenshots; policy tested",
@@ -1030,7 +1030,7 @@
     },
     {
       "id": "P-14",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P0",
       "title": "Repair UI wiring lost in a bad edit",
       "acceptance": "Filter bar, Comparer, Target scope, project controls, listener status/editor and appearance options are all reachable again; no dead helpers left",
@@ -1041,7 +1041,7 @@
     },
     {
       "id": "P-15",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P1",
       "title": "Interactive Open browser launcher",
       "acceptance": "'Open browser' (Intercept bar, empty states, Dashboard) launches the user's Chrome/Chromium or a downloaded Chrome for Testing with a throwaway profile, --proxy-server set to the active listener and the WebProbe CA trusted for that profile only; reports clearly when no browser is found",
@@ -1056,7 +1056,7 @@
     },
     {
       "id": "P-16",
-      "epic": "P \u2014 Live Burp parity gaps (found 2026-11-15)",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
       "priority": "P1",
       "title": "Headless engine trait + Obscura sidecar spike",
       "acceptance": "HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures",
@@ -1070,7 +1070,7 @@
     },
     {
       "id": "UAT-01",
-      "epic": "UAT 2026-11-16 \u2014 blocking defects",
+      "epic": "UAT 2026-11-16 — blocking defects",
       "priority": "P0",
       "title": "Intruder attack-results window ignores all input (cannot close, cannot select a row)",
       "acceptance": "The results window closes via its X/Escape and selecting a row shows the request/response; verified by an automated UAT pass.",
@@ -1081,7 +1081,7 @@
     },
     {
       "id": "UAT-02",
-      "epic": "UAT 2026-11-16 \u2014 blocking defects",
+      "epic": "UAT 2026-11-16 — blocking defects",
       "priority": "P0",
       "title": "Repeater Cancel does not abort an in-flight request",
       "acceptance": "Cancel aborts the worker; the status line reports cancellation; the response never arrives after cancel.",
@@ -1092,7 +1092,7 @@
     },
     {
       "id": "UAT-03",
-      "epic": "UAT 2026-11-16 \u2014 blocking defects",
+      "epic": "UAT 2026-11-16 — blocking defects",
       "priority": "P0",
       "title": "Comparer uses one shared item collection and Paste is inert",
       "acceptance": "Item 1 and item 2 hold independent lists; Paste adds to the targeted list; loading two files then Compare produces the expected diff.",
@@ -1103,7 +1103,7 @@
     },
     {
       "id": "UAT-04",
-      "epic": "UAT 2026-11-16 \u2014 blocking defects",
+      "epic": "UAT 2026-11-16 — blocking defects",
       "priority": "P1",
       "title": "Persist proxy history (and site map) in the project file across restarts",
       "acceptance": "Quit and relaunch with the same project restores HTTP history rows and the site map.",
@@ -1114,7 +1114,7 @@
     },
     {
       "id": "UAT-05",
-      "epic": "UAT 2026-11-16 \u2014 blocking defects",
+      "epic": "UAT 2026-11-16 — blocking defects",
       "priority": "P1",
       "title": "Window intermittently starts unmapped (process spins, proxy bound, no visible UI)",
       "acceptance": "Every launch maps the window; a regression test or startup timeout surfaces the failure instead of spinning.",
@@ -1125,7 +1125,7 @@
     },
     {
       "id": "UAT-06",
-      "epic": "UAT 2026-11-16 \u2014 blocking defects",
+      "epic": "UAT 2026-11-16 — blocking defects",
       "priority": "P1",
       "title": "Paste into request/message editors is ignored or delivers stale clipboard",
       "acceptance": "Ctrl+V inserts the current clipboard text into Repeater/Intruder request editors, preserving line breaks (LF and CRLF).",
@@ -1137,7 +1137,7 @@
     },
     {
       "id": "UAT-07",
-      "epic": "UAT 2026-11-16 \u2014 polish",
+      "epic": "UAT 2026-11-16 — polish",
       "priority": "P2",
       "title": "History Time column is truncated and the table needs horizontal scrolling at 1440 px",
       "acceptance": "Time shows full HH:MM:SS without clipping; default column widths fit the reference window; message panes show more than ~4 lines.",
@@ -1148,7 +1148,7 @@
     },
     {
       "id": "UAT-08",
-      "epic": "UAT 2026-11-16 \u2014 polish",
+      "epic": "UAT 2026-11-16 — polish",
       "priority": "P2",
       "title": "Menu bar parity: WebProbe menu only has Search, Settings, Quit",
       "acceptance": "Menus match the reference structure (Burp/Project/Intruder/Repeater/View/Help) with the expected items.",
@@ -1171,7 +1171,7 @@
     },
     {
       "id": "N-06",
-      "epic": "N \u2014 Quality, performance and build",
+      "epic": "N — Quality, performance and build",
       "priority": "P1",
       "title": "Disk-backed proxy history",
       "acceptance": "Proxy history (and crawl items) keep message bodies out of anonymous memory, in append-only segment files under the cache dir (mapped, then unlinked, so nothing outlives the process); the project stays a single file (format v2 unchanged), written streamed by one background worker, latest snapshot wins; memory bounded at 100k items; table, filters, search, send-to and save/load keep working.",
@@ -1182,7 +1182,7 @@
     },
     {
       "id": "N-07",
-      "epic": "N \u2014 Quality, performance and build",
+      "epic": "N — Quality, performance and build",
       "priority": "P2",
       "title": "Split Shared and App by subsystem",
       "acceptance": "Engine state that carries invariants is owned by subsystem types with private fields whose methods enforce them: Proxy history / crawl items (every write spills bodies; scoped reads), the scan run (claimed and released only through a guard; idle waits without polling), Collaborator ids (registered, pooled and matched through one API, shortfalls reported), Repeater tabs. Each step keeps the full suite and layering test green. Not split: App (single-threaded UI state) and the remaining config-like Shared fields, which are already one Mutex each.",
@@ -1193,7 +1193,7 @@
     },
     {
       "id": "D-11",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P1",
       "title": "Remaining Burp insertion points",
       "acceptance": "Ported from the decompiled source with tests: entire body (burp.Zuq.ZT), nested data inside a parameter such as base64 or JSON (Zuq.Zq), XML standalone tags (Zuq.Za), parameter names (Zuq.Zp); Burp's skip_server_side_injection_for_parameters tagging (PHPSESSID, jsessionid, ...). Order and the cap of 30 stay as burp.Zuq.Zs / Zwez.",
@@ -1204,7 +1204,7 @@
     },
     {
       "id": "D-09",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P1",
       "title": "Remaining Collaborator check variants",
       "acceptance": "Ported with tests: Collaborator payloads across the checks that have them (burp.Zc7h), PHP code injection Collaborator half (Zxvv.ZQ fsockopen/gethostbyname), and the in-band 'Out-of-band resource load (HTTP)' path of Zsrh.",
@@ -1215,7 +1215,7 @@
     },
     {
       "id": "D-10",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P2",
       "title": "Stored XSS retrieval pairing as Burp",
       "acceptance": "Stored input is paired with any later request whose response showed it (as Burp does), not only safe GETs (base GET, same-origin redirect target, up to 3 crawled GETs); test with a local multi-page fixture.",
@@ -1226,7 +1226,7 @@
     },
     {
       "id": "D-12",
-      "epic": "D \u2014 Scanner parity",
+      "epic": "D — Scanner parity",
       "priority": "P2",
       "title": "Collaborator leftovers: SNI variant and scheme payload variants",
       "acceptance": "Collaborator-everywhere SNI probe (needs a custom SNI in the TLS sender) and the scheme-dependent external-interaction payload variants of burp.Zbxl (http://, Http://, own scheme; trace Zpgu / ZY first), with tests.",
@@ -1236,18 +1236,18 @@
     },
     {
       "id": "R-01",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P0",
       "title": "Docs truth pass",
-      "acceptance": "PROGRESS.md, TASKS.md \u00a77, PRD-BACKEND, PRD-UI and tasks.json P-02/D-02 evidence agree with the code and tasks.json; superseded QA reports (BACKEND-COMPARE, GAP-REPORT, parity-scores) carry a 'superseded' banner; BE-PX-12 streaming points at R-06.",
+      "acceptance": "PROGRESS.md, TASKS.md §7, PRD-BACKEND, PRD-UI and tasks.json P-02/D-02 evidence agree with the code and tasks.json; superseded QA reports (BACKEND-COMPARE, GAP-REPORT, parity-scores) carry a 'superseded' banner; BE-PX-12 streaming points at R-06.",
       "effort": "S",
       "status": "done",
-      "evidence": "Review: PROGRESS.md:79,84 stale; TASKS.md \u00a77 missing ticks/rows; PRDs carry 36/46 stale \u274c; D-02 claims 35+ KB passive issues, 19 of 37 use Burp names. Progress 2026-11-18: PROGRESS.md status header and corrections, TASKS.md banner + generated \u00a78 status table, superseded banners on GAP-REPORT / parity-scores / BACKEND-COMPARE, PRD stale-status banners, BE-PX-12 owner -> R-06, P-02 and D-02 evidence corrected, SOURCE-PARITY Expression Language note. REMAINING: re-verify every \u274c/\ud83d\udea7 row of PRD-BACKEND (36) and PRD-UI (46) against the code and set the status column. Done 2026-11-18: all 129 PRD rows that were \u274c or \ud83d\udea7 (50 backend, 79 UI) re-checked against the code: 51 are now \u2705 (31 with file:line evidence, 20 marked 'per task evidence'), 68 stay \ud83d\udea7 with the missing part named, 10 stay \u274c. Per-row evidence: qa/PRD-RECHECK-2026-11-18.md. The re-check was delegated to a free GLM 5.3 flash agent and spot-checked (all 94 file:line references resolve; five sampled claims confirmed), not fully reviewed.",
+      "evidence": "Review: PROGRESS.md:79,84 stale; TASKS.md §7 missing ticks/rows; PRDs carry 36/46 stale ❌; D-02 claims 35+ KB passive issues, 19 of 37 use Burp names. Progress 2026-11-18: PROGRESS.md status header and corrections, TASKS.md banner + generated §8 status table, superseded banners on GAP-REPORT / parity-scores / BACKEND-COMPARE, PRD stale-status banners, BE-PX-12 owner -> R-06, P-02 and D-02 evidence corrected, SOURCE-PARITY Expression Language note. REMAINING: re-verify every ❌/🚧 row of PRD-BACKEND (36) and PRD-UI (46) against the code and set the status column. Done 2026-11-18: all 129 PRD rows that were ❌ or 🚧 (50 backend, 79 UI) re-checked against the code: 51 are now ✅ (31 with file:line evidence, 20 marked 'per task evidence'), 68 stay 🚧 with the missing part named, 10 stay ❌. Per-row evidence: qa/PRD-RECHECK-2026-11-18.md. The re-check was delegated to a free GLM 5.3 flash agent and spot-checked (all 94 file:line references resolve; five sampled claims confirmed), not fully reviewed.",
       "completed": "2026-11-18"
     },
     {
       "id": "R-02",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P0",
       "title": "Portable build: no developer-machine paths",
       "acceptance": "A release binary in a clean container starts and says clearly when issue texts, wordlists or Java are missing; no absolute /root or CARGO_MANIFEST_DIR lookups at run time.",
@@ -1258,7 +1258,7 @@
     },
     {
       "id": "R-03",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P0",
       "title": "Montoya bridge broad enough for real BApps",
       "acceptance": "extension(), http(), userInterface(), scanner(), persistence() (and what the first target BApp needs) are bridged; the sidecar builds against the published montoya-api artifact instead of /opt/BurpSuite/burpsuite.jar (licence checked); one unmodified BApp-store extension loads and does its job.",
@@ -1269,7 +1269,7 @@
     },
     {
       "id": "R-04",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P0",
       "title": "Passive checks in the check registry + missing passive pack",
       "acceptance": "Passive checks are registered like active ones (check_catalogue lists them, scan configuration can switch each off). Ported from Burp with positive and negative fixtures: the 7 CSP issues, Vulnerable JavaScript dependency (resources/RetireJS), Session token in URL, password in GET/URL/cookie, Cookie scoped to parent domain, Duplicate cookies, Cross-domain script include, Source code disclosure, Serialized object, private key / DB connection string / SSN disclosure.",
@@ -1280,7 +1280,7 @@
     },
     {
       "id": "R-05",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P1",
       "title": "HTTP/2 browser-to-proxy and a working Repeater protocol switch",
       "acceptance": "curl --http2 through the proxy negotiates h2; the HTTP/1 / HTTP/2 control in the message pane and the HTTP/2 menu items work against a local h2 lab server.",
@@ -1291,7 +1291,7 @@
     },
     {
       "id": "R-06",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P1",
       "title": "Response streaming and server-sent events",
       "acceptance": "The proxy forwards response bytes as they arrive: the first event of a 1-event-per-second local stream reaches the client in under 2 s; history still records the full message.",
@@ -1302,7 +1302,7 @@
     },
     {
       "id": "R-07",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P1",
       "title": "WebSocket robustness and tools",
       "acceptance": "Binary frames keep their bytes (no lossy text); WebSocket history is bounded/disk-backed and the view does not copy it every frame (100k frames stay fast); WebSocket Repeater and WebSocket match-and-replace as Burp.",
@@ -1313,7 +1313,7 @@
     },
     {
       "id": "R-08",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P1",
       "title": "Tests for untested modules",
       "acceptance": "rules.rs (match and replace: every scope, regex, binary bodies), report, scan_config, and logic tests behind intruder_ui, collaborator_ui, sitemap_compare_ui, rules_ui.",
@@ -1324,7 +1324,7 @@
     },
     {
       "id": "R-09",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P1",
       "title": "JWT checks",
       "acceptance": "Burp's seven JWT issue types ported with tests (alg=none, weak HMAC secret via Scanner/jwt_secrets.txt, ...); a local lab token gets Burp's issue names.",
@@ -1335,7 +1335,7 @@
     },
     {
       "id": "R-10",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P1",
       "title": "Active check pack (non-timing)",
       "acceptance": "Ported with tests: GraphQL (Zula, Zf8g), web cache poisoning/deception (Zp22), XPath injection, HTTP PUT, Backup file, ASP.NET checks, Spoofable client IP, Expression Language injection (regressed: name only in a lookup table). Checks Burp detects only by timing stay excluded and are listed as such.",
@@ -1346,7 +1346,7 @@
     },
     {
       "id": "R-11",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P1",
       "title": "Scan configuration library",
       "acceptance": "Burp's 29 BuiltInConfigs load and can be selected/combined for a scan; 'Audit checks - passive' runs only passive checks; custom configs can be saved and imported from Burp JSON.",
@@ -1356,7 +1356,7 @@
     },
     {
       "id": "R-12",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "Repeater send groups and single-packet attack",
       "acceptance": "Tab groups send in sequence (single connection / separate) and in parallel (single-packet over h2, last-byte sync over h1); 20 grouped requests reach a local lab within 5 ms.",
@@ -1366,7 +1366,7 @@
     },
     {
       "id": "R-13",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "DOM-based / JavaScript analysis",
       "acceptance": "The 48 DOM-based issue types and client-side prototype pollution: source-to-sink tracking in the embedded Chromium crawl; a location.hash -> innerHTML fixture is reported as 'Cross-site scripting (DOM-based)'.",
@@ -1376,7 +1376,7 @@
     },
     {
       "id": "R-14",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "BCheck interpreter",
       "acceptance": "BCheck files load, validate and run (passive and active, per request/host/insertion point); Burp's example BChecks produce the same issues on a local fixture.",
@@ -1386,7 +1386,7 @@
     },
     {
       "id": "R-15",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "Burp CLI flags, config JSON and REST API",
       "acceptance": "--project-file, --config-file, --user-config-file, --unpause-spider-and-scanner and friends; project/user options import/export as Burp JSON; /v0.1 REST API (scan start, status, issues) on a local port.",
@@ -1396,7 +1396,7 @@
     },
     {
       "id": "R-16",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "Bambda-style filters and custom columns",
       "acceptance": "History/Logger/WebSocket filters and custom columns by script, as Burp's Bambda mode (scripting language decided in the task).",
@@ -1406,7 +1406,7 @@
     },
     {
       "id": "R-17",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "Intruder payload completeness",
       "acceptance": "Burp's predefined payload lists, Collaborator payloads and extension-generated payloads/processors (the last via R-03).",
@@ -1416,7 +1416,7 @@
     },
     {
       "id": "R-18",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "Decompose App / Shared and split ui.rs",
       "acceptance": "App (197 fields) and Shared (62) are grouped into owned subsystem types like N-07 did for history/scan/oob/repeater; ui.rs (4,606 lines) is split by tool; no behaviour change, suite green.",
@@ -1426,7 +1426,7 @@
     },
     {
       "id": "R-19",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "UI parity re-score",
       "acceptance": "Visual and behavioural re-score of all 13 tabs against live Burp after the rewrites, incl. Logger, Organizer and WebSocket intercept driven over the egui MCP; parity-scores replaced with dated results.",
@@ -1436,7 +1436,7 @@
     },
     {
       "id": "R-20",
-      "epic": "R \u2014 Roadmap (zoom-out review 2026-11-18)",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
       "priority": "P2",
       "title": "Montoya leftovers and a wider BApp check",
       "acceptance": "Extension payload generation off the UI thread; WebSocket 'to be sent' handlers run after the user's intercept edit; WebSocket send/close and websockets().createWebSocket; scanner startAudit / startCrawl / generateReport / registerAuditIssueHandler; http response analyzers; organizer status; hotkey handlers; burpSuite export/import of options once WebProbe speaks Burp's settings JSON (R-15). Ten more popular BApps (not JWT tools) loaded unmodified, each result recorded in docs/MONTOYA-COVERAGE.md.",
@@ -1446,7 +1446,7 @@
     },
     {
       "id": "AR-01",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P1",
       "title": "Quick architecture fixes: lints, compiled rule sets, intercept liveness, test CA isolation",
       "acceptance": "F12: warn-level lints and clippy in scripts/ci.sh, guard-returning lock API everywhere (no std poisonable locks), dead code removed (net::start_attack). F3: scope / match-and-replace / intercept / WebSocket / grep rules compiled once when edited, history filtering outside the history lock. F9 (first half): a held HTTP intercept is released when its client disconnects. F13: tests never read or write the real ~/.config/webprobe/ca.json (WEBPROBE_CA_DIR in tests).",
@@ -1456,7 +1456,7 @@
     },
     {
       "id": "AR-02",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P1",
       "title": "Engine duties out of App into core",
       "acceptance": "F1: Collaborator pool and matching, project capture/restore mapping, Logger feed and extension tool sends live in webprobe-core; headless scans get Collaborator ids and headless project saves are complete. Unlocks R-15.",
@@ -1466,7 +1466,7 @@
     },
     {
       "id": "AR-03",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P1",
       "title": "Settings snapshot, then the engine split of Shared",
       "acceptance": "F5: the ~25 setting fields of Shared become one versioned settings snapshot value; Shared is split into owned subsystem types (pattern of ProxyHistory / ScanRun); the UI no longer reaches 60+ Shared fields directly. F7 typed errors (thiserror) at the project and send boundaries touched.",
@@ -1476,7 +1476,7 @@
     },
     {
       "id": "AR-04",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P1",
       "title": "Explicit send context instead of thread-locals",
       "acceptance": "F6: the five thread-locals carrying tool name, HTTP/2 choice, listener port and so on are replaced by an explicit SendCtx passed to the sender. Needed by R-12 parallel sends and before any worker pool.",
@@ -1486,7 +1486,7 @@
     },
     {
       "id": "AR-05",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P2",
       "title": "Scanner worker pool and passive-check queue",
       "acceptance": "F8: bounded worker pool for active checks (respecting resource pools, stop/pause, progress), passive checks moved off the proxy connection thread onto a bounded queue. Needed by R-13.",
@@ -1496,7 +1496,7 @@
     },
     {
       "id": "AR-06",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P2",
       "title": "Lifecycle: cancellation, named joinable threads, no sleep-polling",
       "acceptance": "F4: a cancel token and a registry of named, joinable threads; app exit, project close and scan stop end every worker; accept/task-runner/relay loops block on events instead of polling every 2-200 ms.",
@@ -1506,7 +1506,7 @@
     },
     {
       "id": "AR-07",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P2",
       "title": "Event channel and append-only history to the UI",
       "acceptance": "F11: one engine-to-UI event channel instead of five polled/diffed channels; append-only history view before histories grow past ~50k rows.",
@@ -1516,7 +1516,7 @@
     },
     {
       "id": "AR-08",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P2",
       "title": "Java sidecar: route replies by id, no lock across the round trip",
       "acceptance": "F2: exchange_with no longer holds io_lock for a whole round trip; one extension's active check cannot serialise proxied messages. Before R-20.",
@@ -1527,7 +1527,7 @@
     },
     {
       "id": "AR-09",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P2",
       "title": "Bytes, not lossy text, in tool state",
       "acceptance": "F10: Repeater, Intruder and intercept keep requests as bytes; editing a binary body does not corrupt it.",
@@ -1537,7 +1537,7 @@
     },
     {
       "id": "AR-10",
-      "epic": "AR \u2014 Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
+      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
       "priority": "P2",
       "title": "One extensibility pattern and a project format plan",
       "acceptance": "F14: check registries, insertion points and extension seams follow one registration pattern (alongside R-13/R-14). F15: project persistence plan for when one JSON document stops scaling (trigger documented).",
@@ -1547,7 +1547,7 @@
     },
     {
       "id": "S-01",
-      "epic": "S \u2014 Scanner issue types (coverage gate, 2026-11-24)",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
       "priority": "P0",
       "title": "Issue-type coverage gate and the types it showed missing",
       "acceptance": "A script recomputes which of Burp's 183 issue types a WebProbe check can raise and fails CI when a covered type loses its check (roadmap F-08); every type not covered is listed with a status and the reason.",
@@ -1558,7 +1558,7 @@
     },
     {
       "id": "S-02",
-      "epic": "S \u2014 Scanner issue types (coverage gate, 2026-11-24)",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
       "priority": "P1",
       "title": "Manually raised issues (Create issue, Add to issue)",
       "acceptance": "The user can create an issue by hand from a message and add further messages to it, as Burp's \"Create an issue\" and \"Add to an issue\" (burp.Zgwg, Zgwd, Zr7e, factory Zcxr); the issue carries type 0x08008000 and shows in the issue list; verified on the QA display.",
@@ -1569,7 +1569,7 @@
     },
     {
       "id": "S-03",
-      "epic": "S \u2014 Scanner issue types (coverage gate, 2026-11-24)",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
       "priority": "P2",
       "title": "Bambda scan checks (custom scan checks written in Java)",
       "acceptance": "A Bambda can be a scan check, active or passive, with the library, editor and test run Burp offers for custom scan checks; its issues carry type 0x09008000 (\"Bambda generated issue\").",
@@ -1579,7 +1579,7 @@
     },
     {
       "id": "S-04",
-      "epic": "S \u2014 Scanner issue types (coverage gate, 2026-11-24)",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
       "priority": "P2",
       "title": "Static JavaScript analysis for the DOM-based types",
       "acceptance": "DOM-based issue types are also found without running the page, as Burp's static analysis does (task burp.Zwqm, JsAnalysisCheck); client-side SQL injection and local file path manipulation (three variants each) become reportable.",
@@ -1589,7 +1589,7 @@
     },
     {
       "id": "S-05",
-      "epic": "S \u2014 Scanner issue types (coverage gate, 2026-11-24)",
+      "epic": "S — Scanner issue types (coverage gate, 2026-11-24)",
       "priority": "P2",
       "title": "An HTTP/2 enable setting that gates Hidden HTTP/2",
       "acceptance": "WebProbe has Burp's project setting for upstream HTTP/2 (project_options.http.http2.enable_http2); with it off the Hidden HTTP/2 check does not run.",

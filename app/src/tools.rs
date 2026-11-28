@@ -3064,7 +3064,11 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         tls_pass_through: app.shared.tls_bypass.lock().unwrap().clone(),
         streaming_responses: app.shared.streaming.lock().unwrap().clone(),
         listener_http2: app.shared.listener_http2.load(Ordering::SeqCst),
-        http2_enabled: webprobe_core::scan_config::shared_config(&app.shared).lock().unwrap().http.http2_enabled,
+        http2_enabled: webprobe_core::scan_config::shared_config(&app.shared)
+            .lock()
+            .unwrap()
+            .http
+            .http2_enabled,
         ws_match_replace_rules: app.shared.ws_rules.lock().unwrap().clone(),
         ws_match_replace_disable_out_of_scope: app
             .shared
@@ -4199,12 +4203,16 @@ mod save_restore_tests {
                 .unwrap()
                 .http
                 .http2_enabled = false;
-            save_project(&mut app, true);
+            save_project(&mut app, true).expect("project saves");
             let mut fresh = crate::App::new(net::Shared::new());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
             let _ = tx.send((
-                webprobe_core::scan_config::shared_config(&fresh.shared).lock().unwrap().http.http2_enabled,
+                webprobe_core::scan_config::shared_config(&fresh.shared)
+                    .lock()
+                    .unwrap()
+                    .http
+                    .http2_enabled,
                 fresh.project_status.clone(),
             ));
         });

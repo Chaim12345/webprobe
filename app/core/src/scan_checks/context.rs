@@ -84,7 +84,11 @@ impl ScanCtx {
             .unwrap()
             .check_enabled(STORED_INPUT_ID);
         let host_hdr = util::get_header(&parts.headers, "Host").unwrap_or_default();
-        let http2_enabled = crate::scan_config::shared_config(&shared).lock().unwrap().http.http2_enabled;
+        let http2_enabled = crate::scan_config::shared_config(&shared)
+            .lock()
+            .unwrap()
+            .http
+            .http2_enabled;
         let mut cx = ScanCtx {
             shared,
             entry,
