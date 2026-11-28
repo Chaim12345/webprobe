@@ -44,6 +44,9 @@ pub struct OobState {
     wanted: AtomicBool,
     /// A front end with a Collaborator keeps the pool stocked.
     supplier: AtomicBool,
+    /// AR-06: signalled when the pool is stocked or the supplier or the
+    /// request for payloads goes away, so `take` waits without polling.
+    changed: (std::sync::Mutex<()>, std::sync::Condvar),
     /// Ids a waiting `take` needs: `refill` stocks at least this many.
     demand: std::sync::atomic::AtomicUsize,
     /// Interactions seen by `match_new` (last 2000), for extensions'
@@ -107,11 +110,25 @@ impl OobState {
     /// This process has a front end that stocks the pool.
     pub fn set_supplier(&self, on: bool) {
         self.supplier.store(on, Ordering::SeqCst);
+        self.signal();
+    }
+
+    /// Wake a `take` that is waiting for the pool.
+    fn signal(&self) {
+        // Taking the lock orders this after a waiter's check of the pool.
+        drop(
+            self.changed
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        self.changed.1.notify_all();
     }
 
     /// Ask (or stop asking) the supplier for payloads.
     pub fn want(&self, on: bool) {
         self.wanted.store(on, Ordering::SeqCst);
+        self.signal();
     }
 
     pub fn is_wanted(&self) -> bool {
@@ -129,12 +146,15 @@ impl OobState {
             while pool.len() < target {
                 pool.push(mint());
             }
+            drop(pool);
+            self.signal();
         }
     }
 
     /// Put payloads into the pool directly (tests, headless suppliers).
     pub fn stock(&self, items: impl IntoIterator<Item = (String, String)>) {
         self.pool.lock().extend(items);
+        self.signal();
     }
 
     pub fn pool_len(&self) -> usize {
@@ -151,13 +171,26 @@ impl OobState {
             // alone would never stock a request needing more than that.
             self.demand.fetch_max(n, Ordering::SeqCst);
         }
-        while self.supplier.load(Ordering::SeqCst)
-            && self.is_wanted()
-            && self.pool_len() < n
-            && Instant::now() < deadline
-        {
-            std::thread::sleep(Duration::from_millis(25));
+        let mut waiting = self
+            .changed
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while self.supplier.load(Ordering::SeqCst) && self.is_wanted() && self.pool_len() < n {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            // Woken by a refill, a direct stock, or the supplier or the
+            // request going away; the deadline bounds the wait.
+            waiting = self
+                .changed
+                .1
+                .wait_timeout(waiting, left)
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .0;
         }
+        drop(waiting);
         self.demand.store(0, Ordering::SeqCst);
         let mut pool = self.pool.lock();
         let k = n.min(pool.len());
