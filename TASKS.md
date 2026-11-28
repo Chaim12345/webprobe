@@ -370,3 +370,9 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 | P-14 ✅ | Repair UI wiring lost in a bad edit (P0) | Filter bar, Comparer, Target scope, project controls, listener status/editor and appearance options are all reachable again; no dead helpers left | M |
 | P-15 | Interactive Open browser launcher (P1) | 'Open browser' (Intercept bar, empty states, Dashboard) launches the user's Chrome/Chromium or a downloaded Chrome for Testing with a throwaway profile, --proxy-server set to the active listener and the WebProbe CA trusted for that profile only; reports clearly when no browser is found | M |
 | P-16 | Headless engine trait + Obscura sidecar spike (P1) | HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures | M |
+
+### Epic R — Parity verification (P1)
+
+| ID | Task | Acceptance | Effort |
+|---|---|---|---|
+| R-19 ✅ | UI parity re-score for all 13 tabs (dated results) | All 13 tabs re-scored against the Burp reference with dated evidence, including Logger, Organizer and WebSocket history/intercept; `qa/parity-scores-2026-11-28.md` replaces the 2026-11-15 file; every gap found tracked as its own issue (#268–#273) | M |

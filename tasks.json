@@ -1,14 +1,14 @@
 {
  "project": "webprobe",
- "generated": "2026-11-15",
+ "generated": "2026-11-28",
  "source": "TASKS.md",
  "summary": {
-  "total": 101,
+  "total": 102,
   "p0": 64,
-  "p1": 29,
+  "p1": 30,
   "p2": 8,
   "by_status": {
-   "done": 24,
+   "done": 25,
    "in_progress": 12,
    "todo": 65
   }
@@ -1026,6 +1026,17 @@
    "effort": "L",
    "status": "in_progress",
    "evidence": "accesskit build in /root/webprobe-a11y appears on the AT-SPI bus but the frame lacks native-window mapping; egui-mcp-server 0.0.5 installed and registered in ~/.config/opencode/opencode.json (ping=pong, check_connection=false). egui 0.33 + egui-mcp-client trial build in /root/webprobe-egui33."
+  },
+  {
+   "id": "R-19",
+   "epic": "R — UI parity verification",
+   "priority": "P1",
+   "title": "UI parity re-score for all 13 tabs (dated results)",
+   "acceptance": "All 13 tabs re-scored against the Burp reference with dated evidence, including Logger, Organizer and WebSocket history/intercept; the parity-scores file replaced with the dated results; every gap found tracked as its own issue",
+   "effort": "M",
+   "status": "done",
+   "completed": "2026-11-28",
+   "evidence": "qa/parity-scores-2026-11-28.md replaces qa/parity-scores-2026-11-15.md: 13 tabs scored on the 5x10 rubric (mean 34.1/50; Dashboard 17->35, Proxy 29->38, Repeater 30->40), per-tab code evidence with file:line refs, a cross-cutting table-sort defect, and an explicit method/limits section. Scored from source at 010fdfa plus the 2026-11-16 UAT screenshots because this environment has no Rust toolchain, Xvfb or Burp jar; GUI-facing items are listed as live-verification debt. Gaps filed: #268 (WS intercept frames indistinguishable from HTTP), #269 (WS history grid + stale TLS hint), #270 (Logger engine filters unreachable/no export), #271 (Organizer Inbox-only), #272 (Discover cards inert), #273 (shared table sort dead in 9 tables). No UI code changed, so scripts/arch-gate.py was not required (it is not present on master either)."
   }
  ]
 }
