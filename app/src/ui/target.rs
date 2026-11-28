@@ -1265,10 +1265,19 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                     app.site_rows_key = rows_key;
                 }
                 let row_idx = app.site_rows.clone();
-                let rows: Vec<(bool, &net::HistEntry)> = row_idx
+                let mut rows: Vec<(bool, &net::HistEntry)> = row_idx
                     .iter()
                     .filter_map(|&i| entries.get(i).map(|e| (crawl_flags.get(i).copied().unwrap_or(false), e)))
                     .collect();
+                table::sort_rows(&mut rows, &app.target_table, |(_, e), col| match col {
+                    0 => history_host(e),
+                    1 => e.method.clone(),
+                    2 => e.path.clone(),
+                    3 => e.path.contains('?').to_string(),
+                    4 => e.status.clone(),
+                    5 => format!("{:020}", e.resp_len),
+                    _ => String::new(),
+                });
                 let full_h = ui.available_height();
                 egui_extras::StripBuilder::new(ui)
                     .size(egui_extras::Size::relative(0.45))
