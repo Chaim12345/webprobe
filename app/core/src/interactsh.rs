@@ -259,9 +259,34 @@ pub struct Session {
     route: crate::upstream::UpstreamConfig,
 }
 
+/// Why an interactsh session could not be registered. The text is what
+/// the Collaborator tab and the headless runner show.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RegisterError {
+    /// The server setting is not a host name with an optional port.
+    #[error("{0}")]
+    BadServer(String),
+    /// The session's key pair could not be made or encoded.
+    #[error("{0}")]
+    Key(String),
+    /// The server could not be reached, or the exchange failed.
+    #[error("{0}")]
+    Transport(String),
+    /// The server answered, but refused the registration.
+    #[error("{0}")]
+    Rejected(String),
+}
+
+/// Callers that still carry errors as text keep working with `?`.
+impl From<RegisterError> for String {
+    fn from(e: RegisterError) -> String {
+        e.to_string()
+    }
+}
+
 /// Split a server setting (`host`, `host:port`, optionally with `https://`
 /// and a trailing slash) into the payload domain and the API port.
-pub fn parse_server(server: &str) -> Result<(String, u16), String> {
+pub fn parse_server(server: &str) -> Result<(String, u16), RegisterError> {
     let s = server.trim();
     let s = s
         .strip_prefix("https://")
@@ -269,7 +294,9 @@ pub fn parse_server(server: &str) -> Result<(String, u16), String> {
         .trim_end_matches('/')
         .to_ascii_lowercase();
     if s.is_empty() || s.contains('/') || s.contains(char::is_whitespace) {
-        return Err(format!("not a server host name: {server:?}"));
+        return Err(RegisterError::BadServer(format!(
+            "not a server host name: {server:?}"
+        )));
     }
     match s.rsplit_once(':') {
         Some((h, p)) => p
@@ -277,7 +304,7 @@ pub fn parse_server(server: &str) -> Result<(String, u16), String> {
             .ok()
             .filter(|p| *p > 0 && !h.is_empty())
             .map(|p| (h.to_string(), p))
-            .ok_or_else(|| format!("bad port in {server:?}")),
+            .ok_or_else(|| RegisterError::BadServer(format!("bad port in {server:?}"))),
         None => Ok((s, 443)),
     }
 }
@@ -285,7 +312,10 @@ pub fn parse_server(server: &str) -> Result<(String, u16), String> {
 impl Session {
     /// Generate an RSA key pair and register a correlation id, dialing
     /// over `route` (direct only when the route says direct).
-    pub fn register(server: &str, route: &crate::upstream::UpstreamConfig) -> Result<Self, String> {
+    pub fn register(
+        server: &str,
+        route: &crate::upstream::UpstreamConfig,
+    ) -> Result<Self, RegisterError> {
         Self::register_with(server, None, route)
     }
 
@@ -297,15 +327,15 @@ impl Session {
         server: &str,
         token: Option<&str>,
         route: &crate::upstream::UpstreamConfig,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, RegisterError> {
         use rsa::pkcs8::EncodePublicKey;
         let (server, port) = parse_server(server)?;
         let key = rsa::PrivateKey::new(&mut crate::tls::OsRandom, 2048)
-            .map_err(|e| format!("rsa: {e}"))?;
+            .map_err(|e| RegisterError::Key(format!("rsa: {e}")))?;
         let der = key
             .to_public_key()
             .to_public_key_der()
-            .map_err(|e| format!("pkix: {e}"))?;
+            .map_err(|e| RegisterError::Key(format!("pkix: {e}")))?;
         let pem = crate::tls::pem_armor(der.as_bytes(), "RSA PUBLIC KEY");
         let s = Self {
             server,
@@ -325,13 +355,15 @@ impl Session {
             "correlation-id": s.cid,
         })
         .to_string();
-        let (status, resp) = s.request("POST", "/register", Some(&body))?;
+        let (status, resp) = s
+            .request("POST", "/register", Some(&body))
+            .map_err(RegisterError::Transport)?;
         if status != 200 {
-            return Err(format!(
+            return Err(RegisterError::Rejected(format!(
                 "register on {} failed: HTTP {status} {}",
                 s.server,
                 String::from_utf8_lossy(&resp)
-            ));
+            )));
         }
         Ok(s)
     }
@@ -792,6 +824,8 @@ mod tests {
         let err = Session::register_with(&format!("localhost:{target_port}"), None, &route)
             .err()
             .expect("a rejected CONNECT must fail the registration");
+        assert!(matches!(&err, RegisterError::Transport(_)), "{err:?}");
+        let err = err.to_string();
         assert!(err.contains("407"), "{err}");
         assert!(err.contains("route"), "diagnostic names the route: {err}");
         assert_eq!(
@@ -815,6 +849,7 @@ mod tests {
         let err = Session::register_with(&format!("localhost:{target_port}"), None, &route)
             .err()
             .expect("an unusable route must fail closed");
+        let err = err.to_string();
         assert!(err.contains("upstream proxy"), "{err}");
         assert_eq!(bait_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
