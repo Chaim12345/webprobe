@@ -1611,6 +1611,63 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// R-20: a registered audit issue handler is told about issues reported
+    /// after it registered, and not about the ones already listed.
+    #[test]
+    fn montoya_audit_issue_handler_sees_new_issues_only() {
+        let Some(dir) = stage_extension("IssueHandlerExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let shared = crate::net::Shared::new();
+        let entry = crate::net::HistEntry {
+            host: "old.test".into(),
+            path: "/".into(),
+            ..Default::default()
+        };
+        crate::scan::add_issues(
+            &shared,
+            vec![crate::scan::mk("low", "Listed before", &entry, "d")],
+        );
+        let sc = JavaSidecar::spawn_with(
+            dir.to_str().unwrap(),
+            Some(crate::ext_calls::host_link(&shared)),
+        )
+        .expect("issue handler extension loads");
+        eventually(|| {
+            sc.errors()
+                .iter()
+                .any(|l| l.contains("audit issue handler registered"))
+                .then_some(())
+        });
+        let entry = crate::net::HistEntry {
+            host: "new.test".into(),
+            path: "/x".into(),
+            ..Default::default()
+        };
+        crate::scan::add_issues(
+            &shared,
+            vec![crate::scan::mk("high", "Reported after", &entry, "d")],
+        );
+        eventually(|| {
+            sc.errors()
+                .iter()
+                .any(|l| l.contains("audit issue handler saw: Reported after"))
+                .then_some(())
+        });
+        let log = sc.errors();
+        assert!(
+            !log.iter().any(|l| l.contains("saw: Listed before")),
+            "{log:#?}"
+        );
+        sc.unload();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-20: payload options round-trip through the public Montoya API.
     #[test]
     fn montoya_payload_without_server_location() {

@@ -589,7 +589,47 @@ final class Engine {
         o.on("registerActiveScanCheck", a -> reg(ACTIVE, new Active((ActiveScanCheck) a[0], (ScanCheckType) a[1])))
          .on("registerPassiveScanCheck", a -> reg(PASSIVE, (PassiveScanCheck) a[0]))
          .on("registerScanCheck", a -> reg(LEGACY, (ScanCheck) a[0]))
-         .on("registerInsertionPointProvider", a -> reg(POINT_PROVIDERS, (AuditInsertionPointProvider) a[0]));
+         .on("registerInsertionPointProvider", a -> reg(POINT_PROVIDERS, (AuditInsertionPointProvider) a[0]))
+         .on("registerAuditIssueHandler", a -> issueHandler((burp.api.montoya.scanner.audit.AuditIssueHandler) a[0]));
+    }
+
+    static final List<burp.api.montoya.scanner.audit.AuditIssueHandler> ISSUE_HANDLERS = new CopyOnWriteArrayList<>();
+    private static Thread issueWatch;
+
+    private static String issueKey(AuditIssue i) {
+        return i.name() + "\n" + i.baseUrl() + "\n" + i.detail();
+    }
+
+    /** Scanner.registerAuditIssueHandler: the handler is told about every
+     *  issue that appears after it registers. WebProbe has no push channel
+     *  for issues, so one daemon thread reads the issue list once a second
+     *  while any handler is registered; issues listed before registration
+     *  are not reported. */
+    static synchronized Object issueHandler(burp.api.montoya.scanner.audit.AuditIssueHandler handler) {
+        Object registration = Bridge.register(ISSUE_HANDLERS, handler);
+        if (issueWatch == null) {
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (AuditIssue i : issues()) seen.add(issueKey(i));
+            issueWatch = new Thread(() -> {
+                while (true) {
+                    try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
+                    try {
+                        // With no handler left the list is still read, so an
+                        // issue raised meanwhile is not replayed to a later one.
+                        for (AuditIssue i : issues()) {
+                            if (!seen.add(issueKey(i))) continue;
+                            for (var h : ISSUE_HANDLERS) {
+                                try { h.handleNewAuditIssue(i); }
+                                catch (Throwable t) { Logs.error("audit issue handler failed: " + Logs.trace(t)); }
+                            }
+                        }
+                    } catch (Throwable t) { /* the host is gone or busy; try again */ }
+                }
+            }, "audit-issue-watch");
+            issueWatch.setDaemon(true);
+            issueWatch.start();
+        }
+        return registration;
     }
 
     static <T> Object reg(List<T> l, T item) {
