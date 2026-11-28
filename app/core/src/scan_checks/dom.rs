@@ -14,6 +14,7 @@ pub(crate) const DOM_XSS_SINKS: &[&str] = &[
     "element.setAttribute.onclick",
     "element.setAttribute.srcdoc",
     "iframe.srcdoc",
+    "jQuery.init",
     "jQuery.html",
     "jQuery.append",
     "jQuery.prepend",
