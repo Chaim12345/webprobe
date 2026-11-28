@@ -12,8 +12,14 @@ Run from `app/`, and do not hand off with any of them failing:
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 python3 ../scripts/arch-gate.py
-cargo test --workspace --locked
 ```
+
+Then run only the tests relevant to the change, for example
+`cargo test -p webprobe-core --locked --lib scope` or
+`cargo test -p webprobe-core --locked --test f9_intercept_disconnect`.
+Do not run the whole workspace suite for every change: hosted CI runs it on
+the pull request. Run it locally only for a change that touches many files
+or shared code (locking, the proxy engine, the project format).
 
 `app/.cargo/config.toml` pins machine-local tool paths. On another machine set
 `CARGO_BUILD_RUSTC=rustc CARGO_BUILD_RUSTC_WRAPPER="" CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=cc RUSTFLAGS=""`
