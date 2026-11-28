@@ -84,7 +84,7 @@ fn wake_without_a_waker_is_a_no_op() {
     shared.wake_at(500);
     assert_eq!(coalesced(&shared), 0);
     assert_eq!(
-        *shared.last_wake_ms.lock().unwrap(),
+        *shared.last_wake_ms.lock(),
         None,
         "no waker: window unclaimed"
     );

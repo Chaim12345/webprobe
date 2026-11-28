@@ -21,10 +21,11 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+use webprobe_core::sync::Mutex;
 
 use webprobe_core::net::{Shared, send_raw_with};
 
@@ -453,7 +454,7 @@ impl Capture {
                         a.fetch_add(1, Ordering::SeqCst);
                         let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
                         let record = read_client(&mut stream, &s);
-                        r.lock().unwrap().push(record);
+                        r.lock().push(record);
                         let _ = stream.write_all(
                             b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                         );
@@ -490,7 +491,6 @@ impl Capture {
             if let Some(wire) = self
                 .records
                 .lock()
-                .unwrap()
                 .iter()
                 .find(|r| r.complete)
                 .map(|r| r.wire.clone())
@@ -512,11 +512,19 @@ impl Drop for Capture {
     }
 }
 
+/// The isolation harness hands the child its own CA dir in the environment;
+/// load that dir explicitly instead of the persisted user CA. The artifact
+/// proof then shows this process never touched the real `~/.config/webprobe`.
+fn owned_shared() -> std::sync::Arc<Shared> {
+    let dir = std::env::var_os("WEBPROBE_CA_DIR").map(std::path::PathBuf::from);
+    Shared::with_ca_dir(dir).expect("load the isolation harness's CA dir")
+}
+
 // ---------- child bodies ----------
 
 fn control_body() {
     let mut capture = Capture::start();
-    let shared = Shared::new();
+    let shared = owned_shared();
     let raw = raw_request();
     let up = send_raw_with(&shared, "127.0.0.1", capture.port, &raw, None);
     assert!(up.error.is_none(), "send error: {:?}", up.error);
@@ -556,7 +564,7 @@ fn control_body() {
 /// not a fix or GUI proof.
 fn lossy_body() {
     let mut capture = Capture::start();
-    let shared = Shared::new();
+    let shared = owned_shared();
     let raw = raw_request();
     let stored: String = String::from_utf8_lossy(&raw).into_owned();
     let sent = stored.as_bytes().to_vec();

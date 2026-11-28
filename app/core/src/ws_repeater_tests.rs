@@ -2,11 +2,12 @@
 //! (plain TCP, handshake by hand) and, for attached sessions, against a live
 //! proxied connection. Every wait has a deadline.
 
+use crate::sync::Mutex;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::net::{self, Shared};
@@ -42,13 +43,11 @@ struct Srv {
 
 impl Srv {
     fn send_raw(&self, conn: usize, bytes: Vec<u8>) {
-        self.conns.lock().unwrap()[conn]
-            .send(Cmd::Raw(bytes))
-            .unwrap();
+        self.conns.lock()[conn].send(Cmd::Raw(bytes)).unwrap();
     }
 
     fn hangup(&self, conn: usize) {
-        let _ = self.conns.lock().unwrap()[conn].send(Cmd::Hangup);
+        let _ = self.conns.lock()[conn].send(Cmd::Hangup);
     }
 
     /// The next event satisfying `pred`, others dropped; panics at the deadline.
@@ -85,7 +84,7 @@ fn ws_server(status: u16, after_head: Vec<u8>) -> Srv {
         for (idx, s) in l.incoming().enumerate() {
             let Ok(mut s) = s else { break };
             let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
-            reg.lock().unwrap().push(cmd_tx);
+            reg.lock().push(cmd_tx);
             let ev = ev_tx.clone();
             let after = after_head.clone();
             std::thread::spawn(move || {
@@ -596,7 +595,7 @@ fn clone_copies_the_handshake_and_target_but_not_the_connection() {
     let (shared, s) = connected(&srv);
     rep::send(&shared, &s, true, false, b"hi").unwrap();
     eventually("the echo", || !received(&s, "text").is_empty());
-    *s.handshake.lock().unwrap() = format!(
+    *s.handshake.lock() = format!(
         "GET /edited HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
         srv.port
     );
@@ -606,7 +605,7 @@ fn clone_copies_the_handshake_and_target_but_not_the_connection() {
         (c.host.as_str(), c.port, c.tls),
         (s.host.as_str(), s.port, s.tls)
     );
-    assert_eq!(*c.handshake.lock().unwrap(), *s.handshake.lock().unwrap());
+    assert_eq!(*c.handshake.lock(), *s.handshake.lock());
     assert_eq!(c.attached, None);
     assert_eq!(
         c.state(),
@@ -619,8 +618,8 @@ fn clone_copies_the_handshake_and_target_but_not_the_connection() {
         Err("Not connected".to_string())
     );
     // Editing the clone's handshake leaves the original alone.
-    *c.handshake.lock().unwrap() = "GET /other HTTP/1.1\r\n\r\n".into();
-    assert!(s.handshake.lock().unwrap().contains("/edited"));
+    *c.handshake.lock() = "GET /other HTTP/1.1\r\n\r\n".into();
+    assert!(s.handshake.lock().contains("/edited"));
     // Both are listed, and the original is still connected.
     let ids: Vec<u64> = crate::ws_repeater::sessions(&shared)
         .iter()
@@ -629,7 +628,7 @@ fn clone_copies_the_handshake_and_target_but_not_the_connection() {
     assert!(ids.contains(&s.id) && ids.contains(&c.id));
     assert_eq!(s.state(), WsRepState::Connected);
     // The clone opens a connection of its own (a second one at the server).
-    *c.handshake.lock().unwrap() = handshake(srv.port);
+    *c.handshake.lock() = handshake(srv.port);
     rep::connect(&shared, &c).unwrap();
     srv.wait("second connection", |e| matches!(e, Ev::Accepted(1)));
 }
@@ -651,11 +650,7 @@ fn from_history_without_a_live_connection_prepares_a_new_one() {
         (s.host.as_str(), s.port, s.tls),
         ("ws.example.test", 8443, true)
     );
-    assert_eq!(
-        *s.handshake.lock().unwrap(),
-        hs,
-        "the recorded upgrade request"
-    );
+    assert_eq!(*s.handshake.lock(), hs, "the recorded upgrade request");
     assert_eq!(s.attached, None);
     assert_eq!(s.state(), WsRepState::Disconnected);
     // No history row: a default upgrade request for the host.
@@ -667,7 +662,6 @@ fn from_history_without_a_live_connection_prepares_a_new_one() {
     assert!(
         s.handshake
             .lock()
-            .unwrap()
             .starts_with("GET / HTTP/1.1\r\nHost: plain.example.test\r\n")
     );
     let s = rep::from_history(&shared, 4242, "secure.example.test", true);
@@ -737,20 +731,12 @@ fn attached_session_reaches_the_server_and_the_client_through_the_live_relay() {
         String::from_utf8_lossy(&inbox)
     );
     inbox.drain(..at);
-    eventually("the live connection", || {
-        !shared.ws_live.lock().unwrap().is_empty()
-    });
-    let socket = *shared.ws_live.lock().unwrap().keys().next().unwrap();
+    eventually("the live connection", || !shared.ws_live.lock().is_empty());
+    let socket = *shared.ws_live.lock().keys().next().unwrap();
 
     // Attach directly: `from_history` on a live connection is tested apart
     // (it deadlocks, see the ignored test below).
-    let live = shared
-        .ws_live
-        .lock()
-        .unwrap()
-        .get(&socket)
-        .cloned()
-        .unwrap();
+    let live = shared.ws_live.lock().get(&socket).cloned().unwrap();
     let s = rep::new_session(
         &shared,
         &live.host,
@@ -764,9 +750,9 @@ fn attached_session_reaches_the_server_and_the_client_through_the_live_relay() {
     assert!(s.can_send_to_client());
     assert_eq!((s.host.as_str(), s.port), ("127.0.0.1", port));
     assert!(
-        s.handshake.lock().unwrap().contains("/chat"),
+        s.handshake.lock().contains("/chat"),
         "{:?}",
-        s.handshake.lock().unwrap()
+        s.handshake.lock()
     );
     assert!(
         rep::connect(&shared, &s).is_err(),
@@ -810,9 +796,7 @@ fn attached_session_reaches_the_server_and_the_client_through_the_live_relay() {
     // Both ends gone: the live entry is removed and sends fail.
     drop(client);
     srv.hangup(0);
-    eventually("the live entry to go", || {
-        shared.ws_live.lock().unwrap().is_empty()
-    });
+    eventually("the live entry to go", || shared.ws_live.lock().is_empty());
     assert!(rep::send(&shared, &s, true, false, b"late").is_err());
 }
 
@@ -820,7 +804,7 @@ fn attached_session_reaches_the_server_and_the_client_through_the_live_relay() {
 fn from_history_attaches_to_a_live_connection_without_deadlocking() {
     let shared = Shared::new();
     let (tx, _rx) = mpsc::channel();
-    shared.ws_live.lock().unwrap().insert(
+    shared.ws_live.lock().insert(
         5,
         net::LiveWs {
             host: "127.0.0.1".into(),

@@ -1,5 +1,6 @@
 //! MIME checks need negative cases as well as detection: binary downloads,
 //! empty replies and redirects must not acquire HTML-only findings.
+use super::passive_checks::check_library;
 use super::passive_library::*;
 
 fn ids(response: &[u8]) -> Vec<&'static str> {

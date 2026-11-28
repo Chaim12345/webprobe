@@ -71,7 +71,7 @@ impl BudgetedExecution {
         let Some(c) = self.coordinator.upgrade() else {
             return Err(AdmissionError::Busy);
         };
-        let state = c.state.lock().unwrap();
+        let state = c.state.lock();
         if !state.as_ref().is_some_and(|r| {
             r.phase == Phase::Finalizing
                 && Arc::ptr_eq(&r.owner, &self.owner)
@@ -118,7 +118,7 @@ impl ExecutionContext {
                 if !std::ptr::eq(shared, c.shared.as_ref()) || l.owner.is_cancelled() {
                     return Err(AdmissionError::Busy);
                 }
-                let state = c.state.lock().unwrap();
+                let state = c.state.lock();
                 if state.as_ref().is_some_and(|r| {
                     r.phase == Phase::Open
                         && Arc::ptr_eq(&r.owner, &l.owner)
@@ -199,7 +199,7 @@ pub(crate) enum Handoff {
 impl Coordinator {
     pub fn new(shared: Arc<Shared>, limits: Limits) -> Result<Arc<Self>, AdmissionError> {
         Ledger::new(limits).map_err(|_| AdmissionError::InvalidLimits)?;
-        let mut published = shared.host_admission.1.lock().unwrap();
+        let mut published = shared.host_admission.1.lock();
         if let Some(existing) = published.upgrade() {
             if existing.limits != limits {
                 return Err(AdmissionError::ConfigurationMismatch);
@@ -219,7 +219,7 @@ impl Coordinator {
         crate::host_probe_state::experimental_scope(&self.shared)
     }
     pub fn open(self: &Arc<Self>) -> Result<Batch, AdmissionError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         let owner = if let Some(run) = state.as_mut() {
             if run.phase != Phase::Open || run.owner.is_cancelled() {
                 return Err(AdmissionError::Busy);
@@ -257,7 +257,7 @@ impl Coordinator {
         self: &Arc<Self>,
         item: Item,
     ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         if state
             .as_ref()
             .is_some_and(|r| r.phase != Phase::Open || r.active || r.owner.is_cancelled())
@@ -308,13 +308,13 @@ impl Coordinator {
         self.cleanup_outcome(owner, Finish::Incomplete);
     }
     fn cleanup_outcome(&self, owner: &Arc<AttemptScope>, outcome: Finish) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         if let Some(run) = state.as_mut()
             && Arc::ptr_eq(&run.owner, owner)
             && !run.active
         {
-            *owner.terminal.lock().unwrap() = Some(outcome);
-            *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
+            *owner.terminal.lock() = Some(outcome);
+            *self.terminal.lock() = Some((owner.clone(), outcome));
             run.owner.cancel();
             run.phase = Phase::Closed;
             self.shared.stored.close_batch();
@@ -357,7 +357,7 @@ impl Batch {
     }
     pub fn finish(mut self) -> Result<Handoff, AdmissionError> {
         let c = self.coordinator.clone();
-        let mut state = c.state.lock().unwrap();
+        let mut state = c.state.lock();
         let run = state
             .as_mut()
             .filter(|r| Arc::ptr_eq(&r.owner, &self.owner))
@@ -394,7 +394,7 @@ impl Drop for Batch {
         }
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
-        let mut state = self.coordinator.state.lock().unwrap();
+        let mut state = self.coordinator.state.lock();
         if let Some(run) = state.as_mut()
             && Arc::ptr_eq(&run.owner, &self.owner)
             && run.phase == Phase::Open
@@ -417,7 +417,7 @@ impl Audit {
         reason = "used by the cfg(test) experimental engine adapter"
     )]
     pub fn mark_incomplete(&self) {
-        if let Some(run) = self.coordinator.state.lock().unwrap().as_mut()
+        if let Some(run) = self.coordinator.state.lock().as_mut()
             && Arc::ptr_eq(&run.owner, &self.owner)
         {
             run.incomplete = true;
@@ -425,7 +425,7 @@ impl Audit {
     }
     pub fn complete(mut self) -> Result<Handoff, AdmissionError> {
         let c = self.coordinator.clone();
-        let mut state = c.state.lock().unwrap();
+        let mut state = c.state.lock();
         let run = state
             .as_mut()
             .filter(|r| Arc::ptr_eq(&r.owner, &self.owner))
@@ -460,7 +460,7 @@ impl Drop for Audit {
         }
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
-        let mut state = self.coordinator.state.lock().unwrap();
+        let mut state = self.coordinator.state.lock();
         if let Some(run) = state.as_mut()
             && Arc::ptr_eq(&run.owner, &self.owner)
         {
@@ -498,7 +498,6 @@ impl Finalizer {
             .coordinator
             .state
             .lock()
-            .unwrap()
             .as_ref()
             .is_none_or(|r| r.incomplete);
         let complete = result
@@ -695,7 +694,7 @@ mod tests {
         let other = Coordinator::new(shared, limits()).unwrap();
         assert!(Arc::ptr_eq(&c, &other));
         let a = c.open().unwrap();
-        let ledger = c.state.lock().unwrap().as_ref().unwrap().ledger.clone();
+        let ledger = c.state.lock().as_ref().unwrap().ledger.clone();
         assert_eq!(
             ledger.reserve(&[]),
             Err(crate::scan_budget::Denied::NotActivated)
@@ -760,9 +759,9 @@ mod tests {
             Finish::Incomplete
         );
         assert_eq!(calls.load(Ordering::SeqCst), 0);
-        assert_eq!(*old.terminal.lock().unwrap(), Some(Finish::Incomplete));
+        assert_eq!(*old.terminal.lock(), Some(Finish::Incomplete));
         drop(c);
-        assert_eq!(*old.terminal.lock().unwrap(), Some(Finish::Incomplete));
+        assert_eq!(*old.terminal.lock(), Some(Finish::Incomplete));
         let c = Coordinator::new(Shared::new(), limits()).unwrap();
         let b = c.open().unwrap();
         let retained = b.owner.clone();
@@ -780,7 +779,7 @@ mod tests {
             finalizer(b.finish().unwrap()).run(|_| Finish::Complete),
             Finish::Complete
         );
-        assert_eq!(*retained.terminal.lock().unwrap(), Some(Finish::Incomplete));
+        assert_eq!(*retained.terminal.lock(), Some(Finish::Incomplete));
     }
     #[test]
     fn preexhausted_callback_zero_positive_one_and_record_loss_finalization() {

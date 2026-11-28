@@ -11,6 +11,12 @@ pub(crate) trait PointCheck: Sync {
     /// Burp port, otherwise WebProbe's own wording (some WebProbe issues add
     /// the parameter name to it).
     fn issue(&self) -> &'static str;
+    /// The registration record every check kind exposes (AR-10 / F14).
+    /// Active checks pick severity and confidence per finding, so the record
+    /// carries the identity only.
+    fn meta(&self) -> CheckMeta {
+        CheckMeta::identified(self.id(), self.issue())
+    }
     /// The insertion-point kinds it applies to: the point-type rules of the
     /// Burp check's applicability test (`Zuit.Zh`). Every implementation
     /// matches every kind explicitly, so a new kind needs a decision.
@@ -44,6 +50,10 @@ pub(crate) trait RequestCheck: Sync {
     fn id(&self) -> &'static str;
     /// As [`PointCheck::issue`].
     fn issue(&self) -> &'static str;
+    /// As [`PointCheck::meta`].
+    fn meta(&self) -> CheckMeta {
+        CheckMeta::identified(self.id(), self.issue())
+    }
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "check metadata: read only by the registry tests")

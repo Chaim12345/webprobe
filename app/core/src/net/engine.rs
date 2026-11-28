@@ -151,7 +151,7 @@ pub fn set_listeners(shared: &Arc<Shared>, specs: Vec<ListenerSpec>) -> Result<(
             });
         }
     }
-    *shared.listeners.lock().unwrap() = specs
+    *shared.listeners.lock() = specs
         .into_iter()
         .map(|s| Arc::new(ListenerState::new(s)))
         .collect();
@@ -167,7 +167,6 @@ pub fn listener_specs(shared: &Arc<Shared>) -> Vec<ListenerSpec> {
     shared
         .listeners
         .lock()
-        .unwrap()
         .iter()
         .map(|l| ListenerSpec {
             http2: l.http2.load(Ordering::SeqCst),
@@ -183,7 +182,6 @@ pub fn listener_supports_http2(shared: &Shared, port: Option<u16>) -> bool {
         shared
             .listeners
             .lock()
-            .unwrap()
             .iter()
             .find(|l| l.spec.port == p)
             .map(|l| l.http2.load(Ordering::SeqCst))
@@ -196,7 +194,7 @@ pub fn listener_supports_http2(shared: &Shared, port: Option<u16>) -> bool {
 pub fn set_listener_http2(shared: &Shared, row: usize, on: bool) {
     if row == 0 {
         shared.listener_http2.store(on, Ordering::SeqCst);
-    } else if let Some(l) = shared.listeners.lock().unwrap().get(row - 1) {
+    } else if let Some(l) = shared.listeners.lock().get(row - 1) {
         l.http2.store(on, Ordering::SeqCst);
     }
 }
@@ -209,11 +207,11 @@ pub fn listener_status(shared: &Arc<Shared>) -> Vec<(String, bool, Option<String
         shared.listener_running.load(Ordering::SeqCst),
         None,
     )];
-    for l in shared.listeners.lock().unwrap().iter() {
+    for l in shared.listeners.lock().iter() {
         out.push((
             format!("{}:{}", l.spec.bind, l.spec.port),
             l.running.load(Ordering::SeqCst),
-            l.error.lock().unwrap().clone(),
+            l.error.lock().clone(),
         ));
     }
     out
@@ -229,7 +227,7 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, r#gen: u6
             Ok(l) => {
                 let _ = l.set_nonblocking(true);
                 state.running.store(true, Ordering::SeqCst);
-                *state.error.lock().unwrap() = None;
+                *state.error.lock() = None;
                 shared.log(&format!("Proxy listener started on {addr}"));
                 loop {
                     if shared.listener_generation.load(Ordering::SeqCst) != r#gen {
@@ -254,7 +252,7 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, r#gen: u6
             }
             Err(e) => {
                 state.running.store(false, Ordering::SeqCst);
-                *state.error.lock().unwrap() = Some(e.to_string());
+                *state.error.lock() = Some(e.to_string());
                 shared.log(&format!("Proxy listener bind failed on {addr}: {e}"));
                 crate::notice::toast(
                     crate::notice::Level::Error,
@@ -279,7 +277,7 @@ pub fn start_extra_listeners(shared: Arc<Shared>) {
             let r#gen = shared.listener_generation.load(Ordering::SeqCst);
             if r#gen != spawned_gen {
                 spawned_gen = r#gen;
-                let specs: Vec<Arc<ListenerState>> = shared.listeners.lock().unwrap().clone();
+                let specs: Vec<Arc<ListenerState>> = shared.listeners.lock().clone();
                 for st in specs {
                     let sh = shared.clone();
                     crate::util::spawn_contained("net", move || listener_worker(sh, st, r#gen));
@@ -352,7 +350,7 @@ pub fn listener_port(shared: &Shared) -> u16 {
 pub fn upstream_target(shared: &Shared, host: &str, port: u16) -> (String, u16) {
     LISTENER_PORT
         .with(|p| p.get())
-        .and_then(|lp| shared.listener_redirects.lock().unwrap().get(&lp).cloned())
+        .and_then(|lp| shared.listener_redirects.lock().get(&lp).cloned())
         .unwrap_or_else(|| (host.to_string(), port))
 }
 
@@ -580,7 +578,6 @@ pub fn handle_connect_pending(
     let bypassed = shared
         .tls_bypass
         .lock()
-        .unwrap()
         .iter()
         .any(|pattern| host_matches(pattern, &host));
     if bypassed {
@@ -830,7 +827,7 @@ impl<'a, W: Write> ProxySink<'a, W> {
         ProxySink {
             client,
             url: url.to_string(),
-            settings: shared.streaming.lock().unwrap().clone(),
+            settings: shared.streaming.lock().clone(),
             head: None,
             tee: None,
             wired: 0,
@@ -936,22 +933,26 @@ pub fn report_stream_skips(shared: &Shared, host: &str, url: &str, head: &[u8], 
         let p = util::parse_http(head);
         let ct = util::get_header(&p.headers, "Content-Type").unwrap_or_default();
         let status = p.status.split_whitespace().next().unwrap_or("").to_string();
-        let rules = shared.response_rules.lock().unwrap().clone();
-        if rules.matches(&ct, &status, st, rules.in_scope && in_scope(shared, url)) {
+        let rules = shared.response_rules.lock().clone();
+        if rules.matches(
+            &ct,
+            &status,
+            st,
+            rules.rules().in_scope && in_scope(shared, url),
+        ) {
             reasons.push("response interception");
         }
     }
-    if shared.mr_response.lock().unwrap().iter().any(|r| r.enabled) {
+    if shared.mr_response.lock().iter().any(|r| r.enabled) {
         reasons.push("response match and replace rules");
     }
-    if !shared.ext_hooks.lock().unwrap().active_hooks().is_empty() {
+    if !shared.ext_hooks.lock().active_hooks().is_empty() {
         reasons.push("extension response handlers");
     }
     for reason in reasons {
         if shared
             .stream_skips
             .lock()
-            .unwrap()
             .insert((host.to_string(), reason))
         {
             shared.log(&format!("Streaming responses from {host} pass straight through: {reason} did not apply to them"));
@@ -1048,7 +1049,8 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             return true;
         }
     };
-    let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    let req_rules = shared.mr_request.lock().clone();
+    let mut req_out = req_rules.apply(&req_session);
     // Extension hooks run after the built-in chain (session rules, M&R).
     // Burp returns a local HTML error page when an extension drops a request;
     // this is not an origin success, and must not initiate an upstream request.
@@ -1140,7 +1142,8 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             // Rules, hooks and interception may edit what the client gets;
             // the incomplete record keeps the bytes as received.
             let received = incomplete_note.is_some().then(|| resp.clone());
-            let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
+            let resp_rules = shared.mr_response.lock().clone();
+            let mut resp = resp_rules.apply(&resp);
             if !shared.ext_handle_response(
                 &webprobe_support::ext::HttpService::new(&host, port, use_tls),
                 &parts.method,

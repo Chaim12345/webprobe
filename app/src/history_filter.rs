@@ -246,65 +246,41 @@ impl HistoryFilter {
         value.split(';').next().unwrap_or("").trim().to_lowercase()
     }
 
-    pub fn matches(&self, entry: &HistEntry, shared: &std::sync::Arc<net::Shared>) -> bool {
-        if !self.burp_rules_pass(entry) {
-            return false;
-        }
-        if !self.method.trim().is_empty() && !entry.method.eq_ignore_ascii_case(self.method.trim())
-        {
-            return false;
-        }
-        if !self.status.trim().is_empty() && !entry.status.trim().starts_with(self.status.trim()) {
-            return false;
-        }
-        if !self.mime.trim().is_empty() {
-            let needle = self.mime.trim().to_lowercase();
-            let mime = Self::mime_of(entry);
-            let hit = if self.regex {
-                regex::RegexBuilder::new(self.mime.trim())
-                    .case_insensitive(true)
-                    .build()
-                    .map(|re| re.is_match(&mime))
-                    .unwrap_or(false)
-            } else {
-                mime.contains(&needle)
-            };
-            if !hit {
-                return false;
-            }
-        }
-        if self.in_scope_only {
-            let url = format!(
-                "{}://{}{}",
-                if entry.https { "https" } else { "http" },
-                entry.host,
-                entry.path
-            );
-            if !net::in_scope(shared, &url) {
-                return false;
-            }
-        }
-        let needle = self.text.trim();
-        if needle.is_empty() {
-            return true;
-        }
-        let haystack = format!(
-            "{} {} {} {} {} {}",
-            entry.id, entry.method, entry.host, entry.port, entry.path, entry.status
-        );
-        if self.regex {
-            // A half-typed expression must not empty the table: an invalid
-            // pattern matches nothing and says so instead.
-            match regex::RegexBuilder::new(needle)
+    /// Compile the filter once, outside the history lock: the UI rebuilds it
+    /// per cache refresh, then matches thousands of rows with no regex
+    /// compilation and no history lock held.
+    pub fn compile<'a>(
+        &'a self,
+        shared: &std::sync::Arc<net::Shared>,
+    ) -> CompiledHistoryFilter<'a> {
+        let build = |pattern: &str| {
+            regex::RegexBuilder::new(pattern)
                 .case_insensitive(true)
                 .build()
-            {
-                Ok(re) => re.is_match(&haystack),
-                Err(_) => false,
-            }
+                .ok()
+        };
+        let text_re = (self.regex && !self.text.trim().is_empty())
+            .then(|| build(self.text.trim()))
+            .flatten();
+        let mime_re = (self.regex && !self.mime.trim().is_empty())
+            .then(|| build(self.mime.trim()))
+            .flatten();
+        let scope = if self.in_scope_only {
+            shared.scope.lock().clone()
         } else {
-            haystack.to_lowercase().contains(&needle.to_lowercase())
+            net::ScopeRules::default()
+        };
+        CompiledHistoryFilter {
+            filter: self,
+            text_re,
+            mime_re,
+            scope,
         }
+    }
+
+    /// Convenience for tests and one-off checks; the UI uses [`compile`].
+    pub fn matches(&self, entry: &HistEntry, shared: &std::sync::Arc<net::Shared>) -> bool {
+        self.compile(shared).matches(entry)
     }
 
     /// Burp's filter bar: one clickable "Filter settings: ..." strip, the
@@ -379,11 +355,7 @@ impl HistoryFilter {
     }
 
     fn settings_ui(&mut self, ui: &mut Ui, shared: &std::sync::Arc<net::Shared>) {
-        let scope_rules = shared
-            .scope
-            .lock()
-            .map(|r| r.iter().filter(|r| r.enabled).count())
-            .unwrap_or(0);
+        let scope_rules = shared.scope.lock().iter().filter(|r| r.enabled).count();
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.label(RichText::new("Filter by request type").strong());
@@ -488,6 +460,68 @@ impl HistoryFilter {
     }
 }
 
+/// [`HistoryFilter`] with its patterns compiled and its scope snapshotted.
+pub struct CompiledHistoryFilter<'a> {
+    filter: &'a HistoryFilter,
+    text_re: Option<regex::Regex>,
+    mime_re: Option<regex::Regex>,
+    scope: net::ScopeRules,
+}
+
+impl CompiledHistoryFilter<'_> {
+    pub fn matches(&self, entry: &HistEntry) -> bool {
+        let f = self.filter;
+        if !f.burp_rules_pass(entry) {
+            return false;
+        }
+        if !f.method.trim().is_empty() && !entry.method.eq_ignore_ascii_case(f.method.trim()) {
+            return false;
+        }
+        if !f.status.trim().is_empty() && !entry.status.trim().starts_with(f.status.trim()) {
+            return false;
+        }
+        if !f.mime.trim().is_empty() {
+            let mime = HistoryFilter::mime_of(entry);
+            let hit = if f.regex {
+                self.mime_re.as_ref().is_some_and(|re| re.is_match(&mime))
+            } else {
+                mime.contains(&f.mime.trim().to_lowercase())
+            };
+            if !hit {
+                return false;
+            }
+        }
+        if f.in_scope_only {
+            let url = format!(
+                "{}://{}{}",
+                if entry.https { "https" } else { "http" },
+                entry.host,
+                entry.path
+            );
+            if !self.scope.in_scope(&url) {
+                return false;
+            }
+        }
+        let needle = f.text.trim();
+        if needle.is_empty() {
+            return true;
+        }
+        let haystack = format!(
+            "{} {} {} {} {} {}",
+            entry.id, entry.method, entry.host, entry.port, entry.path, entry.status
+        );
+        if f.regex {
+            // A half-typed expression must not empty the table: an invalid
+            // pattern matches nothing and says so instead.
+            self.text_re
+                .as_ref()
+                .is_some_and(|re| re.is_match(&haystack))
+        } else {
+            haystack.to_lowercase().contains(&needle.to_lowercase())
+        }
+    }
+}
+
 /// An iOS-style switch, Burp's "Filter on" control.
 pub fn toggle(on: &mut bool) -> impl egui::Widget + '_ {
     move |ui: &mut Ui| {
@@ -564,7 +598,7 @@ mod tests {
     }
 
     fn shared() -> std::sync::Arc<net::Shared> {
-        net::Shared::new()
+        net::Shared::in_memory()
     }
 
     #[test]
@@ -663,7 +697,7 @@ mod tests {
         assert!(f.matches(&e, &shared));
 
         // With an include rule, only matching URLs pass.
-        shared.scope.lock().unwrap().push(net::ScopeRule {
+        shared.scope.lock().push(net::ScopeRule {
             enabled: true,
             include: true,
             pattern: "example\\.com".into(),
@@ -672,6 +706,38 @@ mod tests {
         let other = entry("GET", "other.test", "/", "200", None);
         assert!(f.matches(&e, &shared));
         assert!(!f.matches(&other, &shared));
+    }
+
+    #[test]
+    fn compiled_filter_matches_rows_and_snapshots_the_scope() {
+        let shared = shared();
+        shared.scope.lock().push(net::ScopeRule {
+            enabled: true,
+            include: true,
+            pattern: "example\\.com".into(),
+            is_regex: true,
+        });
+        let f = HistoryFilter {
+            text: "users".into(),
+            regex: true,
+            in_scope_only: true,
+            ..Default::default()
+        };
+        let compiled = f.compile(&shared);
+        let inside = entry("GET", "api.example.com", "/v1/users", "200", None);
+        let outside = entry("GET", "other.test", "/v1/users", "200", None);
+        assert!(compiled.matches(&inside));
+        assert!(!compiled.matches(&outside));
+        // The compiled filter holds the scope it was built with: a later
+        // edit needs a new compile.
+        shared.scope.lock().push(net::ScopeRule {
+            enabled: true,
+            include: true,
+            pattern: "other\\.test".into(),
+            is_regex: true,
+        });
+        assert!(!compiled.matches(&outside));
+        assert!(f.compile(&shared).matches(&outside));
     }
 
     #[test]

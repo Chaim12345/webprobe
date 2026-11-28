@@ -78,21 +78,27 @@ impl<'a> PassiveCtx<'a> {
 
 /// A registered passive check.
 pub(crate) struct PassiveCheck {
-    /// Stable id (scan configuration, catalogue, tests).
-    pub id: &'static str,
-    /// The issue it reports (Burp's KnowledgeBase name where it is a Burp
-    /// port; the units that report several names give the family).
-    pub issue: &'static str,
+    /// The registration record: stable id, the issue it reports and its
+    /// fixed severity/confidence (AR-10 / F14).
+    pub def: CheckDef,
     pub run: fn(&PassiveCtx, &mut Vec<ScanIssue>),
+}
+
+impl PassiveCheck {
+    /// Stable id (scan configuration, catalogue, tests).
+    pub fn id(&self) -> &'static str {
+        self.def.id
+    }
+
+    /// The one metadata record every check kind exposes.
+    pub fn meta(&self) -> CheckMeta {
+        self.def.meta()
+    }
 }
 
 macro_rules! unit {
     ($c:expr_2021, $run:expr_2021) => {
-        PassiveCheck {
-            id: $c.id,
-            issue: $c.name,
-            run: $run,
-        }
+        PassiveCheck { def: $c, run: $run }
     };
 }
 
@@ -144,13 +150,21 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_REDIRECT_COOKIE, redirect_cookie),
     unit!(CH_CACHE, cacheable_https),
     PassiveCheck {
-        id: "passive.error-signatures",
-        issue: "Error message or stack trace in response (WebProbe)",
+        def: CheckDef {
+            id: "passive.error-signatures",
+            name: "Error message or stack trace in response (WebProbe)",
+            sev: "medium",
+            confidence: "Firm",
+        },
         run: error_signatures,
     },
     PassiveCheck {
-        id: "passive.html-comment-secrets",
-        issue: "Secret reference in HTML comment (WebProbe)",
+        def: CheckDef {
+            id: "passive.html-comment-secrets",
+            name: "Secret reference in HTML comment (WebProbe)",
+            sev: "info",
+            confidence: "Firm",
+        },
         run: comment_secrets,
     },
     unit!(CH_GIT, git_exposed),
@@ -234,6 +248,16 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(pack::CH_DB_CONNECTION, pack::db_connection_string),
 ];
 
+/// Every passive check's metadata, derived from [`PASSIVE_CHECKS`] (AR-10 /
+/// F14): the registry is the only list, so a new check cannot be missing
+/// from the catalogue. One record per registered unit, in run order.
+pub fn check_library() -> &'static [CheckDef] {
+    static LIBRARY: std::sync::OnceLock<Vec<CheckDef>> = std::sync::OnceLock::new();
+    LIBRARY
+        .get_or_init(|| PASSIVE_CHECKS.iter().map(|c| c.def).collect())
+        .as_slice()
+}
+
 /// Run every check `enabled` lets through on one exchange.
 #[cfg(test)]
 pub(crate) fn run_passive(e: &HistEntry, enabled: &dyn Fn(&str) -> bool) -> Vec<ScanIssue> {
@@ -250,7 +274,7 @@ pub(crate) fn run_passive_in(
     let Some(resp) = &e.resp_raw else { return v };
     let cx = PassiveCtx::new(e, resp, state, enabled);
     for c in PASSIVE_CHECKS {
-        if enabled(c.id) {
+        if enabled(c.id()) {
             (c.run)(&cx, &mut v);
         }
     }
@@ -591,7 +615,7 @@ pub(crate) const CH_JWT_PRIVATE_KEY: CheckDef = CheckDef {
 /// one token seen in many requests is brute-forced once.
 fn jwt_tried(raw: &str) -> bool {
     static TRIED: crate::sync::Mutex<Vec<String>> = crate::sync::Mutex::new(Vec::new());
-    let mut t = TRIED.lock().unwrap();
+    let mut t = TRIED.lock();
     if t.iter().any(|x| x == raw) {
         return true;
     }
@@ -1387,7 +1411,12 @@ mod tests {
     fn registry_lists_every_passive_unit_once() {
         let cat = crate::scan::check_catalogue();
         for c in PASSIVE_CHECKS {
-            assert_eq!(cat.iter().filter(|x| x.0 == c.id).count(), 1, "{}", c.id);
+            assert_eq!(
+                cat.iter().filter(|x| x.0 == c.id()).count(),
+                1,
+                "{}",
+                c.id()
+            );
         }
         for id in [
             "passive.csp-untrusted-scripts",
@@ -1672,7 +1701,7 @@ mod tests {
         crate::scan::add_passive_issues(&shared, a);
         crate::scan::add_passive_issues(&shared, b);
         assert_eq!(
-            shared.issues.lock().unwrap().len(),
+            shared.issues.lock().len(),
             2,
             "two numbers; the second path repeats one (SSNs key by origin)"
         );
@@ -1699,7 +1728,6 @@ mod tests {
             shared
                 .issues
                 .lock()
-                .unwrap()
                 .iter()
                 .filter(|i| i.name == "Duplicate cookies set")
                 .count(),
@@ -1707,7 +1735,7 @@ mod tests {
             "path-scoped"
         );
         assert_eq!(
-            crate::scan::passive_merge_key(&shared.issues.lock().unwrap()[0]),
+            crate::scan::passive_merge_key(&shared.issues.lock()[0]),
             "Social security numbers disclosed|example.com||123-45-6789"
         );
     }
@@ -1868,7 +1896,7 @@ mod tests {
             ),
         ];
         for (c, e) in cases {
-            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
+            *crate::scan_config::shared_config(&shared).lock() = Default::default();
             assert!(
                 crate::scan::passive_check_for(&shared, &e)
                     .iter()
@@ -1878,7 +1906,6 @@ mod tests {
             );
             crate::scan_config::shared_config(&shared)
                 .lock()
-                .unwrap()
                 .disabled_checks
                 .insert(c.id.to_string());
             assert!(
@@ -1958,7 +1985,7 @@ mod tests {
         // Two cookies on one path stay two issues after merging.
         let shared = crate::net::Shared::new();
         crate::scan::add_passive_issues(&shared, ho);
-        assert_eq!(shared.issues.lock().unwrap().len(), 2);
+        assert_eq!(shared.issues.lock().len(), 2);
     }
 
     #[test]
@@ -1978,11 +2005,7 @@ mod tests {
                 ),
             );
         }
-        assert_eq!(
-            shared.issues.lock().unwrap().len(),
-            9,
-            "nine locations stay apart"
-        );
+        assert_eq!(shared.issues.lock().len(), 9, "nine locations stay apart");
         crate::scan::add_passive_issues(
             &shared,
             only(
@@ -1990,7 +2013,7 @@ mod tests {
                 pack::CH_DUPLICATE_COOKIES,
             ),
         );
-        let iss = shared.issues.lock().unwrap().clone();
+        let iss = shared.issues.lock().clone();
         assert_eq!(iss.len(), 1);
         assert_eq!(iss[0].path, "/shop");
         assert!(
@@ -2004,11 +2027,7 @@ mod tests {
             &shared,
             only(&ex("/other", true, &dup, "x"), pack::CH_DUPLICATE_COOKIES),
         );
-        assert_eq!(
-            shared.issues.lock().unwrap().len(),
-            1,
-            "later locations add nothing"
-        );
+        assert_eq!(shared.issues.lock().len(), 1, "later locations add nothing");
         // A different identifier is its own group.
         crate::scan::add_passive_issues(
             &shared,
@@ -2022,7 +2041,7 @@ mod tests {
                 pack::CH_DUPLICATE_COOKIES,
             ),
         );
-        assert_eq!(shared.issues.lock().unwrap().len(), 2);
+        assert_eq!(shared.issues.lock().len(), 2);
     }
 
     // ------------------------------------------------------------ R-04 second pass
@@ -3119,7 +3138,7 @@ mod tests {
             ),
         ];
         let check = |c: CheckDef, e: &HistEntry| {
-            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
+            *crate::scan_config::shared_config(&shared).lock() = Default::default();
             assert!(
                 crate::scan::passive_check_for(&shared, e)
                     .iter()
@@ -3129,7 +3148,6 @@ mod tests {
             );
             crate::scan_config::shared_config(&shared)
                 .lock()
-                .unwrap()
                 .disabled_checks
                 .insert(c.id.to_string());
             assert!(

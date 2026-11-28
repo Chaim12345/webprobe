@@ -4,8 +4,9 @@
 //! OS/libc resolver allocation is outside the retained result bound. Two
 //! permanently hung OS calls exhaust the pool; fail closed, never replace
 //! workers and silently grow the resource budget.
+use crate::sync::Mutex;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
 const WORKERS: usize = 2;
@@ -44,7 +45,7 @@ impl Resolver {
                 .spawn(move || {
                     loop {
                         let job = {
-                            let guard = rx.lock().unwrap_or_else(|p| p.into_inner());
+                            let guard = rx.lock();
                             guard.recv()
                         };
                         let Ok(job) = job else { break };
@@ -184,7 +185,7 @@ mod tests {
         let pool = Resolver::with_lookup(Arc::new(move |_, _| {
             c.fetch_add(1, Ordering::SeqCst);
             started_tx.send(()).unwrap();
-            release.lock().unwrap().recv().unwrap();
+            release.lock().recv().unwrap();
             Ok(vec!["127.0.0.1:80".parse().unwrap()])
         }))
         .unwrap();
@@ -241,7 +242,7 @@ mod tests {
         let pool = Resolver::with_lookup(Arc::new(move |_, _| {
             c.fetch_add(1, Ordering::SeqCst);
             started_tx.send(()).unwrap();
-            release.lock().unwrap().recv().unwrap();
+            release.lock().recv().unwrap();
             Ok(vec!["127.0.0.1:80".parse().unwrap()])
         }))
         .unwrap();

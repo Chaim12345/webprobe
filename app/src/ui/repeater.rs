@@ -15,7 +15,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     // A WebSocket Repeater tab has its own view.
     let ws_session = {
-        let reps = app.shared.repeaters.lock().unwrap();
+        let reps = app.shared.repeaters.lock();
         reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))
             .and_then(|r| r.ws)
     };
@@ -26,7 +26,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
 
     let busy = app.shared.rep.is_busy();
     let (target, result_line, https) = {
-        let reps = app.shared.repeaters.lock().unwrap();
+        let reps = app.shared.repeaters.lock();
         let i = app.repeater.sel.min(reps.len().saturating_sub(1));
         let r = &reps[i];
         let host = util::get_header(&util::parse_http(r.request.as_bytes()).headers, "Host")
@@ -99,7 +99,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         }
         // Burp's per-tab request history.
         let (pos, len) = {
-            let reps = app.shared.repeaters.lock().unwrap();
+            let reps = app.shared.repeaters.lock();
             let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             (reps[i].hist_pos, reps[i].history.len())
         };
@@ -110,7 +110,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
             .add_enabled(!busy && pos + 1 < len, egui::Button::new(">"))
             .on_hover_text("Next request");
         if back.clicked() || fwd.clicked() {
-            let mut reps = app.shared.repeaters.lock().unwrap();
+            let mut reps = app.shared.repeaters.lock();
             let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let r = &mut reps[i];
             r.hist_pos = if back.clicked() {
@@ -158,8 +158,8 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                 let i = app
                     .repeater
                     .sel
-                    .min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
-                let mut reps = app.shared.repeaters.lock().unwrap();
+                    .min(app.shared.repeaters.lock().len().saturating_sub(1));
+                let mut reps = app.shared.repeaters.lock();
                 let r = &mut reps[i];
                 egui::Grid::new("rep_target").num_columns(2).show(ui, |ui| {
                     ui.label("Host:");
@@ -197,7 +197,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     );
 
     let resp = {
-        let reps = app.shared.repeaters.lock().unwrap();
+        let reps = app.shared.repeaters.lock();
         let i = app.repeater.sel.min(reps.len().saturating_sub(1));
         reps[i].response.clone()
     };
@@ -227,9 +227,9 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                     let i = app
                         .repeater
                         .sel
-                        .min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
+                        .min(app.shared.repeaters.lock().len().saturating_sub(1));
                     let (mut text, has_resp) = {
-                        let reps = app.shared.repeaters.lock().unwrap();
+                        let reps = app.shared.repeaters.lock();
                         (reps[i].request.clone(), reps[i].response.is_some())
                     };
                     app.repeater.req_pane.live_url_encode = app.rops.url_encode_live;
@@ -237,7 +237,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                     let rops = &mut app.rops;
                     let ext_shared = app.shared.clone();
                     let (rep_service, rep_text) = {
-                        let reps = app.shared.repeaters.lock().unwrap();
+                        let reps = app.shared.repeaters.lock();
                         (
                             webprobe_core::ext_host::HttpService::new(
                                 &reps[i].host,
@@ -249,8 +249,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                     };
                     // Requests extension actions/editors gave back for this tab
                     // (they run off the UI thread and arrive on a later frame).
-                    let ext_target =
-                        format!("Repeater:{}", app.shared.repeaters.lock().unwrap()[i].id);
+                    let ext_target = format!("Repeater:{}", app.shared.repeaters.lock()[i].id);
                     let ext_edit = crate::ext_menu::take_edit(&ext_target);
                     let mut menu = |ui: &mut Ui, sel: Option<String>| {
                         if let Some(a) = crate::repeater_ops::request_menu(
@@ -302,11 +301,11 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                         body_h,
                         Some(&mut menu),
                     ) {
-                        app.shared.repeaters.lock().unwrap()[i].request = text;
+                        app.shared.repeaters.lock()[i].request = text;
                     }
                     // An extension action that set the editor's request.
                     if let Some(raw) = ext_edit {
-                        app.shared.repeaters.lock().unwrap()[i].request =
+                        app.shared.repeaters.lock()[i].request =
                             String::from_utf8_lossy(&raw).into_owned();
                     }
                 });
@@ -337,7 +336,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                             egui::Stroke::new(1.0, theme::line()),
                         );
                         let req = {
-                            let reps = app.shared.repeaters.lock().unwrap();
+                            let reps = app.shared.repeaters.lock();
                             let i = app.repeater.sel.min(reps.len().saturating_sub(1));
                             reps[i].request.clone()
                         };
@@ -350,7 +349,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                             &mut app.insp_state,
                             true,
                         ) {
-                            let mut reps = app.shared.repeaters.lock().unwrap();
+                            let mut reps = app.shared.repeaters.lock();
                             let i = app.repeater.sel.min(reps.len().saturating_sub(1));
                             reps[i].request = String::from_utf8_lossy(&new).into_owned();
                         }
@@ -425,18 +424,18 @@ pub(crate) fn update_content_length(req: &str) -> String {
 
 pub(crate) fn repeater_send(app: &mut App) {
     if app.repeater.update_cl {
-        let mut reps = app.shared.repeaters.lock().unwrap();
+        let mut reps = app.shared.repeaters.lock();
         let i = app.repeater.sel.min(reps.len().saturating_sub(1));
         let fixed = update_content_length(&reps[i].request);
         reps[i].request = fixed;
     }
-    let reps_len = app.shared.repeaters.lock().unwrap().len();
+    let reps_len = app.shared.repeaters.lock().len();
     let i = app.repeater.sel.min(reps_len.saturating_sub(1));
     // Burp sends to the tab's Target; the Host header is just a header (so
     // Host header attacks reach the real server). Only a tab without a
     // target falls back to the Host header, which then becomes its target.
     let (tab_id, request, h, p, https) = {
-        let mut reps = app.shared.repeaters.lock().unwrap();
+        let mut reps = app.shared.repeaters.lock();
         let r = &mut reps[i];
         if r.host.trim().is_empty() {
             let parts = util::parse_http(r.request.as_bytes());
@@ -481,13 +480,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         // A streaming response shows in the tab as it arrives.
         let progress = |bytes: &[u8], restart: bool| {
             sh.rep.finish_partial(r#gen, || {
-                if let Some(r) = sh
-                    .repeaters
-                    .lock()
-                    .unwrap()
-                    .iter_mut()
-                    .find(|r| r.id == tab_id)
-                {
+                if let Some(r) = sh.repeaters.lock().iter_mut().find(|r| r.id == tab_id) {
                     let shown = r.response.get_or_insert_with(Vec::new);
                     if restart {
                         shown.clear();
@@ -524,7 +517,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         // Cancel cannot slip in between.
         let mut line = String::new();
         let finished = sh.rep.finish_with(r#gen, || {
-            let mut reps = sh.repeaters.lock().unwrap();
+            let mut reps = sh.repeaters.lock();
             let target = reps.iter_mut().find(|r| r.id == tab_id);
             if let Some(r) = target {
                 r.response = up.resp.clone();
@@ -571,13 +564,7 @@ pub(crate) fn repeater_send(app: &mut App) {
 pub(crate) fn cancel_repeater_send(shared: &net::Shared) {
     if let Some(tab) = shared.rep.cancel() {
         // The status line the user sees is the tab's.
-        if let Some(r) = shared
-            .repeaters
-            .lock()
-            .unwrap()
-            .iter_mut()
-            .find(|r| r.id == tab)
-        {
+        if let Some(r) = shared.repeaters.lock().iter_mut().find(|r| r.id == tab) {
             r.result_line = "Request cancelled".into();
         }
     }

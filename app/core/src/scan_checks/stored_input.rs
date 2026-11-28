@@ -67,6 +67,10 @@ pub(crate) fn stored_input_issue(
 pub(crate) trait StoredCheck: Sync {
     fn id(&self) -> &'static str;
     fn issue(&self) -> &'static str;
+    /// The registration record every check kind exposes (AR-10 / F14).
+    fn meta(&self) -> CheckMeta {
+        CheckMeta::identified(self.id(), self.issue())
+    }
     fn applies_to(&self, ip: &InsertionPoint) -> bool;
     fn server_side(&self) -> bool;
     fn run(&self, cx: &PairCtx);
@@ -524,7 +528,7 @@ impl PairCtx {
         }
         {
             let cfg_slot = crate::scan_config::shared_config(&self.shared);
-            let config = cfg_slot.lock().unwrap();
+            let config = cfg_slot.lock();
             issues.retain(|i| config.issue_allowed(&i.name, true));
         }
         self.shared.scan.collect(&issues);
@@ -583,10 +587,7 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
     if pairs.is_empty() {
         return;
     }
-    let config = crate::scan_config::shared_config(shared)
-        .lock()
-        .unwrap()
-        .clone();
+    let config = crate::scan_config::shared_config(shared).lock().clone();
     shared.event(
         crate::diagnostics::Level::Info,
         "scan.stored.started",
@@ -647,7 +648,7 @@ pub(crate) fn run_stored_stage_budgeted(
     // Do not clone arbitrary project sets/strings into the bounded stage.
     let enabled: [bool; 5] = {
         let config_slot = crate::scan_config::shared_config(shared);
-        let config = config_slot.lock().unwrap();
+        let config = config_slot.lock();
         std::array::from_fn(|i| {
             config.issue_allowed(STORED_CHECKS[i].issue(), true)
                 && config.check_enabled(STORED_CHECKS[i].id())

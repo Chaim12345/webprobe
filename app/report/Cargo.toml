@@ -7,6 +7,11 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+# Forwarded by `cargo test --workspace --features test-ca`.
+test-ca = ["webprobe-core/test-ca"]
+
 # Stage A (#37): report generation sits downstream of the engine.
 [dependencies]
 webprobe-core = { path = "../core" }

@@ -27,7 +27,8 @@ fn hint(ui: &mut Ui, text: &str) {
 pub fn scope_editor(app: &mut App, ui: &mut Ui) {
     // No heading here: the Target > Scope tab and the Settings page already
     // name it (the label used to repeat under the tab of the same name).
-    let mut rules = app.shared.scope.lock().unwrap().clone();
+    let saved = app.shared.scope.lock().rules().to_vec();
+    let mut rules = saved.clone();
     let mut remove = None;
     egui::Grid::new("scope_grid")
         .striped(true)
@@ -93,7 +94,10 @@ pub fn scope_editor(app: &mut App, ui: &mut Ui) {
     if ui.button("+ scope rule").clicked() {
         rules.push(net::ScopeRule::include("", false));
     }
-    *app.shared.scope.lock().unwrap() = rules;
+    // Recompile only on an actual edit: this runs every frame.
+    if rules != saved {
+        *app.shared.scope.lock() = net::ScopeRules::new(rules);
+    }
     hint(
         ui,
         "With no include rules everything is in scope. A matching exclude rule always wins.",
@@ -109,7 +113,7 @@ pub fn upstream_options(app: &mut App, ui: &mut Ui) {
             .size(14.0)
             .strong(),
     );
-    let mut config = app.shared.upstream.lock().unwrap().clone();
+    let mut config = app.shared.upstream.lock().clone();
     ui.horizontal(|ui| {
         let kinds = [
             ("direct", UpstreamKind::None),
@@ -169,7 +173,7 @@ pub fn upstream_options(app: &mut App, ui: &mut Ui) {
                 .font(egui::TextStyle::Monospace),
         );
     });
-    *app.shared.upstream.lock().unwrap() = config;
+    *app.shared.upstream.lock() = config;
     hint(
         ui,
         "HTTP routing uses absolute-form requests and CONNECT for TLS; SOCKS5 supports username/password authentication.",
@@ -183,7 +187,7 @@ pub fn upstream_options(app: &mut App, ui: &mut Ui) {
             .size(13.0)
             .strong(),
     );
-    let mut rules = app.shared.upstream_rules.lock().unwrap().clone();
+    let mut rules = app.shared.upstream_rules.lock().clone();
     let mut remove = None;
     let mut swap = None;
     egui::Grid::new("upstream_rules")
@@ -264,7 +268,7 @@ pub fn upstream_options(app: &mut App, ui: &mut Ui) {
             config: Default::default(),
         });
     }
-    *app.shared.upstream_rules.lock().unwrap() = rules;
+    *app.shared.upstream_rules.lock() = rules;
 }
 
 // ================= Sequencer =================
@@ -343,7 +347,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
     // location (Cookie / Form field / Custom location) and Start live capture.
     // Drain samples gathered by a running live capture.
     if let Some(buf) = &app.sequencer.live_buf {
-        let got: Vec<Vec<u8>> = std::mem::take(&mut *buf.lock().unwrap());
+        let got: Vec<Vec<u8>> = std::mem::take(&mut *buf.lock());
         let before = app.sequencer.samples.len();
         for t in got {
             add_sequencer_sample(app, t);
@@ -898,7 +902,7 @@ fn start_live_capture(app: &mut App, e: net::HistEntry) {
                 net::send_raw(&shared, &h, p, &req)
             };
             if let Some(t) = up.resp.and_then(|r| extract_token(&r, mode, &selector)) {
-                buf.lock().unwrap().push(t);
+                buf.lock().push(t);
                 n += 1;
                 misses = 0;
             } else {
@@ -944,7 +948,7 @@ fn cookie_jar_panel(app: &mut App, ui: &mut Ui) {
         ui,
         "WebProbe keeps a cookie jar of the cookies set by the applications you visit. Session handling uses it to keep tool requests in session.",
     );
-    let mut jar = app.shared.cookie_jar.lock().unwrap().clone();
+    let mut jar = app.shared.cookie_jar.lock().clone();
     let before = jar.clone();
     let tool_row = |ui: &mut Ui, label: &str, list: &mut Vec<String>| {
         ui.horizontal(|ui| {
@@ -1095,12 +1099,11 @@ fn cookie_jar_panel(app: &mut App, ui: &mut Ui) {
         ui.data_mut(|d| d.insert_temp(id, (host, value)));
     });
     if let Some((host, value)) = added {
-        let ok = app.shared.cookie_jar.lock().unwrap().set_cookie(
-            &host,
-            "/",
-            &value,
-            crate::util::now_secs(),
-        );
+        let ok =
+            app.shared
+                .cookie_jar
+                .lock()
+                .set_cookie(&host, "/", &value, crate::util::now_secs());
         if !ok {
             crate::feedback::toast(
                 crate::feedback::Level::Warn,
@@ -1111,7 +1114,7 @@ fn cookie_jar_panel(app: &mut App, ui: &mut Ui) {
     if jar != before {
         // Only the user's edits are written back: cookies the proxy stored
         // since this frame began must not be lost.
-        let mut live = app.shared.cookie_jar.lock().unwrap();
+        let mut live = app.shared.cookie_jar.lock();
         live.update_from = jar.update_from;
         live.apply_to = jar.apply_to;
         if jar.cookies.len() != before.cookies.len() {
@@ -1134,12 +1137,11 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
         ui,
         "Each rule applies to the ticked tools, on hosts matching its pattern, in order. A macro's cookies go to the cookie jar and from there onto the request. In a header or cookie value, {name} is replaced by that value from the last macro response, e.g. Authorization: Bearer {token}.",
     );
-    let mut rules = app.shared.session_rules.lock().unwrap().clone();
+    let mut rules = app.shared.session_rules.lock().clone();
     let macro_names: Vec<String> = app
         .shared
         .macros
         .lock()
-        .unwrap()
         .iter()
         .map(|m| m.name.clone())
         .collect();
@@ -1287,7 +1289,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
     if ui.button("+ session rule").clicked() {
         rules.push(net::SessionRule::new());
     }
-    *app.shared.session_rules.lock().unwrap() = rules;
+    *app.shared.session_rules.lock() = rules;
 
     ui.add_space(10.0);
     cookie_jar_panel(app, ui);
@@ -1299,7 +1301,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
             .size(14.0)
             .strong(),
     );
-    let macros = app.shared.macros.lock().unwrap().clone();
+    let macros = app.shared.macros.lock().clone();
     egui::Grid::new("macros")
         .striped(true)
         .num_columns(3)
@@ -1325,7 +1327,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
                     app.macro_request = m.request.clone();
                 }
                 if ui.button("x").clicked() {
-                    app.shared.macros.lock().unwrap().remove(i);
+                    app.shared.macros.lock().remove(i);
                 }
                 ui.end_row();
             }
@@ -1337,7 +1339,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
                 .font(egui::TextStyle::Monospace),
         );
         if ui.button("Save macro").clicked() && !app.macro_name.trim().is_empty() {
-            let mut macros = app.shared.macros.lock().unwrap();
+            let mut macros = app.shared.macros.lock();
             if let Some(existing) = macros.iter_mut().find(|m| m.name == app.macro_name) {
                 existing.request = app.macro_request.clone();
             } else {
@@ -1480,7 +1482,7 @@ pub fn search(app: &mut App, ui: &mut Ui) {
                     ),
                 });
             }
-            for r in app.shared.repeaters.lock().unwrap().iter() {
+            for r in app.shared.repeaters.lock().iter() {
                 records.push(analysis::SearchRecord {
                     id: format!("repeater-{}", r.name),
                     tool: "Repeater".into(),
@@ -1495,7 +1497,7 @@ pub fn search(app: &mut App, ui: &mut Ui) {
                     ),
                 });
             }
-            for i in app.shared.issues.lock().unwrap().iter() {
+            for i in app.shared.issues.lock().iter() {
                 records.push(analysis::SearchRecord {
                     id: i.id.to_string(),
                     tool: "Scanner".into(),
@@ -1665,7 +1667,7 @@ fn browser_profile(port: u16) -> std::path::PathBuf {
 /// Close the browsers WebProbe opened (whole process trees). Burp's browser
 /// closes when Burp exits; leaving them would keep tens of processes running.
 pub fn close_launched_browsers(shared: &crate::net::Shared) {
-    for (pid, profile) in shared.browsers.lock().unwrap().drain(..) {
+    for (pid, profile) in shared.browsers.lock().drain(..) {
         crate::util::kill_process_tree(pid, Some(&profile), std::time::Duration::from_secs(2));
     }
 }
@@ -1908,7 +1910,6 @@ pub fn launch_preconfigured_browser(
                 shared
                     .browsers
                     .lock()
-                    .unwrap()
                     .push((child.id(), profile.display().to_string()));
                 // Reap it when it closes, so no zombie is left behind.
                 webprobe_core::util::spawn_contained("tools", move || {
@@ -2429,12 +2430,7 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_secs(1));
     }
-    let events: Vec<String> = app
-        .shared
-        .events
-        .lock()
-        .map(|e| e.clone())
-        .unwrap_or_default();
+    let events: Vec<String> = app.shared.events.lock().clone();
     egui::ScrollArea::vertical()
         .id_salt("ext_detail")
         .auto_shrink([false, false])
@@ -2839,7 +2835,7 @@ fn save_results() -> &'static webprobe_core::sync::Mutex<Vec<SaveResult>> {
 /// `sendToIntruder` / `sendToComparer` / `sendToDecoder`). As in Burp, the
 /// current tab does not change.
 pub fn drain_tool_sends(app: &mut App) {
-    let sends = std::mem::take(&mut *app.shared.tool_sends.lock().unwrap());
+    let sends = std::mem::take(&mut *app.shared.tool_sends.lock());
     for send in sends {
         match send {
             webprobe_core::ext_calls::ToolSend::Intruder {
@@ -2890,7 +2886,7 @@ fn report_save_result(
 }
 
 pub fn drain_save_results(app: &mut App) {
-    let done = std::mem::take(&mut *save_results().lock().unwrap());
+    let done = std::mem::take(&mut *save_results().lock());
     for (target, quiet, result) in done {
         report_save_result(app, &target, quiet, &result);
     }
@@ -2903,7 +2899,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     // One Organizer lock for both fields below: two lock() temporaries in a
     // single struct expression keep the first guard alive until the end of
     // the statement, so the second lock deadlocks the same thread.
-    let org = app.shared.organizer.lock().unwrap();
+    let org = app.shared.organizer.lock();
     let crawl_items: Vec<project::ProjectHistory> = app
         .shared
         .crawl_items
@@ -2927,7 +2923,6 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .shared
         .mr_request
         .lock()
-        .unwrap()
         .iter()
         .map(|r| project_rule("request", r))
         .collect();
@@ -2935,7 +2930,6 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .shared
         .mr_response
         .lock()
-        .unwrap()
         .iter()
         .map(|r| project_rule("response", r))
         .collect();
@@ -2943,7 +2937,6 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .shared
         .scope
         .lock()
-        .unwrap()
         .iter()
         .map(|s| project::ProjectScope {
             enabled: s.enabled,
@@ -2953,14 +2946,13 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         })
         .collect();
     let locked_cookie_jar = Some(project::ProjectCookieJar::from_jar(
-        &app.shared.cookie_jar.lock().unwrap(),
+        &app.shared.cookie_jar.lock(),
     ));
-    let locked_intercept_rules = Some(app.shared.intercept_rules.lock().unwrap().clone());
+    let locked_intercept_rules = Some(app.shared.intercept_rules.lock().rules().to_vec());
     let locked_session_rules = app
         .shared
         .session_rules
         .lock()
-        .unwrap()
         .iter()
         .map(|s| project::ProjectSessionRule {
             enabled: s.enabled,
@@ -2977,7 +2969,6 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .shared
         .macros
         .lock()
-        .unwrap()
         .iter()
         .map(|m| project::ProjectMacro {
             name: m.name.clone(),
@@ -2988,7 +2979,6 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .shared
         .repeaters
         .lock()
-        .unwrap()
         .iter()
         .map(|r| project::ProjectRepeater {
             name: r.name.clone(),
@@ -3003,21 +2993,13 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .collect();
     // R-12: the Repeater groups, members as positions in the saved tab list.
     let locked_rep_groups = {
-        let order: Vec<u64> = app
-            .shared
-            .repeaters
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|r| r.id)
-            .collect();
+        let order: Vec<u64> = app.shared.repeaters.lock().iter().map(|r| r.id).collect();
         webprobe_core::send_group::to_project(&app.rep_groups, &order)
     };
     let locked_issues = app
         .shared
         .issues
         .lock()
-        .unwrap()
         .iter()
         .map(project::ProjectIssue::from_issue)
         .collect();
@@ -3026,19 +3008,11 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
             .map(project::ProjectWebsocket::from_entry)
             .collect()
     });
-    let locked_upstream = app.shared.upstream.lock().unwrap().clone();
-    let locked_upstream_rules = app.shared.upstream_rules.lock().unwrap().clone();
-    let locked_site_links = app
-        .shared
-        .site_links
-        .lock()
-        .unwrap()
-        .iter()
-        .cloned()
-        .collect();
+    let locked_upstream = app.shared.upstream.lock().clone();
+    let locked_upstream_rules = app.shared.upstream_rules.lock().clone();
+    let locked_site_links = app.shared.site_links.lock().iter().cloned().collect();
     let scan_cfg = webprobe_core::scan_config::shared_config(&app.shared)
         .lock()
-        .unwrap()
         .clone();
     let mut locked_scanner = project::ProjectScanner {
         speed: app.shared.scan_speed.load(Ordering::SeqCst),
@@ -3065,23 +3039,21 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 .shared
                 .listener_redirects
                 .lock()
-                .unwrap()
                 .iter()
                 .map(|(lp, (h, p))| (*lp, h.clone(), *p))
                 .collect();
             v.sort();
             v
         },
-        response_rules: Some(app.shared.response_rules.lock().unwrap().clone()),
-        tls_pass_through: app.shared.tls_bypass.lock().unwrap().clone(),
-        streaming_responses: app.shared.streaming.lock().unwrap().clone(),
+        response_rules: Some(app.shared.response_rules.lock().rules().clone()),
+        tls_pass_through: app.shared.tls_bypass.lock().clone(),
+        streaming_responses: app.shared.streaming.lock().clone(),
         listener_http2: app.shared.listener_http2.load(Ordering::SeqCst),
         http2_enabled: webprobe_core::scan_config::shared_config(&app.shared)
             .lock()
-            .unwrap()
             .http
             .http2_enabled,
-        ws_match_replace_rules: app.shared.ws_rules.lock().unwrap().clone(),
+        ws_match_replace_rules: app.shared.ws_rules.lock().rules().to_vec(),
         ws_match_replace_disable_out_of_scope: app
             .shared
             .ws_rules_in_scope_only
@@ -3092,7 +3064,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     let locked_tasks = project::ProjectTasks {
         live_passive_crawl: app.shared.crawl_capture.load(Ordering::SeqCst),
         live_audit: app.shared.scan_enabled.load(Ordering::SeqCst),
-        scans: project::ProjectScanTask::save_all(&app.shared.tasks.lock().unwrap()),
+        scans: project::ProjectScanTask::save_all(&app.shared.tasks.lock()),
     };
     project::ProjectData {
         version: project::PROJECT_VERSION,
@@ -3243,12 +3215,7 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) -> Result<(),
         project::save_in_background(
             std::path::PathBuf::from(&target),
             data,
-            Box::new(move |result| {
-                save_results()
-                    .lock()
-                    .unwrap()
-                    .push((reported, quiet, result))
-            }),
+            Box::new(move |result| save_results().lock().push((reported, quiet, result))),
         );
         return Ok(());
     }
@@ -3278,19 +3245,23 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             .history
             .replace_all(data.history.iter().map(|h| h.to_entry()));
     }
-    *app.shared.mr_request.lock().unwrap() = data
+    let request_rules: Vec<_> = data
         .match_request
         .iter()
         .filter(|r| r.kind == "request")
         .map(net_rule)
         .collect();
-    *app.shared.mr_response.lock().unwrap() = data
+    *app.shared.mr_request.lock() =
+        std::sync::Arc::new(webprobe_core::rules::CompiledMrRules::new(request_rules));
+    let response_rules: Vec<_> = data
         .match_response
         .iter()
         .filter(|r| r.kind == "response")
         .map(net_rule)
         .collect();
-    *app.shared.scope.lock().unwrap() = data
+    *app.shared.mr_response.lock() =
+        std::sync::Arc::new(webprobe_core::rules::CompiledMrRules::new(response_rules));
+    *app.shared.scope.lock() = data
         .scope
         .iter()
         .map(|s| net::ScopeRule {
@@ -3299,17 +3270,19 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             pattern: s.pattern.clone(),
             is_regex: s.is_regex,
         })
-        .collect();
-    *app.shared.cookie_jar.lock().unwrap() = data
+        .collect::<Vec<_>>()
+        .into();
+    *app.shared.cookie_jar.lock() = data
         .cookie_jar
         .as_ref()
         .map(|j| j.to_jar())
         .unwrap_or_default();
-    *app.shared.intercept_rules.lock().unwrap() = data
-        .intercept_rules
-        .clone()
-        .unwrap_or_else(crate::intercept_rules::defaults);
-    *app.shared.session_rules.lock().unwrap() = data
+    *app.shared.intercept_rules.lock() = crate::intercept_rules::CompiledInterceptRules::new(
+        data.intercept_rules
+            .clone()
+            .unwrap_or_else(crate::intercept_rules::defaults),
+    );
+    *app.shared.session_rules.lock() = data
         .session_rules
         .iter()
         .map(|s| net::SessionRule {
@@ -3323,7 +3296,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             check_invalid_on_match: s.check_invalid_on_match,
         })
         .collect();
-    *app.shared.macros.lock().unwrap() = data
+    *app.shared.macros.lock() = data
         .macros
         .iter()
         .map(|m| net::Macro {
@@ -3332,7 +3305,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         })
         .collect();
     if content {
-        *app.shared.repeaters.lock().unwrap() = data
+        *app.shared.repeaters.lock() = data
             .repeaters
             .iter()
             .map(|r| net::RepTab {
@@ -3351,19 +3324,12 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             })
             .collect();
         // R-12: the project's groups over the tabs' fresh ids.
-        let fresh: Vec<u64> = app
-            .shared
-            .repeaters
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|r| r.id)
-            .collect();
+        let fresh: Vec<u64> = app.shared.repeaters.lock().iter().map(|r| r.id).collect();
         app.rep_groups =
             webprobe_core::send_group::from_project(&data.repeater_groups, &fresh, || {
                 app.shared.rep.new_tab_id()
             });
-        *app.shared.issues.lock().unwrap() = data
+        *app.shared.issues.lock() = data
             .issues
             .iter()
             .map(project::ProjectIssue::to_issue)
@@ -3381,8 +3347,8 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
                 .collect(),
         );
     }
-    *app.shared.upstream.lock().unwrap() = data.upstream.clone();
-    *app.shared.upstream_rules.lock().unwrap() = data.upstream_rules.clone();
+    *app.shared.upstream.lock() = data.upstream.clone();
+    *app.shared.upstream_rules.lock() = data.upstream_rules.clone();
     // An explicit WEBPROBE_PORT (QA runs, a second instance) wins
     // over the port saved in the project.
     if std::env::var_os("WEBPROBE_PORT").is_none()
@@ -3440,7 +3406,6 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             .shared
             .issues
             .lock()
-            .unwrap()
             .iter()
             .map(|i| i.id)
             .max()
@@ -3487,7 +3452,7 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         app.shared
             .crawl_items
             .replace_all(data.crawl_items.iter().map(|h| h.to_entry()));
-        *app.shared.site_links.lock().unwrap() = data.site_links.iter().cloned().collect();
+        *app.shared.site_links.lock() = data.site_links.iter().cloned().collect();
     }
     let cs = &data.collaborator;
     if let Some(server) = cs.server.as_ref().filter(|s| !s.trim().is_empty()) {
@@ -3500,9 +3465,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         app.collab_state.set_retention_secs(secs);
     }
     let s = &data.scanner;
-    *webprobe_core::scan_config::shared_config(&app.shared)
-        .lock()
-        .unwrap() = crate::scan_config::ScanConfig::from_saved(s);
+    *webprobe_core::scan_config::shared_config(&app.shared).lock() =
+        crate::scan_config::ScanConfig::from_saved(s);
     app.shared
         .scan_speed
         .store(s.speed.min(2), Ordering::SeqCst);
@@ -3517,16 +3481,16 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.shared
         .ws_intercept_client
         .store(data.proxy.ws_intercept_client, Ordering::SeqCst);
-    *app.shared.streaming.lock().unwrap() = data.proxy.streaming_responses.clone();
+    *app.shared.streaming.lock() = data.proxy.streaming_responses.clone();
     app.shared
         .listener_http2
         .store(data.proxy.listener_http2, Ordering::SeqCst);
     webprobe_core::scan_config::shared_config(&app.shared)
         .lock()
-        .unwrap()
         .http
         .http2_enabled = data.proxy.http2_enabled;
-    *app.shared.ws_rules.lock().unwrap() = data.proxy.ws_match_replace_rules.clone();
+    *app.shared.ws_rules.lock() =
+        webprobe_core::ws_rules::CompiledWsRules::new(data.proxy.ws_match_replace_rules.clone());
     app.shared.ws_rules_in_scope_only.store(
         data.proxy.ws_match_replace_disable_out_of_scope,
         Ordering::SeqCst,
@@ -3540,10 +3504,11 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.shared
         .ws_intercept_server
         .store(data.proxy.ws_intercept_server, Ordering::SeqCst);
-    *app.shared.response_rules.lock().unwrap() =
-        data.proxy.response_rules.clone().unwrap_or_default();
-    *app.shared.tls_bypass.lock().unwrap() = data.proxy.tls_pass_through.clone();
-    *app.shared.listener_redirects.lock().unwrap() = data
+    *app.shared.response_rules.lock() = crate::net::CompiledResponseInterceptRules::new(
+        data.proxy.response_rules.clone().unwrap_or_default(),
+    );
+    *app.shared.tls_bypass.lock() = data.proxy.tls_pass_through.clone();
+    *app.shared.listener_redirects.lock() = data
         .proxy
         .redirects
         .iter()
@@ -3581,7 +3546,6 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             .shared
             .tasks
             .lock()
-            .unwrap()
             .iter()
             .filter(|t| t.state.is_open())
             .map(|t| t.id)
@@ -3589,7 +3553,7 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         for id in ids {
             crate::tasks::cancel(&app.shared, id);
         }
-        app.shared.tasks.lock().unwrap().clear();
+        app.shared.tasks.lock().clear();
     }
     project::ProjectScanTask::restore_all(&data.tasks.scans, &app.shared);
     let l = &data.layout;
@@ -3659,7 +3623,7 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.decoder.input = data.decoder.input.clone();
     app.decoder.output = data.decoder.output.clone();
     // Organizer.
-    let mut org = app.shared.organizer.lock().unwrap();
+    let mut org = app.shared.organizer.lock();
     org.items = data
         .organizer
         .iter()
@@ -3777,7 +3741,7 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                 ..Default::default()
             };
             let http = webprobe_core::burp_config::HttpOptions {
-                http2_enabled: webprobe_core::scan_config::shared_config(&app.shared).lock().unwrap().http.http2_enabled,
+                http2_enabled: webprobe_core::scan_config::shared_config(&app.shared).lock().http.http2_enabled,
             };
             let json = webprobe_core::burp_config::export_project_options(&listener, &http);
             // The file holds the REST API keys: private from the first write.
@@ -3816,7 +3780,6 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                     app.shared.proxy_port.store(listener.port, Ordering::SeqCst);
                     webprobe_core::scan_config::shared_config(&app.shared)
                         .lock()
-                        .unwrap()
                         .http
                         .http2_enabled = http.http2_enabled;
                     if let Ok(mut cfg) = webprobe_core::scan_library::parse_config(
@@ -3828,14 +3791,14 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                         let refs = [&cfg];
                         notes.extend(webprobe_core::scan_library::not_applied(&refs));
                         let slot = webprobe_core::scan_config::shared_config(&app.shared);
-                        let base = slot.lock().unwrap().clone();
+                        let base = slot.lock().clone();
                         let applied = webprobe_core::scan_library::apply(
                             &refs,
                             &base,
                             app.shared.scan_speed.load(Ordering::SeqCst),
                             app.shared.scan_accuracy.load(Ordering::SeqCst),
                         );
-                        *slot.lock().unwrap() = applied.config;
+                        *slot.lock() = applied.config;
                         app.shared.scan_speed.store(applied.speed, Ordering::SeqCst);
                         app.shared
                             .scan_accuracy
@@ -3859,7 +3822,7 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
     });
     ui.horizontal(|ui| {
         if ui.button("Save user options").clicked() {
-            let api = app.shared.api_config.lock().unwrap().clone();
+            let api = app.shared.api_config.lock().clone();
             let json = webprobe_core::burp_config::export_user_options(&api);
             // The file holds the REST API keys: private from the first write.
             match webprobe_core::util::write_private(
@@ -3883,10 +3846,10 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                 });
             match loaded {
                 Ok(json) => {
-                    let mut api = app.shared.api_config.lock().unwrap().clone();
+                    let mut api = app.shared.api_config.lock().clone();
                     let mut notes = Vec::new();
                     webprobe_core::burp_config::apply_user_options(&json, &mut api, &mut notes);
-                    *app.shared.api_config.lock().unwrap() = api.clone();
+                    *app.shared.api_config.lock() = api.clone();
                     // Apply a freshly enabled API at once; the server has no
                     // shutdown, so disabling takes effect on the next start.
                     if api.enabled && !app.shared.api_started.swap(true, Ordering::SeqCst) {
@@ -4057,6 +4020,41 @@ mod tests {
         assert!(std::fs::symlink_metadata(&lock).is_ok(), "live lock kept");
         let _ = std::fs::remove_dir_all(&d);
     }
+
+    /// #248: the user options file holds the REST API keys, so the save path
+    /// must create it owner-only even when it did not exist before.
+    #[cfg(unix)]
+    #[test]
+    fn saved_user_options_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("wp-user-options-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("user-options.json");
+        let api = webprobe_core::burp_config::ApiConfig {
+            enabled: true,
+            keys: vec!["secret-api-key".to_string()],
+            ..Default::default()
+        };
+        let json = webprobe_core::burp_config::export_user_options(&api);
+        webprobe_core::util::write_private(
+            &path,
+            serde_json::to_string_pretty(&json).unwrap().as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "an options file with API keys must be owner-only from its first write"
+        );
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("secret-api-key"),
+            "the keys are what makes the file sensitive"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]
@@ -4068,7 +4066,7 @@ mod save_restore_tests {
     /// written.
     #[test]
     fn settings_restore_keeps_traffic_and_writes_nothing() {
-        let mut app = crate::App::new(net::Shared::new());
+        let mut app = crate::App::new(net::Shared::in_memory());
         app.project_path = "/nonexistent/should-not-be-written.json".into();
         app.shared.scan_speed.store(2, Ordering::SeqCst);
         let snap = crate::settings_dialog::snapshot(&mut app).unwrap();
@@ -4077,15 +4075,11 @@ mod save_restore_tests {
             host: "late.test".into(),
             ..Default::default()
         });
-        app.shared
-            .issues
-            .lock()
-            .unwrap()
-            .push(crate::scan::ScanIssue {
-                id: 78,
-                name: "late".into(),
-                ..Default::default()
-            });
+        app.shared.issues.lock().push(crate::scan::ScanIssue {
+            id: 78,
+            name: "late".into(),
+            ..Default::default()
+        });
         crate::settings_dialog::install(
             &mut app,
             &project::with_section_defaults(&snap, project::SettingsSection::Tasks),
@@ -4096,7 +4090,7 @@ mod save_restore_tests {
             "history kept"
         );
         assert!(
-            app.shared.issues.lock().unwrap().iter().any(|i| i.id == 78),
+            app.shared.issues.lock().iter().any(|i| i.id == 78),
             "issues kept"
         );
         assert!(!std::path::Path::new("/nonexistent/should-not-be-written.json").exists());
@@ -4107,7 +4101,7 @@ mod save_restore_tests {
     /// own next id, taken from that list alone, and keeps the stored ids.
     #[test]
     fn old_shared_counter_project_loads_with_per_list_counters() {
-        let mut old = crate::App::new(net::Shared::new());
+        let mut old = crate::App::new(net::Shared::in_memory());
         for id in [5, 6] {
             old.shared.push_history(net::HistEntry {
                 id,
@@ -4120,18 +4114,14 @@ mod save_restore_tests {
             host: "c.test".into(),
             ..Default::default()
         }]);
-        old.shared
-            .issues
-            .lock()
-            .unwrap()
-            .push(crate::scan::ScanIssue {
-                id: 8,
-                name: "old".into(),
-                ..Default::default()
-            });
+        old.shared.issues.lock().push(crate::scan::ScanIssue {
+            id: 8,
+            name: "old".into(),
+            ..Default::default()
+        });
         let data = project_snapshot(&mut old);
 
-        let mut app = crate::App::new(net::Shared::new());
+        let mut app = crate::App::new(net::Shared::in_memory());
         apply_project(&mut app, &data, true);
         assert_eq!(app.shared.next_id.load(Ordering::SeqCst), 7, "history");
         assert_eq!(app.shared.next_crawl_id.load(Ordering::SeqCst), 8, "crawl");
@@ -4151,16 +4141,14 @@ mod save_restore_tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let p2 = path.clone();
         std::thread::spawn(move || {
-            let mut app = crate::App::new(net::Shared::new());
+            let mut app = crate::App::new(net::Shared::in_memory());
             app.project_path = p2;
             webprobe_core::scan_config::shared_config(&app.shared)
                 .lock()
-                .unwrap()
                 .disabled_checks
                 .insert("xss".into());
             webprobe_core::scan_config::shared_config(&app.shared)
                 .lock()
-                .unwrap()
                 .disabled_insertion
                 .insert("cookie".into());
             app.collab_state.set_poll_secs(9);
@@ -4176,12 +4164,11 @@ mod save_restore_tests {
                 95,
                 "SHA-256 as AA:BB:..."
             );
-            let mut fresh = crate::App::new(net::Shared::new());
+            let mut fresh = crate::App::new(net::Shared::in_memory());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
             let cfg = webprobe_core::scan_config::shared_config(&fresh.shared)
                 .lock()
-                .unwrap()
                 .clone();
             let _ = tx.send((
                 cfg.disabled_checks.contains("xss"),
@@ -4208,21 +4195,19 @@ mod save_restore_tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let p2 = path.clone();
         std::thread::spawn(move || {
-            let mut app = crate::App::new(net::Shared::new());
+            let mut app = crate::App::new(net::Shared::in_memory());
             app.project_path = p2;
             webprobe_core::scan_config::shared_config(&app.shared)
                 .lock()
-                .unwrap()
                 .http
                 .http2_enabled = false;
             save_project(&mut app, true).expect("project saves");
-            let mut fresh = crate::App::new(net::Shared::new());
+            let mut fresh = crate::App::new(net::Shared::in_memory());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
             let _ = tx.send((
                 webprobe_core::scan_config::shared_config(&fresh.shared)
                     .lock()
-                    .unwrap()
                     .http
                     .http2_enabled,
                 fresh.project_status.clone(),
@@ -4245,10 +4230,10 @@ mod save_restore_tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let p2 = path.clone();
         std::thread::spawn(move || {
-            let mut app = crate::App::new(net::Shared::new());
+            let mut app = crate::App::new(net::Shared::in_memory());
             app.project_path = p2;
             let (coll, kept, moved) = {
-                let mut org = app.shared.organizer.lock().unwrap();
+                let mut org = app.shared.organizer.lock();
                 let coll = org.add_collection("Auth bugs");
                 org.set_collection_description(coll, "login flow notes");
                 let kept = org.add("Login", "auth flow", "POST /login HTTP/1.1", "200 OK", 10);
@@ -4257,10 +4242,10 @@ mod save_restore_tests {
                 (coll, kept, moved)
             };
             save_project(&mut app, true).unwrap();
-            let mut fresh = crate::App::new(net::Shared::new());
+            let mut fresh = crate::App::new(net::Shared::in_memory());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
-            let org = fresh.shared.organizer.lock().unwrap();
+            let org = fresh.shared.organizer.lock();
             let _ = tx.send((
                 org.collections
                     .iter()
@@ -4297,10 +4282,10 @@ mod save_restore_tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let p2 = path.clone();
         std::thread::spawn(move || {
-            let mut app = crate::App::new(net::Shared::new());
+            let mut app = crate::App::new(net::Shared::in_memory());
             app.project_path = p2;
             let item_id = {
-                let mut org = app.shared.organizer.lock().unwrap();
+                let mut org = app.shared.organizer.lock();
                 let coll = org.add_collection("Auth bugs");
                 let id = org.add("Login", "auth flow", "POST /login HTTP/1.1", "200 OK", 10);
                 org.move_item(id, coll);
@@ -4309,10 +4294,10 @@ mod save_restore_tests {
                 id
             };
             save_project(&mut app, true).unwrap();
-            let mut fresh = crate::App::new(net::Shared::new());
+            let mut fresh = crate::App::new(net::Shared::in_memory());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
-            let org = fresh.shared.organizer.lock().unwrap();
+            let org = fresh.shared.organizer.lock();
             let _ = tx.send(org.get(item_id).map(|i| {
                 (
                     i.collection,
@@ -4477,7 +4462,6 @@ fn bcheck_checks(app: &mut App, ui: &mut Ui) {
     // threads take the same mutex, and parsing must never happen under it.
     let sources = webprobe_core::scan_config::shared_config(&app.shared)
         .lock()
-        .unwrap()
         .bchecks
         .clone();
     app.bcheck_ui_cache.refresh(&sources);
@@ -4520,7 +4504,6 @@ fn bcheck_checks(app: &mut App, ui: &mut Ui) {
     if let Some(i) = remove {
         webprobe_core::scan_config::shared_config(&app.shared)
             .lock()
-            .unwrap()
             .bchecks
             .remove(i);
     }
@@ -4552,7 +4535,6 @@ fn bcheck_checks(app: &mut App, ui: &mut Ui) {
                                 .log(&format!("Loaded BCheck \"{}\"", def.metadata.name));
                             webprobe_core::scan_config::shared_config(&app.shared)
                                 .lock()
-                                .unwrap()
                                 .bchecks
                                 .push(src);
                         }

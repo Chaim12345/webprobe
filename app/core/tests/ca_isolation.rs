@@ -252,6 +252,12 @@ fn validate_ca_dir(owned_root: &Path, name: &str) -> PathBuf {
 /// killed and reaped before `OwnedDir` removes anything.
 #[test]
 fn injected_ca_leaves_the_default_user_ca_alone() {
+    let test_ca = cfg!(feature = "test-ca");
+    assert!(
+        test_ca,
+        "run core tests with `--features test-ca` (scripts/ci.sh does): without it, \
+         Shared::new() in this integration binary resolves the real user CA"
+    );
     if let Some(marker) = ambient_marker() {
         panic!("ambient f13 marker ({marker}): this run is not its own child, refusing to launch");
     }
@@ -333,15 +339,14 @@ fn injected_ca_leaves_the_default_user_ca_alone() {
                 );
             }
             _ => {
-                // Probe, not a guarantee: in an integration binary `Shared::new()`
-                // compiles the lib without cfg(test), so it still resolves the
-                // default path. Only a before/after change counts as a write;
-                // the pre-created sentinel makes existence meaningless.
+                // With `test-ca` on (asserted above and in the child), even a
+                // direct `Shared::new()` keeps the CA in memory: the sentinel
+                // at the default path must be byte-for-byte unchanged.
                 assert!(
-                    stdout.contains("default_path=changed")
-                        || stdout.contains("default_path=unchanged"),
-                    "default case did not report a before/after comparison:\n{stdout}"
+                    stdout.contains("default_path=unchanged"),
+                    "default case wrote the user CA in a test build:\n{stdout}"
                 );
+                assert_eq!(after, before, "default case wrote the default user CA");
             }
         }
         // Reap explicitly before the owned root goes away instead of relying on
@@ -439,20 +444,21 @@ fn child_case() {
         }
         "default" => {
             // Paired before/after on the same file: the parent pre-creates the
-            // sentinel, so existence alone would not show a write.
+            // sentinel, so existence alone would not show a write. The test-ca
+            // feature makes even this constructor keep the CA in memory.
+            let test_ca = cfg!(feature = "test-ca");
+            assert!(test_ca, "default case needs --features test-ca");
             let default_ca = resolved_xdg.join("webprobe").join("ca.json");
             let before = fingerprint(&default_ca).expect("default-path fingerprint before");
             let shared = webprobe_core::net::Shared::new();
+            assert!(
+                shared.mitm.is_in_memory(),
+                "test build built a persisted CA"
+            );
             assert!(shared.mitm.server_config("f13.test").is_ok());
             let after = fingerprint(&default_ca).expect("default-path fingerprint after");
-            println!(
-                "default_path={}",
-                if after == before {
-                    "unchanged"
-                } else {
-                    "changed"
-                }
-            );
+            assert_eq!(after, before, "test build wrote the default user CA");
+            println!("default_path=unchanged");
         }
         other => panic!("unknown case {other}"),
     }

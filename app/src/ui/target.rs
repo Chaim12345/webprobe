@@ -114,7 +114,7 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
         ui.add_space(22.0);
     }
 
-    let all_issues = app.shared.issues.lock().unwrap().clone();
+    let all_issues = app.shared.issues.lock().clone();
     let counts = |pred: &dyn Fn(&crate::scan::ScanIssue) -> bool| -> [usize; 4] {
         let mut v = [0usize; 4];
         for i in all_issues.iter().filter(|i| !i.false_positive && pred(i)) {
@@ -131,7 +131,7 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
     let busy = app.shared.scan.is_busy();
     let has_active = scan_total > 0 || busy;
     // Scan tasks have card ids 1000 + task id (0 and 1 are the live tasks).
-    let task_list: Vec<crate::tasks::ScanTask> = app.shared.tasks.lock().unwrap().clone();
+    let task_list: Vec<crate::tasks::ScanTask> = app.shared.tasks.lock().clone();
     let card_task = |id: usize| -> Option<&crate::tasks::ScanTask> {
         id.checked_sub(1000)
             .and_then(|t| task_list.iter().find(|x| x.id as usize == t))
@@ -684,12 +684,8 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                     }
                     2 => scanner(app, ui),
                     3 | 5 => {
-                        let events: Vec<String> = app
-                            .shared
-                            .events
-                            .lock()
-                            .map(|e| e.iter().rev().cloned().collect())
-                            .unwrap_or_default();
+                        let events: Vec<String> =
+                            app.shared.events.lock().iter().rev().cloned().collect();
                         let filt: Vec<&String> = events
                             .iter()
                             .filter(|e| app.dash_sub == 3 || e.contains("Scanner"))
@@ -876,7 +872,8 @@ pub(crate) fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::sca
                     });
                 });
                 card(ui, "Task log", theme::icon::CLOCK, &mut |ui| {
-                    let events: Vec<String> = app.shared.events.lock().map(|e| e.iter().rev().take(8).cloned().collect()).unwrap_or_default();
+                    let events: Vec<String> =
+                        app.shared.events.lock().iter().rev().take(8).cloned().collect();
                     for ev in events {
                         let msg = ev.split_once("] ").map(|x| x.1.to_string()).unwrap_or(ev);
                         ui.label(RichText::new(msg).size(12.0).color(theme::ink_dim()));
@@ -1020,7 +1017,6 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         .shared
         .scope
         .lock()
-        .unwrap()
         .iter()
         .map(|r| format!("{}{}{}{}", r.enabled, r.include, r.is_regex, r.pattern))
         .collect::<Vec<_>>()
@@ -1063,7 +1059,6 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
             app.shared
                 .site_links
                 .lock()
-                .unwrap()
                 .iter()
                 .filter(|(o, p)| filter.keeps(o, p, || net::in_scope(&shared, &format!("{o}{p}"))))
                 .cloned()
@@ -1081,7 +1076,6 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         .shared
         .issues
         .lock()
-        .unwrap()
         .iter()
         .filter(|i| !i.false_positive)
         .map(|i| {
@@ -1096,7 +1090,6 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         .shared
         .scope
         .lock()
-        .unwrap()
         .iter()
         .any(|r| r.enabled && r.include);
     if entries.is_empty() && links.is_empty() {

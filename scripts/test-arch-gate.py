@@ -70,6 +70,20 @@ base = json.load(open(os.path.join(app, "baseline.json")))
 check("struct fields are counted", base["metrics"]["shared_fields"] == 2 and base["metrics"]["app_fields"] == 1)
 check("unchanged tree passes", gate(app).returncode == 0)
 
+check("the test CA metric starts at zero", base["metrics"]["test_ca_default_shared"] == 0)
+
+ca_test = os.path.join(app, "src", "ui", "tests.rs")
+os.makedirs(os.path.dirname(ca_test), exist_ok=True)
+with open(ca_test, "w") as fh:
+    fh.write("fn t() { let s = net::Shared::new(); }\n")
+r = gate(app)
+check("a test calling Shared::new() fails",
+      r.returncode == 1 and "WORSE   test_ca_default_shared: 0 -> 1" in r.stdout)
+with open(ca_test, "w") as fh:
+    fh.write("// test-ca-exempt: asserts the constructor\nfn t() { let s = net::Shared::new(); }\n")
+check("a documented exemption passes", gate(app).returncode == 0)
+os.remove(ca_test)
+
 with open(os.path.join(app, "core/src/b.rs"), "w") as fh:
     fh.write("use crate::{a::A};\npub struct B;\n")
 r = gate(app)

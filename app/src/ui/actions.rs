@@ -223,7 +223,7 @@ pub fn send_history_to_repeater(app: &mut App) {
 
 /// Open a new Repeater tab holding `e`'s request (history and Logger menus).
 pub(crate) fn send_entry_to_repeater(app: &mut App, e: &net::HistEntry) {
-    let mut reps = app.shared.repeaters.lock().unwrap();
+    let mut reps = app.shared.repeaters.lock();
     let id = app.shared.rep.new_tab_id();
     reps.push(net::RepTab {
         id,
@@ -246,7 +246,7 @@ pub(crate) fn send_entry_to_repeater(app: &mut App, e: &net::HistEntry) {
 
 /// The selected Repeater tab's (request, https, host, port).
 pub(crate) fn current_repeater(app: &App) -> Option<(String, bool, String, u16)> {
-    let reps = app.shared.repeaters.lock().unwrap();
+    let reps = app.shared.repeaters.lock();
     let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     Some((r.request.clone(), r.https, r.host.clone(), r.port))
 }
@@ -268,7 +268,7 @@ pub(crate) fn repeater_tab_to_new_tab(app: &mut App) {
     let Some((request, https, host, port)) = current_repeater(app) else {
         return;
     };
-    let mut reps = app.shared.repeaters.lock().unwrap();
+    let mut reps = app.shared.repeaters.lock();
     let id = app.shared.rep.new_tab_id();
     reps.push(net::RepTab {
         id,
@@ -309,7 +309,7 @@ pub(crate) fn send_entry_to_organizer(app: &mut App, e: &net::HistEntry) {
         .as_ref()
         .map(|r| String::from_utf8_lossy(r).into_owned())
         .unwrap_or_default();
-    app.shared.organizer.lock().unwrap().add(
+    app.shared.organizer.lock().add(
         &format!("{} {}", e.method, e.path),
         "",
         &req_text,
@@ -358,7 +358,6 @@ pub(crate) fn logger_command(app: &mut App, e: &net::HistEntry, cmd: &str) {
             app.shared
                 .scope
                 .lock()
-                .unwrap()
                 .push(net::ScopeRule::include(rule, false));
             app.shared.log(&format!("Added {} to target scope", e.host));
         }

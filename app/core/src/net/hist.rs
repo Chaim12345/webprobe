@@ -162,7 +162,7 @@ pub fn record_entry_verbatim(
     let (host, port) = host_of(&parts, default_port);
     // Proxied responses feed the session-handling cookie jar (Burp's default).
     if let Some(r) = &resp {
-        let mut jar = shared.cookie_jar.lock().unwrap();
+        let mut jar = shared.cookie_jar.lock();
         if jar.updates_from("Proxy") {
             jar.update_from_response(&host, &path_of(&parts), r, util::now_secs());
         }
@@ -225,11 +225,7 @@ pub fn record_entry_verbatim(
         e.port,
         e.path.split('?').next().unwrap_or("")
     );
-    e.diffs = shared
-        .diff_tracker
-        .lock()
-        .unwrap()
-        .diff(&loc, diff_attrs(&e));
+    e.diffs = shared.diff_tracker.lock().diff(&loc, diff_attrs(&e));
     e.audited = shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico";
     shared.push_history(e.clone());
     // Live passive crawl (Dashboard task 1): "Add links. Add item itself, same
@@ -238,7 +234,7 @@ pub fn record_entry_verbatim(
         && let (Some(resp), Some(hooks)) = (&e.resp_raw, scan_hooks())
     {
         let origin = history_host(&e);
-        let mut links = shared.site_links.lock().unwrap();
+        let mut links = shared.site_links.lock();
         for path in hooks.crawl_links(&origin, &e.path, resp) {
             links.insert((origin.clone(), path));
         }
@@ -261,7 +257,7 @@ pub fn record_entry_verbatim(
         // has no scheme, so with any include rule nothing was ever in scope.
         let within_scope = in_scope(shared, &(history_host(&e) + &e.path));
         let within_cap = {
-            let mut locs = shared.scan_locations.lock().unwrap();
+            let mut locs = shared.scan_locations.lock();
             if locs.contains(&loc) || locs.len() < hooks.crawl_max_unique_locations() {
                 locs.insert(loc);
                 true

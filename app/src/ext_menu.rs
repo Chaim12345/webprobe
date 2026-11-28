@@ -27,13 +27,13 @@ static EDITS: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
 
 /// The request an extension produced for `target`, if one arrived.
 pub fn take_edit(target: &str) -> Option<Vec<u8>> {
-    let mut edits = EDITS.lock().unwrap();
+    let mut edits = EDITS.lock();
     let at = edits.iter().position(|(t, _)| t == target)?;
     Some(edits.remove(at).1)
 }
 
 fn put_edit(target: &str, request: Vec<u8>) {
-    EDITS.lock().unwrap().push((target.to_string(), request));
+    EDITS.lock().push((target.to_string(), request));
 }
 
 /// Run `work` (calls into extension JVMs) off the UI thread and repaint
@@ -82,7 +82,7 @@ fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
             .map(|(_, s)| Arc::clone(s))
     });
     if let Some(slot) = slot {
-        return slot.lock().unwrap().clone();
+        return slot.lock().clone();
     }
     let exts: Vec<_> = webprobe_core::ext_host::active_hooks(shared)
         .into_iter()
@@ -90,7 +90,7 @@ fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
         .collect();
     let slot: Slot = Arc::new(Mutex::new(None));
     if exts.is_empty() {
-        *slot.lock().unwrap() = Some(Vec::new());
+        *slot.lock() = Some(Vec::new());
     } else {
         let (fill, ctx) = (Arc::clone(&slot), ctx.clone());
         off_ui(ui.ctx(), move || {
@@ -102,12 +102,12 @@ fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
                 })
                 .filter(|(_, items)| !items.is_empty())
                 .collect();
-            *fill.lock().unwrap() = Some(found);
+            *fill.lock() = Some(found);
         });
     }
     CACHE.with(|c| *c.borrow_mut() = Some((k, Arc::clone(&slot))));
 
-    slot.lock().unwrap().clone()
+    slot.lock().clone()
 }
 
 /// Draw "Extensions > <extension> > items". A chosen item runs on a worker

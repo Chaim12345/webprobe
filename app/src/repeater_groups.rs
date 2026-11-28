@@ -59,19 +59,13 @@ pub struct GroupSend {
 
 /// The tab bar as tab ids, in order.
 fn bar_order(app: &crate::App) -> Vec<u64> {
-    app.shared
-        .repeaters
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|r| r.id)
-        .collect()
+    app.shared.repeaters.lock().iter().map(|r| r.id).collect()
 }
 
 /// Reorder the shared tab list to `order` (the model's `gather` works on
 /// an id list; this applies it to the tabs themselves).
 fn apply_order(app: &crate::App, order: &[u64]) {
-    let mut reps = app.shared.repeaters.lock().unwrap();
+    let mut reps = app.shared.repeaters.lock();
     let mut sorted = Vec::with_capacity(reps.len());
     for id in order {
         if let Some(pos) = reps.iter().position(|r| r.id == *id) {
@@ -105,7 +99,7 @@ pub fn chip(ui: &mut Ui, groups: &[RepGroup], tab: u64) {
 /// and the three "Send group" modes). Returns true when it changed the
 /// tab bar (the caller refreshes its selection).
 pub fn menu_section(ui: &mut Ui, app: &mut crate::App, idx: usize) {
-    let Some(tab) = app.shared.repeaters.lock().unwrap().get(idx).map(|r| r.id) else {
+    let Some(tab) = app.shared.repeaters.lock().get(idx).map(|r| r.id) else {
         return;
     };
     let item = |ui: &mut Ui, label: &str, enabled: bool| -> bool {
@@ -201,7 +195,7 @@ pub fn menu_section(ui: &mut Ui, app: &mut crate::App, idx: usize) {
 /// closed tab (reopenable), the group goes.
 fn close_group_tabs(app: &mut crate::App, group: u64) {
     let ids = send_group::delete_group(&mut app.rep_groups, group);
-    let mut reps = app.shared.repeaters.lock().unwrap();
+    let mut reps = app.shared.repeaters.lock();
     for id in ids {
         if let Some(pos) = reps.iter().position(|r| r.id == id) {
             crate::repeater_ops::close_tabs(
@@ -214,8 +208,8 @@ fn close_group_tabs(app: &mut crate::App, group: u64) {
         }
     }
     drop(reps);
-    if app.repeater.sel >= app.shared.repeaters.lock().unwrap().len() {
-        app.repeater.sel = app.shared.repeaters.lock().unwrap().len().saturating_sub(1);
+    if app.repeater.sel >= app.shared.repeaters.lock().len() {
+        app.repeater.sel = app.shared.repeaters.lock().len().saturating_sub(1);
     }
 }
 
@@ -322,7 +316,7 @@ pub fn send(app: &mut crate::App, group: u64, mode: GroupMode) {
     // The group's items in tab-bar order, targets filled from the Host
     // header for tabs without one (what a plain Send does).
     let items: Vec<GroupItem> = {
-        let reps = app.shared.repeaters.lock().unwrap();
+        let reps = app.shared.repeaters.lock();
         reps.iter()
             .filter(|r| send_group::group_of(&app.rep_groups, r.id).is_some_and(|g| g.id == group))
             .map(|r| {
@@ -380,7 +374,7 @@ pub fn send(app: &mut crate::App, group: u64, mode: GroupMode) {
         let sh_report = sh.clone();
         let report = move |n: usize, r: send_group::GroupResult| {
             {
-                let mut reps = sh_report.repeaters.lock().unwrap();
+                let mut reps = sh_report.repeaters.lock();
                 if let Some(t) = reps.iter_mut().find(|t| Some(t.id) == tabs.get(n).copied()) {
                     t.response = r.response.clone();
                     t.result_line = match &r.error {

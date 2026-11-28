@@ -47,23 +47,19 @@ pub struct RecoveryState {
 /// answer.
 #[derive(Default)]
 pub struct BrowserRecovery {
-    state: std::sync::Mutex<RecoveryState>,
+    state: crate::sync::Mutex<RecoveryState>,
     cv: std::sync::Condvar,
 }
 
 impl BrowserRecovery {
     /// The prompt the UI should show, if any.
     pub fn pending(&self) -> Option<RecoveryRequest> {
-        self.state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .pending
-            .clone()
+        self.state.lock().pending.clone()
     }
 
     /// The user's answer: `true` once they have logged in again.
     pub fn answer(&self, ok: bool) {
-        let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut st = self.state.lock();
         if let Some(p) = st.pending.take() {
             st.answered = Some((p.id, ok));
             self.cv.notify_all();
@@ -72,7 +68,7 @@ impl BrowserRecovery {
 
     /// Block until the user answers (or `wait` passes, which counts as no).
     fn ask(&self, host: &str, rule: &str, wait: Duration, wake: impl Fn()) -> bool {
-        let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut st = self.state.lock();
         let id = match &st.pending {
             Some(p) => p.id,
             None => {
@@ -171,12 +167,10 @@ pub fn run_macro_text(shared: &Shared, text: &str) -> Vec<MacroStepResult> {
         let p = util::parse_http(&request);
         let (host, port) = host_of(&p, if step.https { 443 } else { 80 });
         let https = step.https || port == 443;
-        let request =
-            shared
-                .cookie_jar
-                .lock()
-                .unwrap()
-                .apply(&request, &host, https, util::now_secs());
+        let request = shared
+            .cookie_jar
+            .lock()
+            .apply(&request, &host, https, util::now_secs());
         let up = in_session(|| {
             if https {
                 send_tls_raw(shared, &host, port, &request)
@@ -185,12 +179,10 @@ pub fn run_macro_text(shared: &Shared, text: &str) -> Vec<MacroStepResult> {
             }
         });
         if let Some(resp) = &up.resp {
-            shared.cookie_jar.lock().unwrap().update_from_response(
-                &host,
-                &p.path,
-                resp,
-                util::now_secs(),
-            );
+            shared
+                .cookie_jar
+                .lock()
+                .update_from_response(&host, &p.path, resp, util::now_secs());
         }
         let failed = up.resp.is_none();
         results.push(MacroStepResult {
@@ -203,7 +195,7 @@ pub fn run_macro_text(shared: &Shared, text: &str) -> Vec<MacroStepResult> {
         }
     }
     if let Some(resp) = results.last().and_then(|r| r.response.clone()) {
-        *shared.macro_last_response.lock().unwrap() = resp;
+        *shared.macro_last_response.lock() = resp;
     }
     results
 }
@@ -215,7 +207,7 @@ pub fn expand_placeholders(shared: &Shared, value: &str) -> String {
     if !value.contains('{') {
         return value.to_string();
     }
-    let last = shared.macro_last_response.lock().unwrap().clone();
+    let last = shared.macro_last_response.lock().clone();
     let mut out = String::new();
     let mut rest = value;
     while let Some(open) = rest.find('{') {
@@ -248,7 +240,6 @@ pub fn run_macro(shared: &Shared, name: &str) -> Option<Vec<u8>> {
     let text = shared
         .macros
         .lock()
-        .unwrap()
         .iter()
         .find(|m| m.name == name)
         .map(|m| m.request.clone())?;
@@ -286,7 +277,7 @@ pub fn apply_session_rules_for(
     if IN_SESSION.with(|s| s.get()) {
         return Ok(req.to_vec());
     }
-    let rules = shared.session_rules.lock().unwrap().clone();
+    let rules = shared.session_rules.lock().clone();
     if rules.is_empty() {
         return Ok(req.to_vec());
     }
@@ -297,7 +288,6 @@ pub fn apply_session_rules_for(
         shared
             .cookie_jar
             .lock()
-            .unwrap()
             .apply(out, &host, https, util::now_secs())
     };
     for rule in rules {
@@ -341,7 +331,7 @@ pub fn apply_session_rules_for(
             }
             "use cookie jar" => out = from_jar(&out),
             "invoke extension" => {
-                let exts = shared.ext_hooks.lock().unwrap().active_hooks();
+                let exts = shared.ext_hooks.lock().active_hooks();
                 let svc = webprobe_support::ext::HttpService::new(&host, port, https);
                 match exts.iter().find(|e| {
                     e.ui()
@@ -446,7 +436,7 @@ pub fn run_post_request_rules(shared: &Shared, tool: &str, host: &str) {
     if IN_SESSION.with(|s| s.get()) {
         return;
     }
-    let rules = shared.session_rules.lock().unwrap().clone();
+    let rules = shared.session_rules.lock().clone();
     for rule in rules {
         if rule.enabled
             && rule.action == "post-request macro"

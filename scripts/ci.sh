@@ -2,15 +2,20 @@
 # ci.sh — the project's CI gate, run locally (the tree has no hosted CI).
 #
 # Steps, each through wp-queue so it never fights other builds on this box:
-#   1. engine and desktop test suites (parsers: chunked, gzip/brotli, keep-alive,
-#      HTTP/2, TLS MITM, proxy; fuzz_tests' 3000 seeded malformed inputs)
-#   2. headless binary builds without GUI libraries (layering test guards it)
-#   3. the desktop app builds with the egui MCP automation feature
-#   4. the vendored egui-mcp-server's tests
+#   1. formatting (rustfmt, `--check`: no file is rewritten)
+#   2. clippy for every target with warnings denied (the workspace lint policy)
+#   3. architecture / issue-coverage ratchets
+#   4. engine and desktop test suites with `test-ca` (parsers: chunked,
+#      gzip/brotli, keep-alive, HTTP/2, TLS MITM, proxy; fuzz_tests' 3000 seeded
+#      malformed inputs). `test-ca` keeps every test CA in memory: no test
+#      reads or writes the user's real CA (tests/ca_isolation.rs enforces it).
+#   5. headless binary builds without GUI libraries (layering test guards it)
+#   6. the desktop app builds with the egui MCP automation feature
+#   7. the vendored egui-mcp-server's tests
 # Exit status is the first failing step's; a summary line per step is printed.
 #
 # Usage: scripts/ci.sh            run everything
-#        CI_SKIP_MCP=1 scripts/ci.sh   skip steps 3-4
+#        CI_SKIP_MCP=1 scripts/ci.sh   skip steps 6-7
 set -uo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -30,10 +35,14 @@ step() {
     fi
 }
 
+step "rustfmt" env WP_APP_DIR="$APP" "$Q" fmt-check
+step "clippy (warnings are errors)" env WP_APP_DIR="$APP" "$Q" clippy \
+    --workspace --all-targets --features test-ca -- -D warnings
 step "architecture ratchet self-test" python3 "$ROOT/scripts/test-arch-gate.py"
 step "architecture ratchet (ADR 0002)" python3 "$ROOT/scripts/arch-gate.py"
 step "issue-type coverage (F-08)" python3 "$ROOT/scripts/issue-coverage.py"
-step "test suites (core + desktop)" env WP_APP_DIR="$APP" "$Q" test
+step "test suites (workspace, test-ca)" env WP_APP_DIR="$APP" "$Q" test \
+    --workspace --features test-ca
 step "headless engine binary" env WP_APP_DIR="$APP" "$Q" run -- cargo build --bin webprobe-headless
 if [ -z "${CI_SKIP_MCP:-}" ]; then
     step "desktop with egui MCP" env WP_APP_DIR="$APP" "$Q" run -- cargo build --features mcp

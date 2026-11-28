@@ -135,8 +135,7 @@ fn placeholder_free_unicode_is_unchanged() {
 #[test]
 fn repeated_adjacent_and_unknown_placeholders_are_independent() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
-        b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
+    *shared.macro_last_response.lock() = b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
     assert_eq!(
         expand_placeholders(&shared, "{token}{token}/{missing}/{}"),
         "abcabc/{missing}/{}"
@@ -146,8 +145,7 @@ fn repeated_adjacent_and_unknown_placeholders_are_independent() {
 #[test]
 fn unmatched_opening_brace_does_not_discard_suffix() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
-        b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
+    *shared.macro_last_response.lock() = b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
     assert_eq!(
         expand_placeholders(&shared, "{token}/tail{unfinished"),
         "abc/tail{unfinished"
@@ -157,7 +155,7 @@ fn unmatched_opening_brace_does_not_discard_suffix() {
 #[test]
 fn placeholder_cookie_value_takes_precedence_over_body_member() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
+    *shared.macro_last_response.lock() =
         b"HTTP/1.1 200 OK\r\nSet-Cookie: token=cookie==; HttpOnly\r\n\r\n{\"token\":\"body\"}"
             .to_vec();
     assert_eq!(
@@ -169,7 +167,7 @@ fn placeholder_cookie_value_takes_precedence_over_body_member() {
 #[test]
 fn placeholders_extract_form_fields_with_either_attribute_order() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() = b"HTTP/1.1 200 OK\r\n\r\n<input name='csrf' value='form-token'><input value='second' name='nonce'>".to_vec();
+    *shared.macro_last_response.lock() = b"HTTP/1.1 200 OK\r\n\r\n<input name='csrf' value='form-token'><input value='second' name='nonce'>".to_vec();
     assert_eq!(
         expand_placeholders(&shared, "{csrf}/{nonce}"),
         "form-token/second"
@@ -179,7 +177,7 @@ fn placeholders_extract_form_fields_with_either_attribute_order() {
 #[test]
 fn placeholders_extract_json_numbers_booleans_and_empty_strings() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
+    *shared.macro_last_response.lock() =
         b"HTTP/1.1 200 OK\r\n\r\n{\"count\":-12,\"ready\":false,\"empty\":\"\"}".to_vec();
     assert_eq!(
         expand_placeholders(&shared, "{count}/{ready}/{empty}"),
@@ -190,10 +188,10 @@ fn placeholders_extract_json_numbers_booleans_and_empty_strings() {
 #[test]
 fn placeholder_reads_the_latest_macro_response_not_a_cached_value() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
+    *shared.macro_last_response.lock() =
         b"HTTP/1.1 200 OK\r\nSet-Cookie: sid=first\r\n\r\n".to_vec();
     assert_eq!(expand_placeholders(&shared, "{sid}"), "first");
-    *shared.macro_last_response.lock().unwrap() =
+    *shared.macro_last_response.lock() =
         b"HTTP/1.1 200 OK\r\nSet-Cookie: sid=second\r\n\r\n".to_vec();
     assert_eq!(expand_placeholders(&shared, "{sid}"), "second");
 }
@@ -201,7 +199,7 @@ fn placeholder_reads_the_latest_macro_response_not_a_cached_value() {
 #[test]
 fn substituted_values_are_not_recursively_expanded() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
+    *shared.macro_last_response.lock() =
         b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"{other}\",\"other\":\"secret\"}".to_vec();
     assert_eq!(expand_placeholders(&shared, "{token}"), "{other}");
 }
@@ -215,14 +213,14 @@ fn rules_require_enabled_matching_tool_and_matching_host() {
     other_tool.tools = vec!["Scanner".into()];
     let mut other_host = rule("set header", "X-Host: no");
     other_host.host_match = "different.test".into();
-    *shared.session_rules.lock().unwrap() = vec![disabled, other_tool, other_host];
+    *shared.session_rules.lock() = vec![disabled, other_tool, other_host];
     assert_eq!(apply(&shared), REQUEST);
 }
 
 #[test]
 fn later_cookie_rule_overrides_earlier_rule_for_the_same_name() {
     let shared = shared();
-    *shared.session_rules.lock().unwrap() = vec![
+    *shared.session_rules.lock() = vec![
         rule("set cookie", "sid=first"),
         rule("set cookie", "sid=second"),
     ];
@@ -232,12 +230,10 @@ fn later_cookie_rule_overrides_earlier_rule_for_the_same_name() {
 #[test]
 fn set_header_expands_placeholders_and_preserves_colons_in_value() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
-        b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
+    *shared.macro_last_response.lock() = b"HTTP/1.1 200 OK\r\n\r\n{\"token\":\"abc\"}".to_vec();
     shared
         .session_rules
         .lock()
-        .unwrap()
         .push(rule("set header", " Authorization : Bearer {token}:tail "));
     let result = util::parse_http(&apply(&shared));
     assert_eq!(
@@ -249,12 +245,11 @@ fn set_header_expands_placeholders_and_preserves_colons_in_value() {
 #[test]
 fn set_cookie_expands_and_trims_while_preserving_equals_in_value() {
     let shared = shared();
-    *shared.macro_last_response.lock().unwrap() =
+    *shared.macro_last_response.lock() =
         b"HTTP/1.1 200 OK\r\nSet-Cookie: token=abc==\r\n\r\n".to_vec();
     shared
         .session_rules
         .lock()
-        .unwrap()
         .push(rule("set cookie", " sid = {token} "));
     assert_eq!(cookie(&apply(&shared)), "sid=abc==");
 }
@@ -262,7 +257,7 @@ fn set_cookie_expands_and_trims_while_preserving_equals_in_value() {
 #[test]
 fn malformed_and_unknown_actions_leave_request_untouched() {
     let shared = shared();
-    *shared.session_rules.lock().unwrap() = vec![
+    *shared.session_rules.lock() = vec![
         rule("set header", "no colon"),
         rule("set cookie", "no equals"),
         rule("unknown", "ignored"),
@@ -276,7 +271,6 @@ fn nested_session_suspension_restores_outer_guard_and_then_normal_rules() {
     shared
         .session_rules
         .lock()
-        .unwrap()
         .push(rule("set cookie", "sid=active"));
     let result = in_session(|| {
         assert_eq!(apply(&shared), REQUEST);
@@ -293,7 +287,6 @@ fn session_suspension_is_restored_when_the_closure_panics() {
     shared
         .session_rules
         .lock()
-        .unwrap()
         .push(rule("set cookie", "sid=active"));
     let panic = std::panic::catch_unwind(|| in_session(|| panic!("intentional guard-unwind test")));
     assert!(panic.is_err());
@@ -306,7 +299,6 @@ fn session_suspension_does_not_leak_to_another_thread() {
     shared
         .session_rules
         .lock()
-        .unwrap()
         .push(rule("set cookie", "sid=active"));
     in_session(|| {
         assert_eq!(apply(&shared), REQUEST);

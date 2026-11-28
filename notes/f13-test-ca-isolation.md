@@ -10,8 +10,8 @@ Three evidence classes, kept apart on purpose:
 - **B. Historical log observations** — from runs at the pin, with the tree state
   named per item. They are log observations, including their own contradictions;
   they are **not** acceptance evidence for the current head.
-- **C. Proposal** — the change on this branch. Unqualified: no build, test,
-  check or lint has been run on it.
+- **C. Proposal** — the change on this branch, merged in #236. CI now
+  builds and tests it; section D records what that does and does not cover.
 
 ---
 
@@ -94,7 +94,7 @@ records `4 passed; 0 failed`.
 - Differing hashes between runs do **not** by themselves identify which test or
   code path wrote the sentinel.
 
-## C. Proposal (unqualified; no run on this head)
+## C. Proposal (merged in #236; exercised by CI)
 
 ### 1. Unwind-safe child
 
@@ -172,9 +172,69 @@ where the residual one still reaches it.
 
 ## D. Limits
 
-- No `cargo build`, `test`, `check` or `clippy` was run on this head; every
-  statement in section C is a code claim, not a result.
+- The change is built and tested in CI: `cargo test --workspace --locked`
+  runs the `ca_isolation`, `session_contracts`, `pipeline_matrix` and
+  `intruder_baseline` cases and the support TLS tests. The section C
+  statements remain code claims about what the fixture checks; the CI run
+  shows it compiles and passes, not that it covers every entrypoint in the
+  inventory.
 - Windows/macOS path behaviour is unverified. GUI CA retire/import flows in
   `app/src/proxy_settings.rs` were read, not executed.
 - The historical numbers in section B are log observations at the pin, with the
   tree state named per item, and must not be read as current-head acceptance.
+
+---
+
+# E. AR-01 leftovers (2026-11-28): the app-crate half, implemented
+
+This section is current-head evidence for the change on
+`openhands/ar01-quick-fixes`. It supersedes the `app/src/**` row of the
+coverage inventory above.
+
+## E.1 Mechanism
+
+- Every workspace crate has a `test-ca` feature: `app/support` (empty, the
+  check lives in `MitmAuthority::new`), `app/core` (forwards to support),
+  `app` (forwards to core, and its **dev-dependency** on core enables it, so
+  `cargo test -p webprobe` is safe without a flag), `app/report` (forwards).
+- `Shared::new()` compiles to `MitmAuthority::in_memory()` under
+  `cfg(any(test, feature = "test-ca"))`; the desktop crate's tests build core
+  without `cfg(test)`, so the feature is what covers them.
+- `Shared::in_memory()` and `Shared::with_ca_dir(Some(dir))` are the explicit
+  constructors. `scripts/ci.sh` runs the workspace tests with
+  `--features test-ca`.
+- The two isolation harnesses (`ar09_binary_tool_state`, and the app-crate
+  copy) give the child process `WEBPROBE_CA_DIR=<owned>/ca` and the child now
+  calls `Shared::with_ca_dir($WEBPROBE_CA_DIR)` from an `owned_shared()`
+  helper: the artifact proof still shows `ca.json` was written **inside the
+  owned dir**, and never in `~/.config/webprobe`.
+
+## E.2 Enforcement (`scripts/arch-gate.py`)
+
+New ratchet metric `test_ca_default_shared`, baseline **0**. It counts
+`Shared::new(` (comments stripped) in `app/src/**` (minus `src/main.rs` and
+`src/bin/`) and `app/core/tests/**` (minus `tests/ca_isolation.rs`). A file
+that must exercise the constructor declares `// test-ca-exempt: <reason>`
+(applied only to the canary in `app/src/ui/tests.rs`).
+
+`scripts/test-arch-gate.py` covers both directions: a test file calling
+`Shared::new()` fails the gate (`WORSE test_ca_default_shared: 0 -> 1`), the
+documented exemption passes.
+
+## E.3 Measured results (this sandbox, rustc 1.100 via `~/.cargo/bin`)
+
+| command | result |
+| --- | --- |
+| `cargo test --workspace --features test-ca` | 1254 core lib, 12 core integration binaries, 175 app bin, 5 headless, 12+2 report — all pass |
+| `cargo clippy --workspace --all-targets --features test-ca -- -D warnings` | clean |
+| `cargo fmt --all -- --check` | clean |
+| `python3 scripts/arch-gate.py` / `scripts/test-arch-gate.py` | ok, 0 failures |
+| `python3 scripts/issue-coverage.py` | ok |
+
+One pre-existing failure was reproduced at `HEAD` in this sandbox and is
+unrelated: `webprobe-support` `util::process_tree_tests::
+a_forking_child_is_ended_with_all_its_descendants` (its `kill -0 -- -pgid`
+check sees sandbox-reparented processes). `scripts/ci.sh` itself was not run
+here: `app/.cargo/config.toml` pins `/usr/local/bin/rustc`,
+`/usr/local/bin/sccache` and `clang`/`ld.lld-22`, none present in this image;
+every step was run individually with equivalent overrides.

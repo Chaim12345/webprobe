@@ -17,29 +17,10 @@ pub fn pattern_matches(pattern: &str, is_regex: bool, text: &str) -> bool {
     }
 }
 
-/// True when the URL is in target scope. With no include entries every URL is
-/// in scope; an enabled matching exclude entry always removes it. Rules with
-/// a blank pattern are ignored.
+/// True when the URL is in target scope. The compiled rule set is cloned out
+/// of the lock and matched after the guard is released.
 pub fn in_scope(shared: &Shared, url: &str) -> bool {
-    let rules = shared.scope.lock().unwrap().clone();
-    // A rule with no pattern is one the user has not filled in yet: it
-    // selects nothing. (pattern_matches treats "" as match-all, which as an
-    // exclusion would put every URL out of scope.)
-    let active: Vec<&ScopeRule> = rules
-        .iter()
-        .filter(|r| r.enabled && !r.pattern.trim().is_empty())
-        .collect();
-    if active
-        .iter()
-        .any(|r| !r.include && pattern_matches(&r.pattern, r.is_regex, url))
-    {
-        return false;
-    }
-    let includes: Vec<&ScopeRule> = active.iter().copied().filter(|r| r.include).collect();
-    includes.is_empty()
-        || includes
-            .iter()
-            .any(|r| pattern_matches(&r.pattern, r.is_regex, url))
+    shared.scope.lock().in_scope(url)
 }
 
 pub fn append_cookie(raw: &[u8], name: &str, value: &str) -> Vec<u8> {

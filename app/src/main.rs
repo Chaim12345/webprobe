@@ -427,7 +427,7 @@ impl App {
             ));
         }
         mirror_history(&mut self.logger, &mut self.log_seen, &rows);
-        let sent = std::mem::take(&mut *self.shared.tool_log.lock().unwrap());
+        let sent = std::mem::take(&mut *self.shared.tool_log.lock());
         mirror_tool_log(&mut self.logger, sent);
     }
 }
@@ -510,11 +510,10 @@ fn autosave_enabled() -> bool {
 fn autosave_signature(app: &App) -> (usize, usize, usize) {
     (
         app.shared.history.len(),
-        app.shared.issues.lock().unwrap().len(),
+        app.shared.issues.lock().len(),
         app.shared
             .repeaters
             .lock()
-            .unwrap()
             .iter()
             .map(|r| r.history.len() + r.request.len())
             .sum(),
@@ -630,7 +629,7 @@ impl eframe::App for App {
                             out.len()
                         ));
                         // verify a request rule was applied if one was preloaded
-                        if !sh.mr_request.lock().unwrap().is_empty() {
+                        if !sh.mr_request.lock().is_empty() {
                             std::thread::sleep(std::time::Duration::from_millis(500));
                             let hit = sh
                                 .history
@@ -676,7 +675,7 @@ impl eframe::App for App {
             if self.shot_added {
                 let mut finished = false;
                 if let Some(done) = &self.grab_done {
-                    finished = *done.lock().unwrap();
+                    finished = *done.lock();
                 }
                 if !finished && self.frames > 400 {
                     tracing::warn!(target: "webprobe", event_code = "ui.screenshot.timeout", "Screenshot paint callback timed out");
@@ -760,7 +759,7 @@ fn schedule_grab(
                 _ => false,
             }
         };
-        *done.lock().unwrap() = ok;
+        *done.lock() = ok;
     });
     painter.add(egui::PaintCallback {
         rect,
@@ -1211,12 +1210,10 @@ fn main() {
         }
     }
 
-    // The scanner registers its hooks so net's live crawl / passive audit
-    // work without net naming scan (issue #38).
-    webprobe_core::scan::register_scan_hooks();
-    webprobe_core::scan::register_task_ops();
-    webprobe_core::scan::register_type_checks();
-    webprobe_core::headless::register_browser_crawl();
+    // One registration call for every seam between the engine and this
+    // front end (AR-10): scanner hooks, task operations, check catalogue and
+    // the browser crawl driver.
+    webprobe_core::register_runtime();
     let shared = net::Shared::new();
     if let Some(p) = std::env::var("WEBPROBE_PORT")
         .ok()
@@ -1234,7 +1231,6 @@ fn main() {
         shared.proxy_port.store(listener.port, Ordering::SeqCst);
         webprobe_core::scan_config::shared_config(&shared)
             .lock()
-            .unwrap()
             .http
             .http2_enabled = http.http2_enabled;
         if !listener.running {
@@ -1247,14 +1243,14 @@ fn main() {
             eprintln!("not applied by WebProbe: {line}");
         }
         let slot = scan_config::shared_config(&shared);
-        let base = slot.lock().unwrap().clone();
+        let base = slot.lock().clone();
         let applied = webprobe_core::scan_library::apply(
             &refs,
             &base,
             shared.scan_speed.load(Ordering::SeqCst),
             shared.scan_accuracy.load(Ordering::SeqCst),
         );
-        *slot.lock().unwrap() = applied.config;
+        *slot.lock() = applied.config;
         shared.scan_speed.store(applied.speed, Ordering::SeqCst);
         shared
             .scan_accuracy
@@ -1273,7 +1269,7 @@ fn main() {
             }
         }
     }
-    *shared.api_config.lock().unwrap() = api;
+    *shared.api_config.lock() = api;
     let mut collab_state = collaborator::CollaboratorState::new();
     if let Some(p) = std::env::var("WEBPROBE_COLLAB_PORT")
         .ok()
@@ -1342,7 +1338,8 @@ fn main() {
         let m = parts.next().unwrap_or_default().to_string();
         let r = parts.next().unwrap_or_default().to_string();
         if !m.is_empty() {
-            shared.mr_request.lock().unwrap().push(rules::MrRule {
+            let mut list = shared.mr_request.lock().rules().to_vec();
+            list.push(rules::MrRule {
                 enabled: true,
                 match_: m,
                 replacement: r,
@@ -1350,6 +1347,8 @@ fn main() {
                 is_regex: false,
                 scope: rules::MrScope::RequestHeader,
             });
+            *shared.mr_request.lock() =
+                std::sync::Arc::new(webprobe_core::rules::CompiledMrRules::new(list));
         }
     }
     load_startup_extensions(&shared, disable_extensions, |k| std::env::var(k).ok());
@@ -1456,7 +1455,6 @@ fn main() {
         if http_explicit {
             webprobe_core::scan_config::shared_config(&app.shared)
                 .lock()
-                .unwrap()
                 .http
                 .http2_enabled = http.http2_enabled;
         }
@@ -1481,7 +1479,7 @@ fn main() {
     // the R-12 group UI screenshot check.
     if std::env::var("WEBPROBE_SEED_REP_GROUP").is_ok() {
         {
-            let mut reps = app.shared.repeaters.lock().unwrap();
+            let mut reps = app.shared.repeaters.lock();
             reps.clear();
             for (n, path) in [(1, "/login"), (2, "/login/step2"), (3, "/account")] {
                 let id = app.shared.rep.new_tab_id();
@@ -1498,14 +1496,7 @@ fn main() {
                 reps.push(tab);
             }
         }
-        let mut order: Vec<u64> = app
-            .shared
-            .repeaters
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|r| r.id)
-            .collect();
+        let mut order: Vec<u64> = app.shared.repeaters.lock().iter().map(|r| r.id).collect();
         let gid = app.shared.rep.new_tab_id();
         let members = order[..2].to_vec();
         webprobe_core::send_group::create_group(
@@ -1575,24 +1566,17 @@ mod tests {
 
     #[test]
     fn disable_extensions_blocks_all_startup_sources() {
-        let shared = net::Shared::new();
+        let shared = net::Shared::in_memory();
         load_startup_extensions(&shared, true, |key| {
             panic!("disabled extensions must not inspect startup source {key}")
         });
         ext_host::with_host(&shared, |host| assert!(host.extensions.is_empty()));
-        assert!(
-            !shared
-                .events
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|e| e.contains("extension"))
-        );
+        assert!(!shared.events.lock().iter().any(|e| e.contains("extension")));
     }
 
     #[test]
     fn enabled_startup_can_load_example_hook() {
-        let shared = net::Shared::new();
+        let shared = net::Shared::in_memory();
         load_startup_extensions(&shared, false, |key| match key {
             "WEBPROBE_EXT_TEST" | "WEBPROBE_NO_EXTENSIONS" => Some("1".into()),
             _ => None,

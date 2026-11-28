@@ -202,7 +202,7 @@ pub fn send_inner(
     };
     let key = (host.to_string(), port);
     let mut pooled = if keep_alive {
-        shared.pool.lock().unwrap().remove(&key)
+        shared.pool.lock().remove(&key)
     } else {
         None
     };
@@ -258,7 +258,7 @@ pub fn send_inner(
     scanner_send_admission(shared)?;
     let (resp, reusable) = exchange(&mut stream, &routed, sink)?;
     if keep_alive && reusable && response_headers_allow_reuse(&resp) {
-        shared.pool.lock().unwrap().insert(key, stream);
+        shared.pool.lock().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
         }
@@ -394,7 +394,7 @@ pub fn send_tls_inner(
     // off entirely when keep-alive is disabled or the sender pinned HTTP/1;
     // a dead socket, a GOAWAY connection or a retired connection is dropped.
     let mut h2conn = if keep_alive && want_h2 != Some(false) && !custom_sni && !force_h2 {
-        shared.h2_pool.lock().unwrap().remove(&h2key)
+        shared.h2_pool.lock().remove(&h2key)
     } else {
         None
     };
@@ -417,7 +417,7 @@ pub fn send_tls_inner(
             Ok(resp) => {
                 shared.pool_hits.fetch_add(1, Ordering::SeqCst);
                 if keep_alive && conn.idle() {
-                    shared.h2_pool.lock().unwrap().insert(h2key, conn);
+                    shared.h2_pool.lock().insert(h2key, conn);
                 }
                 return Ok(resp);
             }
@@ -439,7 +439,7 @@ pub fn send_tls_inner(
     let mut pooled = if want_h2 == Some(true) || custom_sni || force_h2 {
         None
     } else {
-        shared.tls_pool.lock().unwrap().remove(&key)
+        shared.tls_pool.lock().remove(&key)
     };
     if let Some(conn) = pooled.as_mut()
         && !conn.writable()
@@ -503,7 +503,7 @@ pub fn send_tls_inner(
             Ok(resp) => {
                 // Pool the connection for the next request to this origin.
                 if keep_alive && !custom_sni && !force_h2 && conn.idle() {
-                    shared.h2_pool.lock().unwrap().insert(h2key, conn);
+                    shared.h2_pool.lock().insert(h2key, conn);
                 }
                 return Ok(resp);
             }
@@ -528,7 +528,7 @@ pub fn send_tls_inner(
                                 && !force_h2
                                 && retry_conn.idle()
                             {
-                                shared.h2_pool.lock().unwrap().insert(h2key, retry_conn);
+                                shared.h2_pool.lock().insert(h2key, retry_conn);
                             }
                             r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
                         } else {
@@ -550,7 +550,7 @@ pub fn send_tls_inner(
     scanner_send_admission(shared)?;
     let (result, reusable) = exchange(&mut stream, &req, sink)?;
     if keep_alive && reusable && !custom_sni && response_headers_allow_reuse(&result) {
-        shared.tls_pool.lock().unwrap().insert(key, stream);
+        shared.tls_pool.lock().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
         }

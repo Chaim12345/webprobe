@@ -41,13 +41,26 @@ pub const MAX_BODY_SCAN: usize = 256 * 1024;
 
 /// Stable descriptor for one passive check: the report shows name + severity,
 /// while `id` and `confidence` stay fixed for tests, exports and dedupe.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct CheckDef {
     pub id: &'static str,
     pub name: &'static str,
     pub sev: &'static str,
     /// Burp vocabulary: Certain | Firm | Tentative.
     pub confidence: &'static str,
+}
+
+impl CheckDef {
+    /// The registry metadata record (AR-10): the same identity a passive
+    /// check entry exposes plus its fixed severity and confidence.
+    pub fn meta(&self) -> CheckMeta {
+        CheckMeta {
+            id: self.id,
+            issue: self.name,
+            severity: Severity::parse(self.sev),
+            confidence: Confidence::parse(self.confidence),
+        }
+    }
 }
 
 pub const CH_HSTS: CheckDef = CheckDef {
@@ -308,45 +321,6 @@ pub const CH_CSRF: CheckDef = CheckDef {
     sev: "medium",
     confidence: "Firm",
 };
-
-/// Every passive check the engine knows, in report order.
-pub static PASSIVE_LIBRARY: &[CheckDef] = &[
-    CH_HSTS,
-    CH_CSP,
-    CH_FRAME,
-    CH_XCTO,
-    CH_REFERRER,
-    CH_PERMISSIONS,
-    CH_SERVER,
-    CH_XPB,
-    CH_ASPNET,
-    CH_COOKIE_HTTPONLY,
-    CH_COOKIE_SECURE,
-    CH_COOKIE_SAMESITE,
-    CH_COOKIE_SAMESITE_NONE,
-    CH_CORS_WILDCARD,
-    CH_CORS_WILDCARD_CREDS,
-    CH_CORS_REFLECT,
-    CH_CORS_CREDS,
-    CH_CORS_NULL,
-    CH_DIR_LISTING,
-    CH_GIT,
-    CH_ENV,
-    CH_LOGIN_HTTP,
-    CH_MIXED,
-    CH_CACHE,
-    CH_REDIRECT_COOKIE,
-    CH_AUTOCOMPLETE,
-    CH_EMAIL,
-    CH_PRIVATE_IP,
-    CH_CREDIT_CARD,
-    CH_ROBOTS,
-    CH_OPENAPI_PASSIVE,
-    CH_HTML_NO_CHARSET,
-    CH_HTML_BAD_CHARSET,
-    CH_CT_MISSING,
-    CH_CT_MULTI,
-];
 
 /// burp.Zf9p.ZY: charsets Burp recognizes.
 pub const KNOWN_CHARSETS: [&str; 10] = [
@@ -1021,9 +995,4 @@ pub(crate) fn misstated_type(resp: &[u8], path: &str) -> Option<Misstated> {
         browsers,
         html_browsers,
     })
-}
-
-/// The passive check library (ids, names, severities, confidences).
-pub fn check_library() -> &'static [CheckDef] {
-    PASSIVE_LIBRARY
 }

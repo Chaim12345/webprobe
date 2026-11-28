@@ -1,11 +1,11 @@
 //! F9: what happens to a held intercepted HTTP request when its client goes
-//! away. Source-only artifact for review: nothing here has been built or run.
+//! away. The fixture runs in CI: each case spawns this test binary with an
+//! isolated child environment (see below).
 //!
-//! `held_request_is_released_when_the_client_disconnects` records
-//! the CURRENT behaviour (a request stays held and is still forwardable after
-//! the client closed). It is a characterisation, not a fix guard: it passes
-//! precisely because the defect exists. A future target-behaviour regression
-//! (held request released, nothing sent) is planned once a fix is approved.
+//! `held_request_is_released_when_the_client_disconnects` is a
+//! target-behaviour regression: a held request must be released when its
+//! client closed, and nothing may reach the origin afterwards. It replaced
+//! the earlier characterisation of the defect once the F9 fix landed.
 //!
 //! Every case is a parent wrapper that never constructs `Shared`. The parent
 //! creates a unique tempdir with a fake HOME, a fake XDG_CONFIG_HOME and an
@@ -20,10 +20,11 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+use webprobe_core::sync::Mutex;
 
 use webprobe_core::net::{Shared, handle_conn, intercept_release_all};
 
@@ -39,6 +40,7 @@ const SENTINEL_XDG: &[u8] = b"f9-sentinel-xdg: not a CA\n";
 const CONTROL: &str = "control_normal_request_reaches_the_origin_and_returns";
 const HELD: &str = "held_request_is_released_when_the_client_disconnects";
 const DETACHED: &str = "F9-PROXY-WORKERS-DETACHED";
+const WORKER_PANIC: &str = "F9-PROXY-WORKER-PANICKED";
 
 // ---------- child-process CA isolation ----------
 
@@ -419,7 +421,7 @@ impl Origin {
                         let record = read_request(&mut stream, &s);
                         if record.complete {
                             p.fetch_add(1, Ordering::SeqCst);
-                            b.lock().unwrap().push(record.wire);
+                            b.lock().push(record.wire);
                             let _ = stream.write_all(
                                 b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\nupstream-ok",
                             );
@@ -483,11 +485,11 @@ impl Proxy {
                         // A cloned handle lets teardown close the client side
                         // so the worker can finish inside the settle window.
                         if let Ok(handle) = stream.try_clone() {
-                            k.lock().unwrap().push(handle);
+                            k.lock().push(handle);
                         }
                         let shared = Arc::clone(&acceptor_shared);
                         let handle = std::thread::spawn(move || handle_conn(shared, stream));
-                        c.lock().unwrap().push(handle);
+                        c.lock().push(handle);
                     }
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(5))
@@ -511,7 +513,7 @@ impl Drop for Proxy {
     fn drop(&mut self) {
         // Order matters: close owned clients, stop the acceptor, drop held
         // entries, then give finished workers a bounded window to be joined.
-        for client in self.clients.lock().unwrap().drain(..) {
+        for client in self.clients.lock().drain(..) {
             let _ = client.shutdown(Shutdown::Both);
         }
         self.stop.store(true, Ordering::SeqCst);
@@ -522,13 +524,17 @@ impl Drop for Proxy {
         if dropped > 0 {
             println!("F9-PROXY-SETTLE: dropped {dropped} held entries");
         }
-        let mut pending = std::mem::take(&mut *self.conns.lock().unwrap());
+        let mut pending = std::mem::take(&mut *self.conns.lock());
         let end = Instant::now() + PROXY_SETTLE;
         while !pending.is_empty() && Instant::now() < end {
             let mut still = Vec::new();
             for handle in pending {
                 if handle.is_finished() {
-                    let _ = handle.join();
+                    // A worker that panicked is a failed cleanup, not a clean
+                    // join: report it instead of discarding the join result.
+                    if handle.join().is_err() {
+                        println!("{WORKER_PANIC}");
+                    }
                 } else {
                     still.push(handle);
                 }
@@ -585,12 +591,12 @@ impl Drop for HeldQueueGuard {
 fn wait_queue(shared: &Shared, want: usize, deadline: Duration) -> bool {
     let end = Instant::now() + deadline;
     while Instant::now() < end {
-        if shared.queue.lock().unwrap().len() == want {
+        if shared.queue.lock().len() == want {
             return true;
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    shared.queue.lock().unwrap().len() == want
+    shared.queue.lock().len() == want
 }
 
 fn request(origin_port: u16) -> Vec<u8> {
@@ -600,11 +606,19 @@ fn request(origin_port: u16) -> Vec<u8> {
     .into_bytes()
 }
 
+/// The isolation harness hands the child its own CA dir in the environment;
+/// load that dir explicitly instead of the persisted user CA. The artifact
+/// proof then shows this process never touched the real `~/.config/webprobe`.
+fn owned_shared() -> std::sync::Arc<Shared> {
+    let dir = std::env::var_os("WEBPROBE_CA_DIR").map(std::path::PathBuf::from);
+    Shared::with_ca_dir(dir).expect("load the isolation harness's CA dir")
+}
+
 // ---------- child bodies ----------
 
 fn control_body() {
     let mut origin = Origin::start();
-    let shared = Shared::new();
+    let shared = owned_shared();
     let proxy = Proxy::start(Arc::clone(&shared));
     let mut client = TcpStream::connect(("127.0.0.1", proxy.port)).expect("client connect");
     client.set_read_timeout(Some(WAIT)).expect("read timeout");
@@ -617,7 +631,7 @@ fn control_body() {
     let text = String::from_utf8_lossy(&response).into_owned();
     let accepts = origin.accepts.load(Ordering::SeqCst);
     let parsed = origin.parsed.load(Ordering::SeqCst);
-    let retained = origin.bytes.lock().unwrap().len();
+    let retained = origin.bytes.lock().len();
     origin.stop_and_join();
     println!("F9-CONTROL-EVIDENCE accepts={accepts} parsed={parsed} retained={retained}");
     println!("F9-CONTROL-EVIDENCE response_bytes={}", response.len());
@@ -634,9 +648,9 @@ fn control_body() {
 
 fn held_body() {
     let origin = Origin::start();
-    let shared = Shared::new();
+    let shared = owned_shared();
     shared.intercept_on.store(true, Ordering::SeqCst);
-    shared.intercept_rules.lock().unwrap().clear();
+    shared.intercept_rules.lock().clear();
     let proxy = Proxy::start(Arc::clone(&shared));
     // Declared after the proxy so it drops first: a panic anywhere below tears
     // the held queue down before the proxy settle window runs.
@@ -660,7 +674,7 @@ fn held_body() {
     let started = Instant::now();
     let released = wait_queue(&shared, 0, WAIT);
     let released_after = started.elapsed();
-    let held_after = shared.queue.lock().unwrap().len();
+    let held_after = shared.queue.lock().len();
     let accepts_at_cancel = origin.accepts.load(Ordering::SeqCst);
     let parsed_at_cancel = origin.parsed.load(Ordering::SeqCst);
 
@@ -744,6 +758,11 @@ fn control_normal_request_reaches_the_origin_and_returns() {
         !run.stdout.contains(DETACHED),
         "a production worker could not be joined; child termination is containment, not acceptance",
     );
+    assert!(
+        !run.stdout.contains(WORKER_PANIC),
+        "a proxy worker panicked during teardown\nstdout:\n{}",
+        run.stdout,
+    );
     assert_single_case(&run.stdout, true);
     assert!(
         run.stdout.contains("F9-ISOLATION-OK"),
@@ -789,6 +808,11 @@ fn held_request_is_released_when_the_client_disconnects() {
     assert!(
         !run.stdout.contains(DETACHED),
         "a production worker could not be joined; child termination is containment, not acceptance",
+    );
+    assert!(
+        !run.stdout.contains(WORKER_PANIC),
+        "a proxy worker panicked during teardown\nstdout:\n{}",
+        run.stdout,
     );
     assert_single_case(&run.stdout, true);
     assert!(

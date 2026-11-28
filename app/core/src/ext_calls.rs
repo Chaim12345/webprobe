@@ -224,7 +224,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
             let url = args["url"].as_str().unwrap_or_default().to_string();
             let mut rule = crate::net::ScopeRule::include(url, false);
             rule.include = op == "scope.include";
-            shared.scope.lock().unwrap().push(rule);
+            shared.scope.lock().push(rule);
             shared.wake();
             Ok(Value::Null)
         }
@@ -244,7 +244,6 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
             shared
                 .issues
                 .lock()
-                .unwrap()
                 .iter()
                 .map(|i| json!({"name": i.name, "detail": i.detail, "severity": i.sev, "confidence": i.confidence, "baseUrl": format!("https://{}{}", i.host, i.path)}))
                 .collect(),
@@ -258,7 +257,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
             let req = b64(args, "request").ok_or("no request")?;
             let id = shared.rep.new_tab_id();
             let name = args["name"].as_str().filter(|n| !n.is_empty()).map(str::to_string).unwrap_or_else(|| id.to_string());
-            shared.repeaters.lock().unwrap().push(crate::net::RepTab {
+            shared.repeaters.lock().push(crate::net::RepTab {
                 id,
                 name,
                 host: args["host"].as_str().unwrap_or_default().to_string(),
@@ -278,13 +277,13 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
         "intruder.send" => {
             let req = b64(args, "request").ok_or("no request")?;
             let (target, https) = origin(args);
-            shared.tool_sends.lock().unwrap().push(ToolSend::Intruder { request: String::from_utf8_lossy(&req).into_owned(), target, https });
+            shared.tool_sends.lock().push(ToolSend::Intruder { request: String::from_utf8_lossy(&req).into_owned(), target, https });
             shared.wake();
             Ok(Value::Null)
         }
         "comparer.send" | "decoder.send" => {
             let items: Vec<String> = args["items"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).filter_map(|x| util::b64_decode(x).ok()).map(|b| String::from_utf8_lossy(&b).into_owned()).collect()).unwrap_or_default();
-            let mut sends = shared.tool_sends.lock().unwrap();
+            let mut sends = shared.tool_sends.lock();
             for item in items {
                 sends.push(if op == "decoder.send" { ToolSend::Decoder(item) } else { ToolSend::Comparer(item) });
             }
@@ -297,12 +296,12 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
             let resp = b64(args, "response").unwrap_or_default();
             let parts = util::parse_http(&req);
             let name = format!("{} {}", parts.method, parts.path);
-            shared.organizer.lock().unwrap().add(&name, "", &String::from_utf8_lossy(&req), &String::from_utf8_lossy(&resp), util::now_secs());
+            shared.organizer.lock().add(&name, "", &String::from_utf8_lossy(&req), &String::from_utf8_lossy(&resp), util::now_secs());
             shared.wake();
             Ok(Value::Null)
         }
         "organizer.items" => Ok(Value::Array(
-            shared.organizer.lock().unwrap().list().into_iter().map(|i| {
+            shared.organizer.lock().list().into_iter().map(|i| {
                 let host = i.request.lines().skip(1).take_while(|l| !l.is_empty()).find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case("host")).map(|(_, v)| v.trim().to_string())).unwrap_or_default();
                 let (h, port) = match host.rsplit_once(':') {
                     Some((h, p)) if p.parse::<u16>().is_ok() => (h.to_string(), p.parse::<u16>().unwrap_or(80)),
@@ -316,10 +315,10 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
             }).collect(),
         )),
         "cookiejar.cookies" => Ok(Value::Array(
-            shared.cookie_jar.lock().unwrap().cookies.iter().map(|c| json!({"name": c.name, "value": c.value, "domain": c.domain, "path": c.path, "expires": c.expires})).collect(),
+            shared.cookie_jar.lock().cookies.iter().map(|c| json!({"name": c.name, "value": c.value, "domain": c.domain, "path": c.path, "expires": c.expires})).collect(),
         )),
         "cookiejar.set" => {
-            let mut jar = shared.cookie_jar.lock().unwrap();
+            let mut jar = shared.cookie_jar.lock();
             let name = args["name"].as_str().unwrap_or_default().to_string();
             let domain = args["domain"].as_str().unwrap_or_default().trim_start_matches('.').to_ascii_lowercase();
             let path = args["path"].as_str().unwrap_or("/").to_string();
@@ -420,10 +419,7 @@ mod tests {
         );
         let req = util::b64_encode(b"GET /r HTTP/1.1\r\nHost: r.test\r\n\r\n");
         dispatch(&shared, "x", "repeater.send", &json!({"request": req, "host": "r.test", "port": 80, "secure": false, "name": "From ext"})).unwrap();
-        assert_eq!(
-            shared.repeaters.lock().unwrap().last().unwrap().name,
-            "From ext"
-        );
+        assert_eq!(shared.repeaters.lock().last().unwrap().name, "From ext");
         dispatch(
             &shared,
             "x",
@@ -447,7 +443,7 @@ mod tests {
             &json!({"issues": [issue]}),
         )
         .unwrap();
-        let i = shared.issues.lock().unwrap()[0].clone();
+        let i = shared.issues.lock()[0].clone();
         assert_eq!(
             (
                 i.host.as_str(),

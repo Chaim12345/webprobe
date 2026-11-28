@@ -1,10 +1,11 @@
 //! R-05: an in-process HTTP/2 client against the proxy listener (CONNECT,
 //! TLS with ALPN h2) and against the bare server role (hardening).
 
+use crate::sync::Mutex;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use crate::h2::{Frame, PREFACE, parse_frame, write_frame};
@@ -93,7 +94,7 @@ fn upstream(shared: &Shared, release: Arc<Mutex<Option<mpsc::Receiver<()>>>>) ->
                         let _ = tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n");
                         let _ = tls.write_all(b"f\r\ndata: event 1\n\n\r\n");
                         let _ = tls.flush();
-                        let rx = release.lock().unwrap().take();
+                        let rx = release.lock().take();
                         if let Some(rx) = rx {
                             let _ = rx.recv_timeout(Duration::from_secs(30));
                         }
@@ -422,13 +423,13 @@ fn an_h2_response_can_be_intercepted_and_edited() {
     let shared = proxy();
     let port = upstream(&shared, Arc::new(Mutex::new(None)));
     shared.intercept_on.store(true, Ordering::SeqCst);
-    shared.response_rules.lock().unwrap().enabled = true;
+    shared.response_rules.lock().update(|r| r.enabled = true);
     let editor = {
         let shared = shared.clone();
         std::thread::spawn(move || {
             let mut handled = 0;
             for _ in 0..3000 {
-                if let Some(item) = shared.queue.lock().unwrap().pop() {
+                if let Some(item) = shared.queue.lock().pop() {
                     let _ = item
                         .tx
                         .send(Some(item.edited.replace("original", "edited!!")));

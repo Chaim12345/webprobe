@@ -74,8 +74,8 @@ fn browser_recovery_waits_for_the_login_and_uses_the_new_cookie() {
     let mut r = rule("check session", BROWSER_RECOVERY, &["Scanner"]);
     r.check = "please login".into();
     r.check_invalid_on_match = true;
-    shared.session_rules.lock().unwrap().push(r);
-    shared.cookie_jar.lock().unwrap().apply_to = vec!["Scanner".into()];
+    shared.session_rules.lock().push(r);
+    shared.cookie_jar.lock().apply_to = vec!["Scanner".into()];
     let req = format!("GET /account HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes();
     let sh = shared.clone();
     let worker =
@@ -93,7 +93,7 @@ fn browser_recovery_waits_for_the_login_and_uses_the_new_cookie() {
     let login = "HTTP/1.1 302 Found\r\nSet-Cookie: session=fresh; Path=/\r\n\r\n"
         .to_string()
         .into_bytes();
-    shared.cookie_jar.lock().unwrap().update_from_response(
+    shared.cookie_jar.lock().update_from_response(
         "127.0.0.1",
         "/login",
         &login,
@@ -109,14 +109,14 @@ fn browser_recovery_waits_for_the_login_and_uses_the_new_cookie() {
 fn check_session_logs_in_once_and_only_for_tools_in_scope() {
     let shared = Shared::new();
     let (port, logins) = app();
-    shared.macros.lock().unwrap().push(Macro {
+    shared.macros.lock().push(Macro {
         name: "login".into(),
         request: format!("GET /login HTTP/1.1\nHost: 127.0.0.1:{port}"),
     });
     let mut check = rule("check session", "login", &["Scanner"]);
     check.check = "please LOG in".into(); // case-insensitive
     check.check_invalid_on_match = true;
-    shared.session_rules.lock().unwrap().push(check);
+    shared.session_rules.lock().push(check);
     let req =
         format!("GET /protected HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
 
@@ -151,7 +151,6 @@ fn check_session_logs_in_once_and_only_for_tools_in_scope() {
         shared
             .cookie_jar
             .lock()
-            .unwrap()
             .cookies
             .iter()
             .any(|c| c.name == "sid" && c.value == "ok")
@@ -162,12 +161,12 @@ fn check_session_logs_in_once_and_only_for_tools_in_scope() {
 fn header_cookie_and_post_request_actions_apply_in_order() {
     let shared = Shared::new();
     let (port, logins) = app();
-    shared.macros.lock().unwrap().push(Macro {
+    shared.macros.lock().push(Macro {
         name: "ping".into(),
         request: format!("GET /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
     });
     {
-        let mut rules = shared.session_rules.lock().unwrap();
+        let mut rules = shared.session_rules.lock();
         rules.push(rule("set header", "X-Session: abc", &["Intruder"]));
         rules.push(rule("set cookie", "role=admin", &["Intruder"]));
         rules.push(rule("post-request macro", "ping", &["Intruder"]));
@@ -249,13 +248,13 @@ fn multi_step_macro_derives_a_token_and_carries_cookies() {
         "{sent}"
     );
     // Both steps' cookies are now in the jar for later tool requests.
-    let jar = shared.cookie_jar.lock().unwrap();
+    let jar = shared.cookie_jar.lock();
     let mut names: Vec<&str> = jar.cookies.iter().map(|c| c.name.as_str()).collect();
     names.sort();
     assert_eq!(names, ["flow", "sid"]);
     drop(jar);
     // By name, the stored macro returns its last response.
-    shared.macros.lock().unwrap().push(Macro {
+    shared.macros.lock().push(Macro {
         name: "flow".into(),
         request: text,
     });
@@ -287,12 +286,12 @@ fn recorded_login_supplies_a_bearer_token_to_later_requests() {
         }
     });
     let shared = Shared::new();
-    shared.macros.lock().unwrap().push(Macro {
+    shared.macros.lock().push(Macro {
             name: "login".into(),
             request: format!("POST /login HTTP/1.1\nHost: 127.0.0.1:{port}\nContent-Type: application/json\nContent-Length: 2\n\n{{}}"),
         });
     {
-        let mut rules = shared.session_rules.lock().unwrap();
+        let mut rules = shared.session_rules.lock();
         let mut check = rule("check session", "login", &["Repeater"]);
         check.check = "401 unauthorised".into();
         rules.push(check);
@@ -324,7 +323,7 @@ fn recorded_login_supplies_a_bearer_token_to_later_requests() {
 fn proxy_rules_need_proxy_in_their_tool_scope() {
     let shared = Shared::new();
     {
-        let mut rules = shared.session_rules.lock().unwrap();
+        let mut rules = shared.session_rules.lock();
         rules.push(rule("set header", "X-Tools: 1", &["Scanner", "Repeater"]));
         rules.push(rule("set header", "X-Proxy: 1", &["Proxy"]));
     }
@@ -375,17 +374,16 @@ fn post_request_macros_do_not_change_the_outer_reusable_outcome() {
         (port, "/ka", true),
     ] {
         let shared = Shared::new();
-        shared.macros.lock().unwrap().push(Macro {
+        shared.macros.lock().push(Macro {
             name: "login".into(),
             request: format!(
                 "POST /login HTTP/1.1\nHost: 127.0.0.1:{macro_port}\nContent-Length: 2\n\n{{}}"
             ),
         });
-        shared.session_rules.lock().unwrap().push(rule(
-            "post-request macro",
-            "login",
-            &["Repeater"],
-        ));
+        shared
+            .session_rules
+            .lock()
+            .push(rule("post-request macro", "login", &["Repeater"]));
         let _t = tool_scope("Repeater");
         let req = format!("GET {outer_path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
         LAST_EXCHANGE_REUSABLE.with(|c| c.set(!expect));

@@ -240,7 +240,7 @@ impl Store {
 /// bytes whose final size is not known yet (a streaming response being
 /// recorded). `None` when there is no store directory.
 pub fn scratch_file() -> Option<std::fs::File> {
-    let dir = store().lock().unwrap().dir.clone()?;
+    let dir = store().lock().dir.clone()?;
     std::fs::create_dir_all(&dir).ok()?;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = dir.join(format!(
@@ -283,7 +283,7 @@ pub fn spill(body: &Body) -> Body {
     if body.is_stored() || body.len() < MIN_SPILL {
         return body.clone();
     }
-    let mut st = store().lock().unwrap();
+    let mut st = store().lock();
     if st.retry_at.is_some_and(|t| std::time::Instant::now() < t) {
         return body.clone();
     }

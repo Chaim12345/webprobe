@@ -3,12 +3,11 @@
 Source pin: `692f09728039884c59a676ff314879c06dcb1cf5` (parity/2026-11-17).
 Branch: `goal/ar09-binary-tool-state-20261125`.
 
-## Status: source-only artifact, runtime HOLD still in force
+## Status: merged; the fixtures run in CI
 
-Nothing in this revision was built, linked, executed or checked. No cargo command, no test
-binary, no script touching project code, no installs. The only tool run was a standalone
-`rustfmt` on copies of the changed test files in `/tmp` (formatter already present from the
-earlier, recorded deviation).
+This note was written on `goal/ar09-binary-tool-state-20261125` before its cases had run. #236
+integrated the branch; `cargo test --workspace --locked` in CI now builds and runs both the core
+and app cases. Nothing here was re-measured for this note.
 
 ## What the cases are
 
@@ -49,7 +48,7 @@ earlier, recorded deviation).
   fail-closed inspection, and parent rejection of an Intruder settle failure
   (`AR09-INTRUDER-CLEANUP-FAILED`).
 
-## Coverage at the earlier run (`a3345a2`), not re-run
+## Coverage at the earlier run (`a3345a2`), not re-measured here
 
 - `app/core/tests/ar09_binary_tool_state.rs`: 2 cases passed (control plus characterisation).
 - `app/src/ar09_binary_tool_state_tests.rs`: 2 send-path cases passed driving the real app code
@@ -59,8 +58,8 @@ earlier, recorded deviation).
   `00 ef bf bd ef bf bd 00 ef bf bd 28` (12 bytes) under `Content-Length: 6`; the Intruder chain
   sent the same 12 bytes with Content-Length restamped to 12.
 
-The next run is expected to report 3 app cases (two isolated send-path cases plus the
-discriminating split fixture) and 2 core cases.
+CI now runs 3 app cases (two isolated send-path cases plus the discriminating split fixture)
+and 2 core cases.
 
 Claim limits: a converted body plus a declared-length mismatch on one connection. Malformed
 framing and data loss only; no desync or connection-reuse claim.

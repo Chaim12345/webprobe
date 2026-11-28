@@ -282,7 +282,7 @@ pub(crate) fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cm
     let ids: Vec<u64> = entries.iter().map(|e| e.id).collect();
     match cmd {
         "scope" => {
-            let mut scope = app.shared.scope.lock().unwrap();
+            let mut scope = app.shared.scope.lock();
             let mut added = std::collections::BTreeSet::new();
             for e in entries {
                 let rule = format!("{}://{}", if e.https { "https" } else { "http" }, e.host);
@@ -331,7 +331,7 @@ pub(crate) fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cm
                     .as_ref()
                     .map(|r| String::from_utf8_lossy(r).into_owned())
                     .unwrap_or_default();
-                app.shared.organizer.lock().unwrap().add(
+                app.shared.organizer.lock().add(
                     &format!("{} {}", e.method, e.path),
                     "",
                     &req_text,
@@ -429,6 +429,7 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
         || total < app.hist_cache_len
         || (total > app.hist_cache_len && !newest_first)
     {
+        let filter = app.hist_filter.compile(&app.shared);
         let bambda_column = app.bambdas.tables.history.column_run();
         let custom_column = |e: &net::HistEntry| {
             crate::bambda_tables::cell_text(bambda_column.as_deref().and_then(|a| a.cell(e.id)))
@@ -437,10 +438,7 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
             app.shared.history.with_rows(|history| {
                 history_view(
                     history,
-                    |e| {
-                        app.hist_filter.matches(e, &app.shared)
-                            && app.bambdas.tables.history.keeps(e.id)
-                    },
+                    |e| filter.matches(e) && app.bambdas.tables.history.keeps(e.id),
                     &app.hist_table,
                     Some(&custom_column),
                 )
@@ -451,11 +449,11 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
         app.hist_cache_key = key;
         app.hist_cache_len = total;
     } else if total > app.hist_cache_len {
+        let filter = app.hist_filter.compile(&app.shared);
         let fresh = {
             app.shared.history.with_rows(|history| {
                 history_new_rows(history, app.hist_cache_len, |e| {
-                    app.hist_filter.matches(e, &app.shared)
-                        && app.bambdas.tables.history.keeps(e.id)
+                    filter.matches(e) && app.bambdas.tables.history.keeps(e.id)
                 })
             })
         };
@@ -882,7 +880,6 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
                 app.shared
                     .scope
                     .lock()
-                    .unwrap()
                     .push(net::ScopeRule::include(rule, false));
                 app.shared.log(&format!("Added {} to target scope", e.host));
             }

@@ -83,7 +83,7 @@ fn pattern_matches_literal_regex_and_invalid_regex() {
 }
 
 fn scope(shared: &Shared, rules: Vec<ScopeRule>) {
-    *shared.scope.lock().unwrap() = rules;
+    *shared.scope.lock() = rules.into();
 }
 
 #[test]
@@ -128,6 +128,48 @@ fn disabled_scope_rules_are_ignored() {
     exc.enabled = false;
     scope(&shared, vec![exc]);
     assert!(in_scope(&shared, "http://bad.test/"));
+}
+
+/// #246: a blank rule is the one the scope editor creates before the user
+/// types a pattern. As an exclusion it must select nothing, not everything.
+#[test]
+fn blank_exclusion_rule_is_ignored() {
+    let shared = Shared::new();
+    let mut blank = ScopeRule::include("", false);
+    blank.include = false;
+    scope(&shared, vec![blank]);
+    assert!(in_scope(&shared, "http://any.test/home"));
+    assert!(in_scope(&shared, "https://other.test/path"));
+
+    // Whitespace only is blank too, and a blank rule beside a real include
+    // removes nothing.
+    let mut spaces = ScopeRule::include("   ", false);
+    spaces.include = false;
+    scope(
+        &shared,
+        vec![ScopeRule::include("only.test", false), spaces],
+    );
+    assert!(in_scope(&shared, "http://only.test/x"));
+    assert!(!in_scope(&shared, "http://other.test/x"));
+}
+
+/// #246: an invalid regex never matches. As an exclusion that leaves every
+/// URL in scope; as the only include rule it selects nothing.
+#[test]
+fn invalid_regex_scope_rule_never_matches() {
+    let shared = Shared::new();
+    let mut exclude = ScopeRule::include("(unclosed", true);
+    exclude.include = false;
+    scope(&shared, vec![exclude]);
+    assert!(
+        in_scope(&shared, "http://any.test/"),
+        "an invalid exclusion must not exclude anything"
+    );
+    scope(&shared, vec![ScopeRule::include("(unclosed", true)]);
+    assert!(
+        !in_scope(&shared, "http://any.test/"),
+        "an invalid include selects nothing"
+    );
 }
 
 #[test]

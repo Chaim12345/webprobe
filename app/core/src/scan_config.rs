@@ -100,22 +100,12 @@ pub fn shared_config(
 
 use std::collections::BTreeSet;
 
-/// Burp's insertion point types, as (key, label): AuditDefaults.json
-/// scanner.insertion_point_types (insert_url_params, insert_body_params,
-/// insert_cookies, insert_param_name, insert_http_headers,
-/// insert_entire_body, insert_url_path_folders, insert_url_path_filename).
-/// A key is stored only when switched off, so a configuration saved before
-/// a type existed loads with that type on, as in Burp's defaults.
-pub const INSERTION_TYPES: [(&str, &str); 8] = [
-    ("url", "URL parameter values"),
-    ("body", "Body parameter values"),
-    ("cookie", "Cookie parameter values"),
-    ("param_name", "Parameter name"),
-    ("header", "HTTP headers"),
-    ("entire_body", "Entire body"),
-    ("folder", "URL path folders"),
-    ("filename", "URL path filename"),
-];
+/// Burp's insertion point types, one table with the Settings label and the
+/// project key (defined next to the kind vocabulary in
+/// `webprobe_support::insertion`). A key is stored only when switched off,
+/// so a configuration saved before a type existed loads with that type on,
+/// as in Burp's defaults.
+pub use webprobe_support::insertion::INSERTION_TYPES;
 
 /// "Use nested insertion points" (AuditDefaults.json
 /// scanner.misc_insertion_point_options.use_nested_insertion_points, on by
@@ -263,19 +253,6 @@ impl ScanConfig {
     }
 }
 
-/// Burp's insertion point switches and WebProbe's keys for them
-/// ([`INSERTION_TYPES`]).
-pub(crate) const INSERTION_KEYS: [(&str, &str); 8] = [
-    ("insert_url_params", "url"),
-    ("insert_body_params", "body"),
-    ("insert_cookies", "cookie"),
-    ("insert_param_name", "param_name"),
-    ("insert_http_headers", "header"),
-    ("insert_entire_body", "entire_body"),
-    ("insert_url_path_folders", "folder"),
-    ("insert_url_path_filename", "filename"),
-];
-
 pub(crate) const SPEEDS: [&str; 3] = ["fast", "normal", "thorough"];
 pub(crate) const ACCURACIES: [&str; 3] = [
     "minimise_false_negatives",
@@ -297,10 +274,10 @@ pub fn config_to_tree(c: &ScanConfig, speed: u8, accuracy: u8) -> serde_json::Va
             selected: None,
         });
     let mut ipt = serde_json::Map::new();
-    for (burp, key) in INSERTION_KEYS {
+    for t in &INSERTION_TYPES {
         ipt.insert(
-            burp.into(),
-            serde_json::Value::Bool(c.insertion_enabled(key)),
+            t.burp.into(),
+            serde_json::Value::Bool(c.insertion_enabled(t.key)),
         );
     }
     let selected: Vec<serde_json::Value> = f
@@ -347,10 +324,9 @@ mod tests {
     #[test]
     fn http2_is_on_until_the_project_turns_it_off() {
         let shared = crate::net::Shared::new();
-        let http2 =
-            |shared: &crate::net::Shared| shared_config(shared).lock().unwrap().http.http2_enabled;
+        let http2 = |shared: &crate::net::Shared| shared_config(shared).lock().http.http2_enabled;
         assert!(http2(&shared), "Burp's default is on");
-        shared_config(&shared).lock().unwrap().http.http2_enabled = false;
+        shared_config(&shared).lock().http.http2_enabled = false;
         assert!(!http2(&shared));
     }
 
@@ -391,7 +367,7 @@ mod tests {
             "checks added later load on"
         );
         assert!(
-            INSERTION_TYPES.iter().all(|(k, _)| c.insertion_enabled(k))
+            INSERTION_TYPES.iter().all(|t| c.insertion_enabled(t.key))
                 && c.insertion_enabled(NESTED_KEY)
         );
         let odd = ProjectScanner {

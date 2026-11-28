@@ -293,14 +293,14 @@ mod tests {
             std::env::temp_dir().join(format!("wp-project-start-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let mut app = App::new(net::Shared::new());
+        let mut app = App::new(net::Shared::in_memory());
         app.project_path = dir.join("original.json").display().to_string();
         app.shared.push_history(net::HistEntry {
             id: 77,
             host: "previous-project.test".into(),
             ..Default::default()
         });
-        app.shared.issues.lock().unwrap().push(scan::ScanIssue {
+        app.shared.issues.lock().push(scan::ScanIssue {
             id: 78,
             name: "previous finding".into(),
             ..Default::default()
@@ -309,7 +309,7 @@ mod tests {
             host: "previous-project.test".into(),
             ..Default::default()
         });
-        app.shared.repeaters.lock().unwrap().push(net::RepTab {
+        app.shared.repeaters.lock().push(net::RepTab {
             id: 79,
             name: "previous request".into(),
             host: "previous-project.test".into(),
@@ -323,21 +323,17 @@ mod tests {
             response_sources: Vec::new(),
             ws: None,
         });
-        app.shared
-            .tasks
-            .lock()
-            .unwrap()
-            .push(crate::tasks::ScanTask {
-                id: 80,
-                name: "previous scan".into(),
-                kind: crate::tasks::TaskKind::Audit(Vec::new()),
-                state: crate::tasks::TaskState::Paused,
-                done: 0,
-                total: Some(0),
-                issues_found: 0,
-                created: 0,
-                finished: None,
-            });
+        app.shared.tasks.lock().push(crate::tasks::ScanTask {
+            id: 80,
+            name: "previous scan".into(),
+            kind: crate::tasks::TaskKind::Audit(Vec::new()),
+            state: crate::tasks::TaskState::Paused,
+            done: 0,
+            total: Some(0),
+            issues_found: 0,
+            created: 0,
+            finished: None,
+        });
         app.log_sel = Some(1);
         app.log_seen = 77;
         app.decoder.input = "previous secret".into();
@@ -351,15 +347,15 @@ mod tests {
             "new project inherited HTTP history"
         );
         assert!(
-            app.shared.issues.lock().unwrap().is_empty(),
+            app.shared.issues.lock().is_empty(),
             "new project inherited findings"
         );
         assert!(
             app.logger.entries.is_empty(),
             "project inherited Logger rows"
         );
-        assert!(app.shared.repeaters.lock().unwrap().is_empty());
-        assert!(app.shared.tasks.lock().unwrap().is_empty());
+        assert!(app.shared.repeaters.lock().is_empty());
+        assert!(app.shared.tasks.lock().is_empty());
         assert!(app.log_sel.is_none());
         assert_eq!(app.log_seen, 0);
         assert!(

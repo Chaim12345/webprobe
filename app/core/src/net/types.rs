@@ -59,7 +59,7 @@ pub fn resolve_ip(shared: &Shared, host: &str) -> String {
         return String::new();
     }
     {
-        let cache = shared.ip_cache.lock().unwrap();
+        let cache = shared.ip_cache.lock();
         if let Some(ip) = cache.get(host) {
             return ip.clone();
         }
@@ -70,7 +70,7 @@ pub fn resolve_ip(shared: &Shared, host: &str) -> String {
         .map(|a| a.ip().to_string())
         .unwrap_or_default();
     {
-        let mut cache = shared.ip_cache.lock().unwrap();
+        let mut cache = shared.ip_cache.lock();
         if cache.len() > 4096 {
             cache.clear();
         }
@@ -196,6 +196,94 @@ impl ResponseInterceptRules {
     }
 }
 
+/// [`ResponseInterceptRules`] with both patterns compiled once, when the
+/// rules are edited: response handling never compiles a regex.
+#[derive(Clone, Default)]
+pub struct CompiledResponseInterceptRules {
+    rules: ResponseInterceptRules,
+    content_type: Option<regex::Regex>,
+    status_not: Option<regex::Regex>,
+}
+
+impl CompiledResponseInterceptRules {
+    pub fn new(rules: ResponseInterceptRules) -> Self {
+        let compile = |pattern: &str| {
+            regex::RegexBuilder::new(pattern)
+                .case_insensitive(true)
+                .build()
+                .ok()
+        };
+        let content_type = (rules.enabled && rules.content_type_on)
+            .then(|| compile(&rules.content_type))
+            .flatten();
+        let status_not = (rules.enabled && rules.status_not_on)
+            .then(|| compile(&rules.status_not))
+            .flatten();
+        Self {
+            rules,
+            content_type,
+            status_not,
+        }
+    }
+
+    pub fn rules(&self) -> &ResponseInterceptRules {
+        &self.rules
+    }
+
+    pub fn into_rules(self) -> ResponseInterceptRules {
+        self.rules
+    }
+
+    /// Edit the rules and recompile in one step (the UI and project load).
+    pub fn update(&mut self, edit: impl FnOnce(&mut ResponseInterceptRules)) {
+        edit(&mut self.rules);
+        *self = Self::new(std::mem::take(&mut self.rules));
+    }
+
+    /// Same evaluation as [`ResponseInterceptRules::matches`], with the two
+    /// patterns taken from the compiled copies.
+    pub fn matches(&self, content_type: &str, status: &str, req: ReqState, in_scope: bool) -> bool {
+        if !self.rules.enabled {
+            return false;
+        }
+        let hit =
+            |re: &Option<regex::Regex>, text: &str| re.as_ref().is_some_and(|r| r.is_match(text));
+        let rules: [(bool, bool, bool); 5] = [
+            (
+                self.rules.content_type_on,
+                false,
+                hit(&self.content_type, content_type),
+            ),
+            (self.rules.was_modified, false, req.edited),
+            (self.rules.was_intercepted, false, req.held),
+            (
+                self.rules.status_not_on,
+                true,
+                !hit(&self.status_not, status),
+            ),
+            (self.rules.in_scope, true, in_scope),
+        ];
+        let mut acc: Option<bool> = None;
+        for (on, is_and, result) in rules {
+            if !on {
+                continue;
+            }
+            acc = Some(match acc {
+                None => result,
+                Some(a) if is_and => a && result,
+                Some(a) => a || result,
+            });
+        }
+        acc.unwrap_or(true)
+    }
+}
+
+impl From<ResponseInterceptRules> for CompiledResponseInterceptRules {
+    fn from(rules: ResponseInterceptRules) -> Self {
+        Self::new(rules)
+    }
+}
+
 pub struct InterceptItem {
     pub id: u64,
     pub host: String,
@@ -281,26 +369,6 @@ pub fn diff_attrs(e: &HistEntry) -> Vec<(String, String)> {
     attrs
 }
 
-#[derive(Clone)]
-pub struct AttackRow {
-    pub payload: String,
-    pub status: String,
-    pub len: usize,
-    pub ms: u128,
-    pub ok: bool,
-    /// The request sent and the response received (attack results window).
-    pub req: Vec<u8>,
-    pub resp: Option<Vec<u8>>,
-}
-
-pub struct Attack {
-    pub running: AtomicBool,
-    pub stop: AtomicBool,
-    pub done: AtomicUsize,
-    pub total: AtomicUsize,
-    pub rows: Mutex<Vec<AttackRow>>,
-}
-
 /// Actual request/target which produced one Repeater history response.
 #[derive(Clone)]
 pub struct RepResponseSource {
@@ -329,4 +397,43 @@ pub struct RepTab {
     pub response_sources: Vec<Option<RepResponseSource>>,
     /// A WebSocket Repeater tab: its session (in `Shared::tool_state`).
     pub ws: Option<u64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compiled_response_rules_match_the_plain_evaluation() {
+        let plain = ResponseInterceptRules::default();
+        let compiled = CompiledResponseInterceptRules::new(plain.clone());
+        let st = ReqState::default();
+        assert_eq!(
+            compiled.matches("text/html", "304", st, false),
+            plain.matches("text/html", "304", st, false)
+        );
+
+        let mut on = plain.clone();
+        on.enabled = true;
+        on.content_type_on = false;
+        let compiled = CompiledResponseInterceptRules::new(on.clone());
+        for status in ["304", "200"] {
+            for (ct, scope) in [("text/html", false), ("image/png", true)] {
+                assert_eq!(
+                    compiled.matches(ct, status, st, scope),
+                    on.matches(ct, status, st, scope),
+                    "{ct} {status} {scope}"
+                );
+            }
+        }
+        // 304 is excluded by the default status rule, so 200 is held.
+        assert!(compiled.matches("text/html", "200", st, false));
+        assert!(!compiled.matches("text/html", "304", st, false));
+
+        // update() recompiles the patterns.
+        let mut live = compiled;
+        live.update(|r| r.status_not = "^500$".into());
+        assert!(!live.matches("text/html", "500", st, false));
+        assert!(live.matches("text/html", "304", st, false));
+    }
 }

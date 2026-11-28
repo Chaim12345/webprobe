@@ -419,7 +419,7 @@ pub(crate) fn burp_ai(app: &mut App, ui: &mut Ui) {
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("New chat").clicked() {
-                app.ai.messages.lock().unwrap().clear();
+                app.ai.messages.lock().clear();
             }
         });
     });
@@ -441,7 +441,7 @@ pub(crate) fn burp_ai(app: &mut App, ui: &mut Ui) {
             hint(ui, "Requests and responses you send to WebProbe AI are transmitted to this endpoint. Use a local model server to keep traffic on your machine.");
         });
     ui.add_space(6.0);
-    let msgs = app.ai.messages.lock().unwrap().clone();
+    let msgs = app.ai.messages.lock().clone();
     let busy = app.ai.busy.load(Ordering::SeqCst);
     let h = (ui.available_height() - 90.0).max(120.0);
     egui::ScrollArea::vertical().id_salt("ai_chat").max_height(h).auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
@@ -871,7 +871,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                             .clicked()
                         {
                             let (id, name) = {
-                                let mut org = app.shared.organizer.lock().unwrap();
+                                let mut org = app.shared.organizer.lock();
                                 let id = org.add_collection("");
                                 let name = org
                                     .collections
@@ -902,7 +902,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                 // (newest first), matching Burp's rail. The Inbox shows an
                 // orange dot when items arrived while it was not selected.
                 let sel = app.org_coll == 0;
-                let inbox_new = app.shared.organizer.lock().unwrap().inbox_new;
+                let inbox_new = app.shared.organizer.lock().inbox_new;
                 if rail_row(ui, theme::icon::TRAY, "Inbox", sel, inbox_new > 0 && !sel).clicked() {
                     app.org_coll = 0;
                     app.org_sel = None;
@@ -916,7 +916,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                 );
                 ui.add_space(4.0);
                 let rail: Vec<(u64, String)> = {
-                    let org = app.shared.organizer.lock().unwrap();
+                    let org = app.shared.organizer.lock();
                     org.collections
                         .iter()
                         .rev()
@@ -939,7 +939,6 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                             app.shared
                                 .organizer
                                 .lock()
-                                .unwrap()
                                 .rename_collection(id, &buf);
                             app.org_renaming = None;
                         } else if !resp.has_focus() {
@@ -957,7 +956,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     resp.context_menu(|ui| {
                         if ui.button("Create collection").clicked() {
                             let (nid, nname) = {
-                                let mut org = app.shared.organizer.lock().unwrap();
+                                let mut org = app.shared.organizer.lock();
                                 let nid = org.add_collection("");
                                 let nname = org
                                     .collections
@@ -983,7 +982,6 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                                 .shared
                                 .organizer
                                 .lock()
-                                .unwrap()
                                 .duplicate_collection(id);
                             if let Some(nid) = nid {
                                 app.org_coll = nid;
@@ -1003,7 +1001,6 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     .shared
                     .organizer
                     .lock()
-                    .unwrap()
                     .collections
                     .iter()
                     .find(|c| c.id == app.org_coll)
@@ -1012,7 +1009,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     app.org_coll = 0;
                 }
                 if app.org_coll == 0 {
-                    app.shared.organizer.lock().unwrap().mark_inbox_seen();
+                    app.shared.organizer.lock().mark_inbox_seen();
                 }
                 // Send to Organizer files into the selected collection.
                 if app.org_tab_coll != app.org_coll {
@@ -1050,7 +1047,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                             .add_enabled(app.org_sel.is_some(), egui::Button::new("Delete"))
                             .clicked()
                             && let Some(id) = app.org_sel.take() {
-                                app.shared.organizer.lock().unwrap().remove(id);
+                                app.shared.organizer.lock().remove(id);
                             }
                     });
                 });
@@ -1091,7 +1088,6 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                         app.shared
                             .organizer
                             .lock()
-                            .unwrap()
                             .set_collection_description(app.org_coll, &desc);
                     }
                     return;
@@ -1101,7 +1097,6 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     .shared
                     .organizer
                     .lock()
-                    .unwrap()
                     .list()
                     .into_iter()
                     .filter(|i| i.collection == app.org_coll)
@@ -1157,7 +1152,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                 // Right-click move/copy targets: Inbox plus every other
                 // custom collection.
                 let targets: Vec<(u64, String)> = {
-                    let org = app.shared.organizer.lock().unwrap();
+                    let org = app.shared.organizer.lock();
                     std::iter::once((0, "Inbox".to_string()))
                         .chain(org.collections.iter().map(|c| (c.id, c.name.clone())))
                         .filter(|(cid, _)| *cid != app.org_coll)
@@ -1243,7 +1238,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                             }
                             if let Some((item_id, kind, cid)) = act {
                                 {
-                                    let mut org = app.shared.organizer.lock().unwrap();
+                                    let mut org = app.shared.organizer.lock();
                                     if kind == 0 {
                                         org.move_item(item_id, cid);
                                     } else {
@@ -1258,7 +1253,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                         col.cell(|ui| {
                             let Some(id) = app.org_sel else { return };
                             let Some(mut item) =
-                                app.shared.organizer.lock().unwrap().get(id).cloned()
+                                app.shared.organizer.lock().get(id).cloned()
                             else {
                                 return;
                             };
@@ -1274,7 +1269,6 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                                     app.shared
                                         .organizer
                                         .lock()
-                                        .unwrap()
                                         .set_note(id, &item.note);
                                 }
                             });
@@ -1394,11 +1388,7 @@ fn organizer_modals(app: &mut App, ctx: &egui::Context) {
                 });
                 if commit {
                     let buf = app.org_rename_buf.clone();
-                    app.shared
-                        .organizer
-                        .lock()
-                        .unwrap()
-                        .rename_collection(id, &buf);
+                    app.shared.organizer.lock().rename_collection(id, &buf);
                     done = true;
                 }
             });
@@ -1441,7 +1431,7 @@ fn organizer_modals(app: &mut App, ctx: &egui::Context) {
         if done {
             // The collection goes; its items move to the Inbox (D-CEO-02),
             // they are not deleted.
-            app.shared.organizer.lock().unwrap().remove_collection(id);
+            app.shared.organizer.lock().remove_collection(id);
             if app.org_coll == id {
                 app.org_coll = 0;
                 app.org_sel = None;
@@ -1454,7 +1444,7 @@ fn organizer_modals(app: &mut App, ctx: &egui::Context) {
     if let Some(id) = app.org_share_modal {
         let mut cancel = false;
         let export = {
-            let org = app.shared.organizer.lock().unwrap();
+            let org = app.shared.organizer.lock();
             let c = org.collections.iter().find(|c| c.id == id);
             let items: Vec<serde_json::Value> = org
                 .items
