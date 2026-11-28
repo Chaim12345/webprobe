@@ -595,7 +595,69 @@ final class Engine {
          .on("registerPassiveScanCheck", a -> reg(PASSIVE, (PassiveScanCheck) a[0]))
          .on("registerScanCheck", a -> reg(LEGACY, (ScanCheck) a[0]))
          .on("registerInsertionPointProvider", a -> reg(POINT_PROVIDERS, (AuditInsertionPointProvider) a[0]))
-         .on("registerAuditIssueHandler", a -> issueHandler((burp.api.montoya.scanner.audit.AuditIssueHandler) a[0]));
+         .on("registerAuditIssueHandler", a -> issueHandler((burp.api.montoya.scanner.audit.AuditIssueHandler) a[0]))
+         .on("generateReport", a -> { report((List<AuditIssue>) a[0], String.valueOf(a[1]), (java.nio.file.Path) a[2]); return null; });
+    }
+
+    private static String xmlText(String s) {
+        return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    /** CDATA cannot hold "]]>"; it is split across two sections. */
+    private static String cdata(String s) {
+        return "<![CDATA[" + (s == null ? "" : s.replace("]]>", "]]]]><![CDATA[>")) + "]]>";
+    }
+
+    private static String label(Object level) {
+        String name = String.valueOf(level).toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
+        return name.isEmpty() ? name : Character.toUpperCase(name.charAt(0)) + name.substring(1);
+    }
+
+    /** Scanner.generateReport: the given issues as a report file. XML uses
+     *  the element names of Burp's issue export (serialNumber, name, host,
+     *  path, severity, confidence, issueDetail, remediationDetail) so tools
+     *  that read one read the other; HTML is one section per issue. The
+     *  sidecar writes it itself, so it works wherever extensions run.
+     *  Requests and responses are not included. */
+    static void report(List<AuditIssue> issues, String format, java.nio.file.Path path) {
+        if (issues == null || path == null) throw new IllegalArgumentException("generateReport needs issues and a path");
+        StringBuilder b = new StringBuilder();
+        boolean xml = "XML".equals(format);
+        if (xml) b.append("<?xml version=\"1.0\"?>\r\n<issues burpVersion=\"WebProbe\" exportTime=\"").append(xmlText(new java.util.Date().toString())).append("\">\r\n");
+        else b.append("<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Scan report</title></head><body>\n<h1>Scan report</h1>\n<p>").append(issues.size()).append(" issue(s)</p>\n");
+        int serial = 0;
+        for (AuditIssue i : issues) {
+            serial++;
+            String base = i.baseUrl() == null ? "" : i.baseUrl();
+            String origin = base, pathPart = "/";
+            int scheme = base.indexOf("://");
+            int slash = scheme < 0 ? -1 : base.indexOf('/', scheme + 3);
+            if (slash >= 0) { origin = base.substring(0, slash); pathPart = base.substring(slash); }
+            if (xml) {
+                b.append("  <issue>\r\n    <serialNumber>").append(serial).append("</serialNumber>\r\n")
+                 .append("    <name>").append(cdata(i.name())).append("</name>\r\n")
+                 .append("    <host ip=\"\">").append(xmlText(origin)).append("</host>\r\n")
+                 .append("    <path>").append(cdata(pathPart)).append("</path>\r\n")
+                 .append("    <location>").append(cdata(pathPart)).append("</location>\r\n")
+                 .append("    <severity>").append(xmlText(label(i.severity()))).append("</severity>\r\n")
+                 .append("    <confidence>").append(xmlText(label(i.confidence()))).append("</confidence>\r\n");
+                if (i.detail() != null && !i.detail().isEmpty()) b.append("    <issueDetail>").append(cdata(i.detail())).append("</issueDetail>\r\n");
+                if (i.remediation() != null && !i.remediation().isEmpty()) b.append("    <remediationDetail>").append(cdata(i.remediation())).append("</remediationDetail>\r\n");
+                b.append("  </issue>\r\n");
+            } else {
+                // Detail and remediation are the HTML an issue carries, as in Burp's report.
+                b.append("<h2>").append(serial).append(". ").append(xmlText(i.name())).append("</h2>\n<table>")
+                 .append("<tr><td>Severity</td><td>").append(xmlText(label(i.severity()))).append("</td></tr>")
+                 .append("<tr><td>Confidence</td><td>").append(xmlText(label(i.confidence()))).append("</td></tr>")
+                 .append("<tr><td>Host</td><td>").append(xmlText(origin)).append("</td></tr>")
+                 .append("<tr><td>Path</td><td>").append(xmlText(pathPart)).append("</td></tr></table>\n");
+                if (i.detail() != null && !i.detail().isEmpty()) b.append("<h3>Issue detail</h3>\n<div>").append(i.detail()).append("</div>\n");
+                if (i.remediation() != null && !i.remediation().isEmpty()) b.append("<h3>Remediation detail</h3>\n<div>").append(i.remediation()).append("</div>\n");
+            }
+        }
+        b.append(xml ? "</issues>\r\n" : "</body></html>\n");
+        try { java.nio.file.Files.writeString(path, b.toString(), java.nio.charset.StandardCharsets.UTF_8); }
+        catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
     }
 
     static final List<burp.api.montoya.scanner.audit.AuditIssueHandler> ISSUE_HANDLERS = new CopyOnWriteArrayList<>();
