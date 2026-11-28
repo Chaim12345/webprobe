@@ -314,6 +314,29 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
                 v
             }).collect(),
         )),
+        // A frame the extension sends over a proxied WebSocket, through the
+        // channel WebSocket Repeater uses. A frame to the server is masked,
+        // as a client's must be.
+        "ws.send" => {
+            let socket = args["socket"].as_u64().ok_or("no socket")?;
+            let to_server = args["toServer"].as_bool().unwrap_or(true);
+            let binary = args["binary"].as_bool().unwrap_or(false);
+            let payload = b64(args, "payload").ok_or("no payload")?;
+            let live = shared.ws_live.lock().get(&socket).cloned().ok_or("The proxied WebSocket has closed")?;
+            let frame = crate::net::ws_frame(if binary { 0x82 } else { 0x81 }, &payload, to_server);
+            live.inject.send((to_server, frame)).map_err(|_| "The proxied WebSocket has closed".to_string())?;
+            Ok(Value::Null)
+        }
+        // Close both sides with a normal-closure frame each.
+        "ws.close" => {
+            let socket = args["socket"].as_u64().ok_or("no socket")?;
+            // Already gone is not an error: close is idempotent.
+            if let Some(live) = shared.ws_live.lock().get(&socket).cloned() {
+                let _ = live.inject.send((true, crate::net::ws_close_frame(1000, "", true)));
+                let _ = live.inject.send((false, crate::net::ws_close_frame(1000, "", false)));
+            }
+            Ok(Value::Null)
+        }
         "cookiejar.cookies" => Ok(Value::Array(
             shared.cookie_jar.lock().cookies.iter().map(|c| json!({"name": c.name, "value": c.value, "domain": c.domain, "path": c.path, "expires": c.expires})).collect(),
         )),
@@ -381,6 +404,67 @@ fn interaction_json(i: &crate::collaborator::Interaction) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R-20: an extension's send and close on a proxied WebSocket reach the
+    /// relay's injection channel as well-formed frames.
+    #[test]
+    fn websocket_send_and_close_are_injected_into_the_live_connection() {
+        let shared = crate::net::Shared::new();
+        let (tx, rx) = std::sync::mpsc::channel();
+        shared.ws_live.lock().insert(
+            7,
+            crate::net::LiveWs {
+                host: "h.test".into(),
+                port: 80,
+                tls: false,
+                handshake: Vec::new(),
+                inject: tx,
+            },
+        );
+        let payload = util::b64_encode(b"hello");
+        dispatch(
+            &shared,
+            "x",
+            "ws.send",
+            &json!({"socket": 7, "toServer": true, "binary": false, "payload": payload}),
+        )
+        .unwrap();
+        let (to_server, frame) = rx.try_recv().unwrap();
+        assert!(to_server);
+        assert_eq!(frame[0], 0x81);
+        assert_eq!(frame[1] & 0x80, 0x80, "a frame to the server is masked");
+        let (opcode, body, _) = crate::net::ws_parse_frame(&frame).unwrap();
+        assert_eq!((opcode & 0x0f, body.as_slice()), (1, &b"hello"[..]));
+        dispatch(
+            &shared,
+            "x",
+            "ws.send",
+            &json!({"socket": 7, "toServer": false, "binary": true, "payload": payload}),
+        )
+        .unwrap();
+        let (to_server, frame) = rx.try_recv().unwrap();
+        assert!(!to_server);
+        assert_eq!(
+            (frame[0], frame[1] & 0x80),
+            (0x82, 0),
+            "a frame to the client is not masked"
+        );
+        dispatch(&shared, "x", "ws.close", &json!({"socket": 7})).unwrap();
+        let closes: Vec<(bool, Vec<u8>)> = rx.try_iter().collect();
+        assert_eq!(closes.len(), 2);
+        assert!(closes.iter().all(|(_, f)| f[0] & 0x0f == 8));
+        // A socket that is gone: send says so, close does nothing.
+        assert!(
+            dispatch(
+                &shared,
+                "x",
+                "ws.send",
+                &json!({"socket": 9, "payload": payload})
+            )
+            .is_err()
+        );
+        dispatch(&shared, "x", "ws.close", &json!({"socket": 9})).unwrap();
+    }
 
     #[test]
     fn calls_reach_the_engine() {
