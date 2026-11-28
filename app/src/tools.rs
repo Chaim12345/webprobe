@@ -3103,12 +3103,13 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 method: e.method.clone(),
                 host: e.host.clone(),
                 port: e.port,
-                https: false,
+                https: e.https,
                 path: e.path.clone(),
                 status: e.status.clone(),
                 request: String::new(),
                 response: None,
-                note: None,
+                note: (!e.note.is_empty()).then(|| e.note.clone()),
+                highlight: e.highlight,
                 req_len: e.req_len,
                 resp_len: e.resp_len,
                 mime: e.mime.clone(),
@@ -3671,6 +3672,9 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
                 resp_len: e.resp_len,
                 mime: e.mime.clone(),
                 source: String::new(),
+                https: e.https,
+                note: e.note.clone().unwrap_or_default(),
+                highlight: e.highlight,
                 ..Default::default()
             })
             .collect();

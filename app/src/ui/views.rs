@@ -635,7 +635,8 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         5 => e.path.clone(),
         6 => e.status.clone(),
         7 => format!("{:020}", e.resp_len),
-        _ => e.mime.clone(),
+        8 => e.mime.clone(),
+        _ => e.note.clone(),
     });
     if rows.is_empty() {
         if !app.logger.is_empty() {
@@ -668,6 +669,7 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         table::Column::new("Status code", 80.0),
         table::Column::new("Length", 70.0),
         table::Column::new("MIME type", 90.0),
+        table::Column::new("Notes", 160.0),
     ];
     let bambda_run = app.bambdas.tables.logger.column_run();
     let bambda_column = bambda_run.as_ref().map(|applied| {
@@ -683,6 +685,10 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                 let mut st = app.log_table.clone();
                 let mut pick = None;
                 let mut menu: Option<(u64, &'static str)> = None;
+                // #270: annotations set from the row menu, applied after the
+                // table is drawn (the rows are a copy).
+                let mut note_set: Option<(u64, String)> = None;
+                let mut highlight_set: Option<(u64, Option<u8>)> = None;
                 let sel = app.log_sel;
                 let h = ui.available_height();
                 table::table_body(
@@ -700,19 +706,28 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                         );
                         if sel == Some(e.id) {
                             ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+                        } else if let Some(k) = e.highlight {
+                            ui.painter().rect_filled(rr, 0.0, highlight_colours(k).0);
                         }
+                        // A highlighted row uses the colour's own ink, as in
+                        // Proxy history; a selected row keeps the selection's.
+                        let ink = match e.highlight {
+                            Some(k) if sel != Some(e.id) => Some(highlight_colours(k).1),
+                            _ => None,
+                        };
                         let row = ui
                             .horizontal(|ui| {
                                 let mut cells = vec![
-                                    (0, e.id.to_string(), None),
-                                    (1, history_time(e.ts), None),
-                                    (2, e.tool.clone(), None),
-                                    (3, e.method.clone(), None),
-                                    (4, e.host.clone(), None),
-                                    (5, e.path.clone(), None),
-                                    (6, e.status.clone(), None),
-                                    (7, e.resp_len.to_string(), None),
-                                    (8, e.mime.clone(), None),
+                                    (0, e.id.to_string(), ink),
+                                    (1, history_time(e.ts), ink),
+                                    (2, e.tool.clone(), ink),
+                                    (3, e.method.clone(), ink),
+                                    (4, e.host.clone(), ink),
+                                    (5, e.path.clone(), ink),
+                                    (6, e.status.clone(), ink),
+                                    (7, e.resp_len.to_string(), ink),
+                                    (8, e.mime.clone(), ink),
+                                    (9, e.note.clone(), ink),
                                 ];
                                 if let Some(index) = bambda_column {
                                     cells.push((
@@ -749,6 +764,37 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                                     menu = Some((e.id, *cmd));
                                 }
                             }
+                            ui.menu_button(RichText::new("Add notes").size(13.0), |ui| {
+                                let mut text = e.note.clone();
+                                let edit = ui.add(
+                                    egui::TextEdit::singleline(&mut text)
+                                        .hint_text("Note for this row")
+                                        .desired_width(240.0),
+                                );
+                                if edit.changed() {
+                                    note_set = Some((e.id, text));
+                                }
+                            });
+                            ui.menu_button(RichText::new("Highlight").size(13.0), |ui| {
+                                for (k, name) in HIGHLIGHT_NAMES.iter().enumerate() {
+                                    let (bg, _) = highlight_colours(k as u8);
+                                    if ui
+                                        .add(
+                                            egui::Button::new(RichText::new(*name).size(13.0))
+                                                .fill(bg),
+                                        )
+                                        .clicked()
+                                    {
+                                        highlight_set = Some((e.id, Some(k as u8)));
+                                        ui.close();
+                                    }
+                                }
+                                if ui.button(RichText::new("None").size(13.0)).clicked() {
+                                    highlight_set = Some((e.id, None));
+                                    ui.close();
+                                }
+                            });
+                            ui.separator();
                             if menu_action(ui, "Copy URL") {
                                 menu = Some((e.id, "copy_url"));
                             }
@@ -761,6 +807,12 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                 app.log_table = st;
                 if pick.is_some() {
                     app.log_sel = pick;
+                }
+                if let Some((id, text)) = note_set {
+                    app.logger.annotate(id, |e| e.note = text);
+                }
+                if let Some((id, k)) = highlight_set {
+                    app.logger.annotate(id, |e| e.highlight = k);
                 }
                 if let Some((id, cmd)) = menu {
                     app.log_sel = Some(id);

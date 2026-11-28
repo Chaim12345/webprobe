@@ -544,6 +544,9 @@ pub struct ProjectLoggerEntry {
     pub request: String,
     pub response: Option<String>,
     pub note: Option<String>,
+    /// Row highlight, an index into Burp's nine highlight colours.
+    #[serde(default)]
+    pub highlight: Option<u8>,
     #[serde(default)]
     pub req_len: usize,
     #[serde(default)]
@@ -2012,6 +2015,7 @@ mod tests {
                 request: "POST /v1/items HTTP/1.1\r\n\r\n{\"a\":1}".into(),
                 response: Some("HTTP/1.1 201 Created\r\n\r\n{}".into()),
                 note: Some("logger note".into()),
+                highlight: Some(3),
                 req_len: 30,
                 resp_len: 27,
                 mime: "JSON".into(),
