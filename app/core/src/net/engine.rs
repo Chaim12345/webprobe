@@ -39,6 +39,8 @@ pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, NetError> {
 }
 
 pub fn start_proxy(shared: Arc<Shared>) {
+    // AR-05: live passive audits get their own thread from here on.
+    start_passive_worker(&shared);
     start_extra_listeners(shared.clone());
     crate::util::spawn_contained("net", move || {
         loop {

@@ -62,6 +62,8 @@ pub use upstream_conn::*;
 
 mod hist;
 pub use hist::*;
+mod live_audit;
+pub use live_audit::*;
 
 mod scan_hooks;
 mod send;

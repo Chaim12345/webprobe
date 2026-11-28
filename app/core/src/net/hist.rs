@@ -265,7 +265,10 @@ pub fn record_entry_verbatim(
                 false
             }
         };
-        if within_scope && within_cap {
+        // AR-05: with a worker running the audit is queued, so a slow
+        // passive check does not hold this proxy connection. Without one
+        // (a direct caller, a full queue) it runs here, as before.
+        if within_scope && within_cap && !live_audit(shared).enqueue(&e) {
             let issues = hooks.passive_check_live(shared, &e);
             hooks.add_passive_issues(shared, issues);
         }
