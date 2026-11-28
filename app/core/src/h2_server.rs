@@ -521,7 +521,7 @@ impl Conn {
                     return err(PROTOCOL_ERROR, "HEADERS on stream 0 or an even stream");
                 }
                 let frag = header_fragment(f.flags, &f.payload)
-                    .map_err(|e| ConnError(PROTOCOL_ERROR, e))?
+                    .map_err(|e| ConnError(PROTOCOL_ERROR, e.to_string()))?
                     .to_vec();
                 if frag.len() > MAX_HEADER_BLOCK {
                     return err(COMPRESSION_ERROR, "header block too large");
@@ -574,7 +574,7 @@ impl Conn {
                     self.recv_window += len;
                 }
                 let payload = data_payload(f.flags, &f.payload)
-                    .map_err(|e| ConnError(PROTOCOL_ERROR, e))?
+                    .map_err(|e| ConnError(PROTOCOL_ERROR, e.to_string()))?
                     .to_vec();
                 let Some(s) = self.streams.get_mut(&f.stream) else {
                     self.stream_reset(f.stream, STREAM_CLOSED);

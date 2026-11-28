@@ -136,23 +136,46 @@ fn read_frame<R: Read>(r: &mut R) -> std::io::Result<Frame> {
     })
 }
 
+/// An HTTP/2 failure by kind, matching the RFC 9113 error classes the
+/// connection would report. The text is what the UI shows.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum H2Error {
+    /// A frame whose padding or priority fields do not fit it
+    /// (PROTOCOL_ERROR / FRAME_SIZE_ERROR).
+    #[error("{0}")]
+    Frame(String),
+    /// A flow-control window that would overflow or be overrun
+    /// (FLOW_CONTROL_ERROR).
+    #[error("{0}")]
+    FlowControl(String),
+}
+
+/// Callers that still carry errors as text keep working with `?`.
+impl From<H2Error> for String {
+    fn from(e: H2Error) -> String {
+        e.to_string()
+    }
+}
+
 /// HEADERS fragment after removing PADDED padding and the PRIORITY fields
 /// (RFC 9113 §6.2: Pad Length, Exclusive/Stream Dependency/Weight, fragment).
-pub(crate) fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
+pub(crate) fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], H2Error> {
     let mut p = payload;
     if flags & FLAG_PADDED != 0 {
         let (&pad, rest) = p
             .split_first()
-            .ok_or("h2: padded HEADERS without pad length")?;
+            .ok_or_else(|| H2Error::Frame("h2: padded HEADERS without pad length".into()))?;
         let pad = pad as usize;
         if pad > rest.len() {
-            return Err("h2: HEADERS padding exceeds frame".into());
+            return Err(H2Error::Frame("h2: HEADERS padding exceeds frame".into()));
         }
         p = &rest[..rest.len() - pad];
     }
     if flags & FLAG_PRIORITY != 0 {
         if p.len() < 5 {
-            return Err("h2: HEADERS priority fields truncated".into());
+            return Err(H2Error::Frame(
+                "h2: HEADERS priority fields truncated".into(),
+            ));
         }
         p = &p[5..];
     }
@@ -160,16 +183,16 @@ pub(crate) fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], String
 }
 
 /// DATA payload after removing PADDED padding.
-pub(crate) fn data_payload(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
+pub(crate) fn data_payload(flags: u8, payload: &[u8]) -> Result<&[u8], H2Error> {
     if flags & FLAG_PADDED == 0 {
         return Ok(payload);
     }
     let (&pad, rest) = payload
         .split_first()
-        .ok_or("h2: padded DATA without pad length")?;
+        .ok_or_else(|| H2Error::Frame("h2: padded DATA without pad length".into()))?;
     let pad = pad as usize;
     if pad > rest.len() {
-        return Err("h2: DATA padding exceeds frame".into());
+        return Err(H2Error::Frame("h2: DATA padding exceeds frame".into()));
     }
     Ok(&rest[..rest.len() - pad])
 }
@@ -201,11 +224,11 @@ pub(crate) fn is_connection_header(name: &str) -> bool {
     ) || name.starts_with("proxy-")
 }
 
-fn grow_window(window: &mut i64, delta: i64, what: &str) -> Result<(), String> {
+fn grow_window(window: &mut i64, delta: i64, what: &str) -> Result<(), H2Error> {
     let next = window
         .checked_add(delta)
         .filter(|value| *value <= 0x7fff_ffff)
-        .ok_or_else(|| format!("h2: {what} flow-control window overflow"))?;
+        .ok_or_else(|| H2Error::FlowControl(format!("h2: {what} flow-control window overflow")))?;
     *window = next;
     Ok(())
 }
@@ -1334,12 +1357,12 @@ pub const INITIAL_WINDOW_SIZE: usize = 65_535;
 /// Fail fast when a single-packet group's request bodies would overrun the
 /// initial connection window: the server would reset every stream with
 /// FLOW_CONTROL_ERROR otherwise.
-pub fn check_burst_window(body_lens: impl IntoIterator<Item = usize>) -> Result<(), String> {
+pub fn check_burst_window(body_lens: impl IntoIterator<Item = usize>) -> Result<(), H2Error> {
     let total: usize = body_lens.into_iter().sum();
     if total > INITIAL_WINDOW_SIZE {
-        return Err(format!(
+        return Err(H2Error::FlowControl(format!(
             "the group's request bodies total {total} bytes, past the HTTP/2 initial flow-control window ({INITIAL_WINDOW_SIZE}): the server would reset every stream with FLOW_CONTROL_ERROR. Send the group in sequence or shrink the bodies"
-        ));
+        )));
     }
     Ok(())
 }
