@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use super::exec::{Collaborator, Exchange, RequestData, ResponseData};
+use super::exec::{Collaborator, Exchange, IoError, RequestData, ResponseData};
 use super::runner::{InsertionPoint as BcheckIp, Transport, run_definition};
 use super::{Definition, GivenMode, InsertionPointKind, parse};
 use crate::net::{HistEntry, Shared};
@@ -217,9 +217,9 @@ fn in_scope_destination(
 }
 
 impl Transport for CxTransport<'_> {
-    fn send(&self, req: &RequestData) -> Result<ResponseData, String> {
+    fn send(&self, req: &RequestData) -> Result<ResponseData, IoError> {
         if self.cx.stopped() {
-            return Err("scan stopped".to_string());
+            return Err(IoError::Stopped);
         }
         if !in_scope_destination(
             self.cx.entry.https,
@@ -228,14 +228,17 @@ impl Transport for CxTransport<'_> {
             &self.cx.host_hdr,
             req,
         ) {
-            return Err(format!(
+            return Err(IoError::Refused(format!(
                 "BCheck request to out-of-scope destination `{}` refused",
                 req.url
-            ));
+            )));
         }
         let raw = req.raw();
-        let resp = self.cx.send(raw.as_bytes()).ok_or("no response")?;
-        parse_response(&resp).ok_or_else(|| "unparseable response".to_string())
+        let resp = self
+            .cx
+            .send(raw.as_bytes())
+            .ok_or_else(|| IoError::NoResponse("no response".into()))?;
+        parse_response(&resp).ok_or_else(|| IoError::NoResponse("unparseable response".into()))
     }
 }
 
@@ -252,14 +255,16 @@ struct ScanCollab {
 }
 
 impl Collaborator for ScanCollab {
-    fn generate_address(&mut self) -> Result<String, String> {
+    fn generate_address(&mut self) -> Result<String, IoError> {
         let ids = self.shared.oob.take(1, Duration::from_millis(1500));
         match ids.into_iter().next() {
             Some((token, dns)) => {
                 self.tokens.push(token);
                 Ok(dns)
             }
-            None => Err("no Collaborator payloads available".to_string()),
+            None => Err(IoError::NoCollaborator(
+                "no Collaborator payloads available".into(),
+            )),
         }
     }
 
@@ -509,8 +514,10 @@ pub(crate) fn bcheck_passive_issues(shared: &Shared, e: &HistEntry) -> Vec<ScanI
         }
         // Passive checks never send; a transport that always fails keeps a
         // stray (invalid) definition from doing anything.
-        let transport = |_: &RequestData| -> Result<ResponseData, String> {
-            Err("passive checks cannot send requests".to_string())
+        let transport = |_: &RequestData| -> Result<ResponseData, IoError> {
+            Err(IoError::Refused(
+                "passive checks cannot send requests".into(),
+            ))
         };
         match run_definition(def, &exchange, None, &transport, None) {
             Ok(issues) => {
