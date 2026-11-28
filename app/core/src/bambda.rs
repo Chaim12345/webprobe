@@ -308,8 +308,17 @@ impl Program {
             }
             Kind::Filter | Kind::Column => "",
         };
+        // A scan check also receives `api` (see BambdaRunner).
+        let params = match kind {
+            Kind::PassiveCheck => {
+                "ProxyHttpRequestResponse requestResponse, Utilities utilities, burp.api.montoya.MontoyaApi api"
+            }
+            Kind::Filter | Kind::Column => {
+                "ProxyHttpRequestResponse requestResponse, Utilities utilities"
+            }
+        };
         let code = format!(
-            "{extra}import burp.api.montoya.proxy.ProxyHttpRequestResponse;\nimport burp.api.montoya.utilities.Utilities;\nimport burp.api.montoya.http.message.StatusCodeClass;\nimport burp.api.montoya.http.message.params.HttpParameterType;\npublic final class WebProbeUserBambda {{\npublic static {ty} evaluate(ProxyHttpRequestResponse requestResponse, Utilities utilities) throws Exception {{\n{source}\n}}\n}}\n"
+            "{extra}import burp.api.montoya.proxy.ProxyHttpRequestResponse;\nimport burp.api.montoya.utilities.Utilities;\nimport burp.api.montoya.http.message.StatusCodeClass;\nimport burp.api.montoya.http.message.params.HttpParameterType;\npublic final class WebProbeUserBambda {{\npublic static {ty} evaluate({params}) throws Exception {{\n{source}\n}}\n}}\n"
         );
         let source_path = classes.0.join("WebProbeUserBambda.java");
         std::fs::write(&source_path, code)?;

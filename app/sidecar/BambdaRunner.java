@@ -62,13 +62,33 @@ public final class BambdaRunner {
         System.setOut(new PrintStream(java.io.OutputStream.nullOutputStream()));
         System.setErr(new PrintStream(java.io.OutputStream.nullOutputStream()));
         ObjectFactoryLocator.FACTORY = Factory.create();
-        var method = Class.forName("WebProbeUserBambda").getMethod("evaluate", ProxyHttpRequestResponse.class, Utilities.class);
+        Class<?> user = Class.forName("WebProbeUserBambda");
+        // S-03: a scan check also gets `api`, as in Burp. Only what needs no
+        // running engine is there (utilities and a logging that discards);
+        // any other call throws and is reported as that row's error.
+        java.lang.reflect.Method withApi = null;
+        try { withApi = user.getMethod("evaluate", ProxyHttpRequestResponse.class, Utilities.class, burp.api.montoya.MontoyaApi.class); }
+        catch (NoSuchMethodException none) { /* a filter or a column */ }
+        var method = withApi != null ? withApi : user.getMethod("evaluate", ProxyHttpRequestResponse.class, Utilities.class);
+        PrintStream discard = new PrintStream(java.io.OutputStream.nullOutputStream());
+        Object logging = Api.obj()
+            .on("output", a -> discard).on("error", a -> discard)
+            .on("logToOutput", a -> null).on("logToError", a -> null)
+            .on("raiseDebugEvent", a -> null).on("raiseInfoEvent", a -> null)
+            .on("raiseErrorEvent", a -> null).on("raiseCriticalEvent", a -> null)
+            .as(burp.api.montoya.logging.Logging.class);
+        Object api = withApi == null ? null : Api.obj()
+            .on("utilities", a -> Utils.utilities())
+            .on("logging", a -> logging)
+            .as(burp.api.montoya.MontoyaApi.class);
         Object parsed = Wire.Json.parse(Files.readString(Path.of(args[0]), StandardCharsets.UTF_8));
         for (Object item : (List<?>) parsed) {
             @SuppressWarnings("unchecked") Map<String,Object> row = (Map<String,Object>) item;
             String prefix = "{\"id\":" + Wire.str(row, "id", "0");
             try {
-                Object value = method.invoke(null, exchange(row), Utils.utilities());
+                Object value = withApi != null
+                    ? method.invoke(null, exchange(row), Utils.utilities(), api)
+                    : method.invoke(null, exchange(row), Utils.utilities());
                 String json;
                 if (value == null) json = "null";
                 else if (value instanceof burp.api.montoya.scanner.AuditResult result) {

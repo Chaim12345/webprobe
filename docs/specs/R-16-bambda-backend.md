@@ -62,7 +62,7 @@ API method signatures were checked against the Maven Central Montoya API 2026.7 
 ## S-03: passive scan checks (2026-11-28)
 
 A Bambda with function `SCAN_CHECK_PASSIVE_PER_REQUEST` is a passive scan
-check. Its body sees `requestResponse` and `utilities` and returns an
+check. Its body sees `requestResponse`, `utilities` and `api` and returns an
 `AuditResult` (or `null` for nothing found). `AuditResult`, `AuditIssue`,
 `AuditIssueSeverity`, `AuditIssueConfidence`, `List` and `ArrayList` are
 imported. Each issue is reported as Burp's type "Bambda generated issue"
@@ -77,6 +77,9 @@ Where it runs:
 - `webprobe-headless scan URL --bambda-check FILE`: every exchange the scan
   recorded, after the audit ends.
 
-Not done: active (per insertion point) checks, running a saved check
-automatically during a desktop scan or live audit, and the `api` variable Burp
-gives a scan-check Bambda.
+`api` offers `api.utilities()` and `api.logging()` (which discards what it is
+given). The check runs in its own JVM with no engine behind it, so any other
+`api` call throws and counts as that exchange's error.
+
+Not done: active (per insertion point) checks, and running a saved check
+automatically during a desktop scan or live audit.
