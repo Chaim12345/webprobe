@@ -16,6 +16,34 @@ use std::time::Duration;
 
 use crate::net::Shared;
 
+/// Why a headless browser engine did not produce a result. The text is
+/// what the crawl log shows.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum HeadlessError {
+    /// The engine's binary was not found.
+    #[error("{0}")]
+    NotInstalled(String),
+    /// The engine cannot do what was asked (no screenshot support).
+    #[error("{0}")]
+    Unsupported(String),
+    /// The engine could not be started, failed, or exited with an error.
+    #[error("{0}")]
+    Run(String),
+    /// The engine did not finish within the deadline.
+    #[error("{0}")]
+    Timeout(String),
+    /// The engine ran but wrote no output.
+    #[error("{0}")]
+    NoOutput(String),
+}
+
+/// Callers that still carry errors as text keep working with `?`.
+impl From<HeadlessError> for String {
+    fn from(e: HeadlessError) -> String {
+        e.to_string()
+    }
+}
+
 pub trait HeadlessBrowser: Send + Sync {
     fn name(&self) -> &'static str;
     /// The engine's binary, when installed.
@@ -27,7 +55,7 @@ pub trait HeadlessBrowser: Send + Sync {
         url: &str,
         proxy_port: u16,
         ca_pem: Option<&std::path::Path>,
-    ) -> Result<String, String>;
+    ) -> Result<String, HeadlessError>;
     /// Render `url` through the proxy to a PNG file, when the engine can.
     fn screenshot(
         &self,
@@ -35,8 +63,11 @@ pub trait HeadlessBrowser: Send + Sync {
         _proxy_port: u16,
         _ca_pem: Option<&std::path::Path>,
         _out: &std::path::Path,
-    ) -> Result<(), String> {
-        Err(format!("{} cannot take screenshots", self.name()))
+    ) -> Result<(), HeadlessError> {
+        Err(HeadlessError::Unsupported(format!(
+            "{} cannot take screenshots",
+            self.name()
+        )))
     }
     /// Version string, for pinning (`--version`).
     fn version(&self) -> Option<String> {
@@ -109,14 +140,17 @@ fn on_path(names: &[&str]) -> Option<String> {
 const MAX_STDOUT: usize = 64 * 1024 * 1024;
 
 /// Run an engine command with a deadline; stdout on success.
-fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
+fn run(mut cmd: Command, deadline: Duration) -> Result<String, HeadlessError> {
     crate::util::own_process_group(&mut cmd);
     let mut child = cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|e| e.to_string())?;
-    let mut out = child.stdout.take().ok_or("no stdout")?;
+        .map_err(|e| HeadlessError::Run(e.to_string()))?;
+    let mut out = child
+        .stdout
+        .take()
+        .ok_or_else(|| HeadlessError::Run("no stdout".into()))?;
     let (tx, rx) = std::sync::mpsc::channel();
     crate::util::spawn_contained("headless", move || {
         // Bounded: a page that makes the engine print without end cannot
@@ -136,7 +170,7 @@ fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
             // without waiting forever on a pipe a stray helper still holds.
             crate::util::kill_process_tree(pgid, None, Duration::from_millis(500));
             let text = match rx.recv_timeout(Duration::from_secs(2)) {
-                Ok(Err(e)) => return Err(e.to_string()),
+                Ok(Err(e)) => return Err(HeadlessError::Run(e.to_string())),
                 Ok(Ok(t)) => t,
                 Err(_) => String::new(),
             };
@@ -149,19 +183,22 @@ fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
             return if status.success() || !text.trim().is_empty() {
                 Ok(text)
             } else {
-                Err(format!("exited with {status}"))
+                Err(HeadlessError::Run(format!("exited with {status}")))
             };
         }
         // Output over the cap: stop the engine now.
         if let Ok(Err(e)) = rx.try_recv() {
             crate::util::kill_process_tree(pgid, None, Duration::from_millis(500));
             let _ = child.wait();
-            return Err(e.to_string());
+            return Err(HeadlessError::Run(e.to_string()));
         }
         if t0.elapsed() > deadline {
             crate::util::kill_process_tree(child.id(), None, Duration::from_millis(500));
             let _ = child.wait();
-            return Err(format!("no result within {} s", deadline.as_secs()));
+            return Err(HeadlessError::Timeout(format!(
+                "no result within {} s",
+                deadline.as_secs()
+            )));
         }
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -183,8 +220,10 @@ impl HeadlessBrowser for Chromium {
         url: &str,
         proxy_port: u16,
         _ca: Option<&std::path::Path>,
-    ) -> Result<String, String> {
-        let bin = self.binary().ok_or("no Chromium/Chrome binary found")?;
+    ) -> Result<String, HeadlessError> {
+        let bin = self
+            .binary()
+            .ok_or_else(|| HeadlessError::NotInstalled("no Chromium/Chrome binary found".into()))?;
         let profile = std::env::temp_dir().join(format!(
             "webprobe-headless-{}-{proxy_port}",
             std::process::id()
@@ -216,8 +255,10 @@ impl HeadlessBrowser for Chromium {
         proxy_port: u16,
         _ca: Option<&std::path::Path>,
         out: &std::path::Path,
-    ) -> Result<(), String> {
-        let bin = self.binary().ok_or("no Chromium/Chrome binary found")?;
+    ) -> Result<(), HeadlessError> {
+        let bin = self
+            .binary()
+            .ok_or_else(|| HeadlessError::NotInstalled("no Chromium/Chrome binary found".into()))?;
         let profile = std::env::temp_dir().join(format!(
             "webprobe-headless-shot-{}-{proxy_port}",
             std::process::id()
@@ -241,7 +282,7 @@ impl HeadlessBrowser for Chromium {
         r?;
         out.is_file()
             .then_some(())
-            .ok_or_else(|| "no screenshot written".into())
+            .ok_or_else(|| HeadlessError::NoOutput("no screenshot written".into()))
     }
 }
 
@@ -262,8 +303,10 @@ impl HeadlessBrowser for Lightpanda {
         url: &str,
         proxy_port: u16,
         _ca: Option<&std::path::Path>,
-    ) -> Result<String, String> {
-        let bin = self.binary().ok_or("lightpanda is not installed")?;
+    ) -> Result<String, HeadlessError> {
+        let bin = self
+            .binary()
+            .ok_or_else(|| HeadlessError::NotInstalled("lightpanda is not installed".into()))?;
         let mut cmd = Command::new(bin);
         // Host verification off: WebProbe's own CA signs intercepted sites.
         cmd.args([
@@ -298,10 +341,12 @@ impl HeadlessBrowser for Obscura {
         url: &str,
         proxy_port: u16,
         ca: Option<&std::path::Path>,
-    ) -> Result<String, String> {
-        let bin = self
-            .binary()
-            .ok_or("obscura is not installed (see docs/EVAL-OBSCURA.md)")?;
+    ) -> Result<String, HeadlessError> {
+        let bin = self.binary().ok_or_else(|| {
+            HeadlessError::NotInstalled(
+                "obscura is not installed (see docs/EVAL-OBSCURA.md)".into(),
+            )
+        })?;
         let mut cmd = Command::new(bin);
         // Private targets need --allow-private-network; the WebProbe CA is
         // trusted through SSL_CERT_FILE (the only variable it reads).
@@ -328,8 +373,10 @@ impl HeadlessBrowser for Obscura {
         proxy_port: u16,
         ca: Option<&std::path::Path>,
         out: &std::path::Path,
-    ) -> Result<(), String> {
-        let bin = self.binary().ok_or("obscura is not installed")?;
+    ) -> Result<(), HeadlessError> {
+        let bin = self
+            .binary()
+            .ok_or_else(|| HeadlessError::NotInstalled("obscura is not installed".into()))?;
         let mut cmd = Command::new(bin);
         cmd.args([
             "fetch",
@@ -347,7 +394,7 @@ impl HeadlessBrowser for Obscura {
         run(cmd, Duration::from_secs(30))?;
         out.is_file()
             .then_some(())
-            .ok_or_else(|| "no screenshot written".into())
+            .ok_or_else(|| HeadlessError::NoOutput("no screenshot written".into()))
     }
 }
 
