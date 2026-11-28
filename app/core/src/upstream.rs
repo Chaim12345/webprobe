@@ -60,10 +60,38 @@ pub fn choose(rules: &[UpstreamRule], default: &UpstreamConfig, host: &str) -> U
         .unwrap_or_else(|| default.clone())
 }
 
-fn connect_socket(host: &str, port: u16) -> Result<TcpStream, String> {
-    let addrs = webprobe_support::dns::resolve(host, port, DNS_TIMEOUT_MS)?;
+/// Why a connection to the target, or to the upstream proxy in front of
+/// it, could not be made. The text is what the UI and the event log show.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum UpstreamError {
+    /// No address, or every TCP connect attempt failed.
+    #[error("{0}")]
+    Connect(String),
+    /// The upstream proxy settings cannot be used (empty host, bad port).
+    #[error("{0}")]
+    Config(String),
+    /// The SOCKS5 proxy refused, failed authentication or answered badly.
+    #[error("{0}")]
+    Socks(String),
+    /// The HTTP proxy did not open the CONNECT tunnel.
+    #[error("{0}")]
+    HttpConnect(String),
+}
+
+/// Callers that still carry errors as text keep working with `?`.
+impl From<UpstreamError> for String {
+    fn from(e: UpstreamError) -> String {
+        e.to_string()
+    }
+}
+
+fn connect_socket(host: &str, port: u16) -> Result<TcpStream, UpstreamError> {
+    let addrs = webprobe_support::dns::resolve(host, port, DNS_TIMEOUT_MS)
+        .map_err(UpstreamError::Connect)?;
     if addrs.is_empty() {
-        return Err(format!("no address for {host}:{port}"));
+        return Err(UpstreamError::Connect(format!(
+            "no address for {host}:{port}"
+        )));
     }
     // Every resolved address in turn: `localhost` often resolves to ::1
     // first, and a server bound to IPv4 only was then unreachable.
@@ -78,13 +106,13 @@ fn connect_socket(host: &str, port: u16) -> Result<TcpStream, String> {
             Err(e) => errors.push(format!("connect {addr}: {e}")),
         }
     }
-    let stream = connected.ok_or_else(|| errors.join("; "))?;
+    let stream = connected.ok_or_else(|| UpstreamError::Connect(errors.join("; ")))?;
     stream
         .set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
-        .map_err(|e| format!("set read timeout: {e}"))?;
+        .map_err(|e| UpstreamError::Connect(format!("set read timeout: {e}")))?;
     stream
         .set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
-        .map_err(|e| format!("set write timeout: {e}"))?;
+        .map_err(|e| UpstreamError::Connect(format!("set write timeout: {e}")))?;
     Ok(stream)
 }
 
@@ -104,23 +132,27 @@ fn socks_negotiate(
     config: &UpstreamConfig,
     host: &str,
     port: u16,
-) -> Result<TcpStream, String> {
+) -> Result<TcpStream, UpstreamError> {
     let with_auth = !config.username.is_empty();
     stream
         .write_all(&[5, if with_auth { 2 } else { 1 }, 0, 2][..if with_auth { 4 } else { 3 }])
-        .map_err(|e| format!("SOCKS greeting: {e}"))?;
+        .map_err(|e| UpstreamError::Socks(format!("SOCKS greeting: {e}")))?;
     let mut choice = [0u8; 2];
     stream
         .read_exact(&mut choice)
-        .map_err(|e| format!("SOCKS greeting response: {e}"))?;
+        .map_err(|e| UpstreamError::Socks(format!("SOCKS greeting response: {e}")))?;
     if choice[0] != 5 || choice[1] == 255 {
-        return Err("SOCKS proxy rejected all authentication methods".into());
+        return Err(UpstreamError::Socks(
+            "SOCKS proxy rejected all authentication methods".into(),
+        ));
     }
     if choice[1] == 2 {
         let user = config.username.as_bytes();
         let pass = config.password.as_bytes();
         if user.len() > 255 || pass.len() > 255 {
-            return Err("SOCKS credentials exceed 255 bytes".into());
+            return Err(UpstreamError::Socks(
+                "SOCKS credentials exceed 255 bytes".into(),
+            ));
         }
         let mut auth = Vec::with_capacity(user.len() + pass.len() + 3);
         auth.extend_from_slice(&[1, user.len() as u8]);
@@ -129,19 +161,21 @@ fn socks_negotiate(
         auth.extend_from_slice(pass);
         stream
             .write_all(&auth)
-            .map_err(|e| format!("SOCKS authentication: {e}"))?;
+            .map_err(|e| UpstreamError::Socks(format!("SOCKS authentication: {e}")))?;
         let mut result = [0u8; 2];
         stream
             .read_exact(&mut result)
-            .map_err(|e| format!("SOCKS authentication response: {e}"))?;
+            .map_err(|e| UpstreamError::Socks(format!("SOCKS authentication response: {e}")))?;
         if result[1] != 0 {
-            return Err("SOCKS username/password authentication failed".into());
+            return Err(UpstreamError::Socks(
+                "SOCKS username/password authentication failed".into(),
+            ));
         }
     } else if choice[1] != 0 {
-        return Err(format!(
+        return Err(UpstreamError::Socks(format!(
             "unsupported SOCKS authentication method {}",
             choice[1]
-        ));
+        )));
     }
 
     let mut request = vec![5, 1, 0];
@@ -156,7 +190,9 @@ fn socks_negotiate(
         }
         Err(_) => {
             if host.len() > 255 {
-                return Err("SOCKS target hostname exceeds 255 bytes".into());
+                return Err(UpstreamError::Socks(
+                    "SOCKS target hostname exceeds 255 bytes".into(),
+                ));
             }
             request.extend_from_slice(&[3, host.len() as u8]);
             request.extend_from_slice(host.as_bytes());
@@ -165,19 +201,26 @@ fn socks_negotiate(
     request.extend_from_slice(&port.to_be_bytes());
     stream
         .write_all(&request)
-        .map_err(|e| format!("SOCKS connect request: {e}"))?;
+        .map_err(|e| UpstreamError::Socks(format!("SOCKS connect request: {e}")))?;
     let mut head = [0u8; 4];
     stream
         .read_exact(&mut head)
-        .map_err(|e| format!("SOCKS connect response: {e}"))?;
+        .map_err(|e| UpstreamError::Socks(format!("SOCKS connect response: {e}")))?;
     if head[0] != 5 {
-        return Err("invalid SOCKS connect response version".into());
+        return Err(UpstreamError::Socks(
+            "invalid SOCKS connect response version".into(),
+        ));
     }
     if head[2] != 0 {
-        return Err("invalid SOCKS connect response: reserved byte is not zero".into());
+        return Err(UpstreamError::Socks(
+            "invalid SOCKS connect response: reserved byte is not zero".into(),
+        ));
     }
     if head[1] != 0 {
-        return Err(format!("SOCKS connect failed with code {}", head[1]));
+        return Err(UpstreamError::Socks(format!(
+            "SOCKS connect failed with code {}",
+            head[1]
+        )));
     }
     let address_len = match head[3] {
         1 => 4,
@@ -186,20 +229,28 @@ fn socks_negotiate(
             let mut len = [0u8; 1];
             stream
                 .read_exact(&mut len)
-                .map_err(|e| format!("SOCKS response address: {e}"))?;
+                .map_err(|e| UpstreamError::Socks(format!("SOCKS response address: {e}")))?;
             len[0] as usize
         }
-        other => return Err(format!("invalid SOCKS address type {other}")),
+        other => {
+            return Err(UpstreamError::Socks(format!(
+                "invalid SOCKS address type {other}"
+            )));
+        }
     };
     let mut remainder = vec![0u8; address_len + 2];
     stream
         .read_exact(&mut remainder)
-        .map_err(|e| format!("SOCKS response remainder: {e}"))?;
+        .map_err(|e| UpstreamError::Socks(format!("SOCKS response remainder: {e}")))?;
     Ok(stream)
 }
 
 /// Connect directly or negotiate the configured upstream transport.
-pub fn connect_target(config: &UpstreamConfig, host: &str, port: u16) -> Result<TcpStream, String> {
+pub fn connect_target(
+    config: &UpstreamConfig,
+    host: &str,
+    port: u16,
+) -> Result<TcpStream, UpstreamError> {
     match config.kind {
         UpstreamKind::None => connect_socket(host, port),
         UpstreamKind::Http | UpstreamKind::Socks5 => {
@@ -207,9 +258,9 @@ pub fn connect_target(config: &UpstreamConfig, host: &str, port: u16) -> Result<
                 .port
                 .trim()
                 .parse::<u16>()
-                .map_err(|_| "invalid upstream proxy port".to_string())?;
+                .map_err(|_| UpstreamError::Config("invalid upstream proxy port".into()))?;
             if config.host.trim().is_empty() {
-                return Err("upstream proxy host is empty".into());
+                return Err(UpstreamError::Config("upstream proxy host is empty".into()));
             }
             let stream = connect_socket(config.host.trim(), proxy_port)?;
             if config.kind == UpstreamKind::Socks5 {
@@ -226,7 +277,7 @@ pub fn connect_tls_target(
     config: &UpstreamConfig,
     host: &str,
     port: u16,
-) -> Result<TcpStream, String> {
+) -> Result<TcpStream, UpstreamError> {
     let mut stream = connect_target(config, host, port)?;
     if config.kind != UpstreamKind::Http {
         return Ok(stream);
@@ -245,21 +296,25 @@ pub fn connect_tls_target(
     request.push_str("\r\n");
     stream
         .write_all(request.as_bytes())
-        .map_err(|e| format!("HTTP CONNECT write: {e}"))?;
+        .map_err(|e| UpstreamError::HttpConnect(format!("HTTP CONNECT write: {e}")))?;
     let mut response = Vec::new();
     let mut byte = [0u8; 1];
     while !response.ends_with(b"\r\n\r\n") {
         stream
             .read_exact(&mut byte)
-            .map_err(|e| format!("HTTP CONNECT response: {e}"))?;
+            .map_err(|e| UpstreamError::HttpConnect(format!("HTTP CONNECT response: {e}")))?;
         response.push(byte[0]);
         if response.len() > 64 * 1024 {
-            return Err("HTTP CONNECT response headers are too large".into());
+            return Err(UpstreamError::HttpConnect(
+                "HTTP CONNECT response headers are too large".into(),
+            ));
         }
     }
     let status = util::parse_http(&response).status;
     if status != "200" {
-        return Err(format!("HTTP CONNECT rejected with status {status}"));
+        return Err(UpstreamError::HttpConnect(format!(
+            "HTTP CONNECT rejected with status {status}"
+        )));
     }
     Ok(stream)
 }
@@ -469,7 +524,10 @@ mod tests {
             ..UpstreamConfig::default()
         };
         let err = connect_tls_target(&config, "example.com", 443).unwrap_err();
-        assert!(err.contains("407"), "{err}");
+        assert!(
+            matches!(&err, UpstreamError::HttpConnect(text) if text.contains("407")),
+            "{err}"
+        );
         server.join().unwrap();
     }
 
@@ -629,7 +687,10 @@ mod tests {
             ..UpstreamConfig::default()
         };
         let err = connect_target(&config, "127.0.0.1", 80).unwrap_err();
-        assert!(err.contains("code 5"), "{err}");
+        assert!(
+            matches!(&err, UpstreamError::Socks(text) if text.contains("code 5")),
+            "{err}"
+        );
         server.join().unwrap();
     }
 
