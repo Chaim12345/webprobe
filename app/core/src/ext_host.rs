@@ -1912,7 +1912,7 @@ mod tests {
             "[out] version=WebProbe edition=COMMUNITY_EDITION".into(),
             "[out] state=PAUSED args=0".into(),
             "[out] caught: MontoyaApi.bambda is not supported by WebProbe".into(),
-            "[out] caught: BurpSuite.exportProjectOptionsAsJson is not supported by WebProbe"
+            "[out] caught: BurpSuite.importProjectOptionsFromJson is not supported by WebProbe"
                 .into(),
             "[event info] stage1 event".into(),
             "[out] stage1 unloaded".into(),

@@ -28,7 +28,7 @@ public class Stage1Extension implements BurpExtension {
             }
         }
         try {
-            api.burpSuite().exportProjectOptionsAsJson();
+            api.burpSuite().importProjectOptionsFromJson("{}");
         } catch (UnsupportedOperationException e) {
             api.logging().logToOutput("caught: " + e.getMessage());
         }
