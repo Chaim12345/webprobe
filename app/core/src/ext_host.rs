@@ -2258,6 +2258,57 @@ mod tests {
         port
     }
 
+    /// R-20: Scanner.startAudit queues an active audit of the exact request
+    /// an extension adds, as a task, and reports when it has finished.
+    #[test]
+    fn montoya_start_audit() {
+        let Some(dir) = stage_extension("StartAuditExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        crate::register_runtime();
+        let shared = crate::net::Shared::new();
+        let port = echo_responder();
+        shared.history.push(crate::net::HistEntry {
+            id: 1,
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: "/audit?q=1".into(),
+            status: "200".into(),
+            req_raw: format!("GET /audit?q=1 HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            resp_raw: Some(b"HTTP/1.1 200 OK\r\n\r\nx".to_vec().into()),
+            ..Default::default()
+        });
+        let sc = JavaSidecar::spawn_with(
+            dir.to_str().unwrap(),
+            Some(crate::ext_calls::host_link(&shared)),
+        )
+        .expect("start audit extension loads");
+        let seen = |needle: &str| sc.errors().iter().any(|l| l.contains(needle));
+        eventually_for(60, || seen("audit after delete:").then_some(()));
+        let log = sc.errors();
+        assert!(
+            seen("audit before: Waiting for requests requests=0"),
+            "{log:#?}"
+        );
+        assert!(
+            log.iter()
+                .any(|l| l.contains("audit status: Audit finished requests=1")),
+            "{log:#?}"
+        );
+        assert!(seen("audit after delete: Waiting for requests"), "{log:#?}");
+        assert!(shared.tasks.lock().is_empty(), "delete removes the task");
+        sc.unload();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-20: Scanner.startCrawl crawls the seed in the background, reports
     /// progress, adds what it finds to the site map, and can be deleted.
     #[test]

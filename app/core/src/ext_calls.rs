@@ -189,6 +189,43 @@ struct CrawlTable {
 #[derive(Clone, Default)]
 struct ExtensionCrawls(std::sync::Arc<crate::sync::Mutex<CrawlTable>>);
 
+/// Why a request an extension added to an audit was not queued.
+#[derive(Debug, thiserror::Error)]
+enum AuditAddError {
+    #[error("the audit item has no request")]
+    NoRequest,
+    #[error("the request could not be sent to get the response the audit starts from: {0}")]
+    NoBaseline(String),
+}
+
+/// `Audit.addRequest` / `addRequestResponse`: queue an active audit of this
+/// exact exchange as a Dashboard task (it can be paused and cancelled
+/// there). A request with no response is sent once first, because the
+/// audit compares against the response. Returns the task id.
+fn audit_add(shared: &std::sync::Arc<Shared>, args: &Value) -> Result<Value, AuditAddError> {
+    let mut entry = entry_of(args).ok_or(AuditAddError::NoRequest)?;
+    if entry.resp_raw.is_none() {
+        let up = if entry.https {
+            crate::net::send_tls_raw(shared, &entry.host, entry.port, &entry.req_raw)
+        } else {
+            crate::net::send_raw(shared, &entry.host, entry.port, &entry.req_raw)
+        };
+        let resp = up.resp.ok_or_else(|| {
+            AuditAddError::NoBaseline(up.error.unwrap_or_else(|| "no response".into()))
+        })?;
+        entry.status = util::parse_http(&resp).status;
+        entry.resp_len = resp.len();
+        entry.resp_raw = Some(resp.into());
+    }
+    let name = format!(
+        "Extension audit of {}{}",
+        crate::net::history_host(&entry),
+        entry.path
+    );
+    let id = crate::tasks::enqueue(shared, name, crate::tasks::TaskKind::Audit(vec![entry]));
+    Ok(json!(id))
+}
+
 /// Why `Scanner.startCrawl` did not start.
 #[derive(Debug, thiserror::Error)]
 enum StartCrawlError {
@@ -275,6 +312,9 @@ pub fn host_link(shared: &std::sync::Arc<Shared>) -> std::sync::Arc<crate::ext_h
             // Starting a crawl needs an owned handle for its thread.
             if op == "scanner.start-crawl" {
                 return start_crawl(&shared, args).map_err(|e| e.to_string());
+            }
+            if op == "scanner.audit-add" {
+                return audit_add(&shared, args).map_err(|e| e.to_string());
             }
             dispatch(&shared, ext, op, args)
         }),
@@ -391,6 +431,26 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
                 v
             }).collect(),
         )),
+        // Progress of the audit tasks an extension queued, summed.
+        "scanner.audit-status" | "scanner.audit-delete" => {
+            let ids: Vec<u64> = args["ids"].as_array().map(|a| a.iter().filter_map(Value::as_u64).collect()).unwrap_or_default();
+            if op == "scanner.audit-delete" {
+                for id in &ids {
+                    crate::tasks::cancel(shared, *id);
+                    crate::tasks::remove(shared, *id);
+                }
+                return Ok(Value::Null);
+            }
+            let tasks = shared.tasks.lock();
+            let mine: Vec<_> = tasks.iter().filter(|t| ids.contains(&t.id)).collect();
+            let open = mine.iter().any(|t| t.state.is_open());
+            Ok(json!({
+                "requests": mine.iter().map(|t| t.done).sum::<usize>(),
+                "issues": mine.iter().map(|t| t.issues_found).sum::<usize>(),
+                "open": open,
+                "known": mine.len(),
+            }))
+        }
         // Progress of a crawl an extension started; `delete` forgets it
         // (a crawl that is still running finishes on its own).
         "scanner.crawl-status" | "scanner.crawl-delete" => {

@@ -708,7 +708,60 @@ final class Engine {
          .on("registerInsertionPointProvider", a -> reg(POINT_PROVIDERS, (AuditInsertionPointProvider) a[0]))
          .on("registerAuditIssueHandler", a -> issueHandler((burp.api.montoya.scanner.audit.AuditIssueHandler) a[0]))
          .on("startCrawl", a -> startCrawl((burp.api.montoya.scanner.CrawlConfiguration) a[0]))
+         .on("startAudit", a -> startAudit())
          .on("generateReport", a -> { report((List<AuditIssue>) a[0], String.valueOf(a[1]), (java.nio.file.Path) a[2]); return null; });
+    }
+
+    /** Scanner.startAudit: an audit the extension feeds with requests. Each
+     *  added request becomes an active-scan task in WebProbe's task queue
+     *  (visible, pausable and cancellable in the Dashboard), auditing that
+     *  exact request. The built-in configuration is not applied: WebProbe's
+     *  own scan settings are, and it chooses the insertion points itself
+     *  (the ranges of addRequest(request, ranges) are ignored).
+     *  requestCount counts audited items, not probe requests; errorCount
+     *  and insertionPointCount are always 0; issues() lists the scanner
+     *  issues on the hosts added. */
+    @SuppressWarnings("unchecked")
+    static Object startAudit() {
+        List<Long> tasks = new CopyOnWriteArrayList<>();
+        java.util.Set<String> hosts = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        java.util.function.Supplier<String> ids = () -> {
+            StringBuilder b = new StringBuilder("{\"ids\":[");
+            for (int i = 0; i < tasks.size(); i++) b.append(i > 0 ? "," : "").append(tasks.get(i));
+            return b.append("]}").toString();
+        };
+        java.util.function.Supplier<Map<String, Object>> status = () -> {
+            Object r = Wire.call("scanner.audit-status", ids.get());
+            return r instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+        };
+        java.util.function.BiFunction<HttpRequest, HttpResponse, Object> add = (q, r) -> {
+            Object id = Wire.call("scanner.audit-add", msg(q, r));
+            tasks.add((long) Wire.num(id));
+            HttpService s = q.httpService();
+            if (s != null) hosts.add(s.host());
+            return null;
+        };
+        return Api.obj()
+                .on("addRequest", a -> add.apply((HttpRequest) a[0], null))
+                .on("addRequestResponse", a -> add.apply(((HttpRequestResponse) a[0]).request(), ((HttpRequestResponse) a[0]).response()))
+                .on("requestCount", a -> (int) Wire.num(status.get().get("requests")))
+                .on("errorCount", a -> 0)
+                .on("insertionPointCount", a -> 0)
+                .on("issues", a -> {
+                    List<AuditIssue> out = new ArrayList<>();
+                    for (AuditIssue i : issues()) {
+                        HttpService s = i.httpService();
+                        if (s != null && hosts.contains(s.host())) out.add(i);
+                    }
+                    return out;
+                })
+                .on("statusMessage", a -> {
+                    if (tasks.isEmpty()) return "Waiting for requests";
+                    return Boolean.TRUE.equals(status.get().get("open")) ? "Auditing" : "Audit finished";
+                })
+                .on("delete", a -> { Object r = Wire.call("scanner.audit-delete", ids.get()); tasks.clear(); return r; })
+                .text("Audit")
+                .as(burp.api.montoya.scanner.audit.Audit.class);
     }
 
     /** Scanner.startCrawl: WebProbe crawls the seed URLs in the background
