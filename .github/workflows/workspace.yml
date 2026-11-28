@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request supersedes the run in flight. Pushes to a
+# long-lived branch each get their own group, so a merge is never left with a
+# cancelled acceptance run.
 concurrency:
-  group: workspace-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: workspace-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # CI builds each commit once: incremental state only adds to the cache.
