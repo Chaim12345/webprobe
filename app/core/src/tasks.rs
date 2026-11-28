@@ -44,6 +44,37 @@ fn scan_ops() -> Option<&'static ScanOps> {
     SCAN_OPS.get()
 }
 
+/// AR-06: wakes the runner and paused scanner threads when the queue or a
+/// task's state changes, instead of them sleeping in a loop. Kept in a
+/// tool-state slot (ADR 0002).
+#[derive(Clone, Default)]
+struct TaskSignal(Arc<(std::sync::Mutex<u64>, std::sync::Condvar)>);
+
+fn notify_change(shared: &Shared) {
+    let signal: TaskSignal = shared.tool_state.get_or_insert();
+    let (count, changed) = &*signal.0;
+    *count
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) += 1;
+    changed.notify_all();
+}
+
+/// Wait for the next queue or task-state change, at most `at_most`. The
+/// bound covers what is not signalled here: the scanner going idle and the
+/// stop flag, which other modules set.
+fn wait_for_change(shared: &Shared, at_most: Duration) {
+    let signal: TaskSignal = shared.tool_state.get_or_insert();
+    let (count, changed) = &*signal.0;
+    let guard = count
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    drop(
+        changed
+            .wait_timeout(guard, at_most)
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    );
+}
+
 /// Add a scan to the queue and make sure the runner is going. Returns its id.
 pub fn enqueue(shared: &Arc<Shared>, name: impl Into<String>, kind: TaskKind) -> u64 {
     let id = shared.next_task_id.fetch_add(1, Ordering::SeqCst);
@@ -64,6 +95,7 @@ pub fn enqueue(shared: &Arc<Shared>, name: impl Into<String>, kind: TaskKind) ->
         finished: None,
     });
     ensure_runner(shared);
+    notify_change(shared);
     shared.wake();
     id
 }
@@ -75,6 +107,7 @@ fn set_state(shared: &Shared, id: u64, state: TaskState) {
             t.finished = Some(crate::util::now_secs());
         }
     }
+    notify_change(shared);
     shared.wake();
 }
 
@@ -145,7 +178,7 @@ pub fn remove(shared: &Shared, id: u64) {
 /// Block while the scanner is paused (called before every scanner request).
 pub fn wait_while_paused(shared: &Shared) {
     while shared.scan.paused.load(Ordering::SeqCst) && !shared.scan.stop.load(Ordering::SeqCst) {
-        std::thread::sleep(Duration::from_millis(100));
+        wait_for_change(shared, Duration::from_millis(100));
     }
 }
 
@@ -168,7 +201,7 @@ pub fn ensure_runner(shared: &Arc<Shared>) {
                 };
                 match next {
                     Some((id, kind)) if !shared.scan.is_busy() => run(&shared, id, kind),
-                    _ => std::thread::sleep(Duration::from_millis(200)),
+                    _ => wait_for_change(&shared, Duration::from_millis(200)),
                 }
             }
         })
