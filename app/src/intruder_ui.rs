@@ -824,6 +824,8 @@ pub fn settings_panel(ui: &mut Ui, x: &mut IntruderExtra) -> bool {
         ui.add_enabled_ui(enc.enabled, |ui| {
             ui.add(egui::TextEdit::singleline(&mut enc.chars).desired_width(240.0).font(egui::TextStyle::Monospace));
         });
+        ui.checkbox(&mut enc.hex, "Payloads are hex: send the decoded bytes")
+            .on_hover_text("A payload such as 00ff41 is sent as the three bytes it names, without URL-encoding. A payload that is not valid hex is sent as text.");
         ui.add_space(10.0);
         // ---------------- Grep - Payloads ----------------
         heading(ui, "Grep - Payloads");
