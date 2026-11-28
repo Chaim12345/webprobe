@@ -226,6 +226,10 @@ pub(crate) fn history_view(
     history: &[net::HistEntry],
     keep: impl Fn(&net::HistEntry) -> bool,
     sort: &table::TableState,
+    // R-16: text of the Bambda custom column, when one is shown. It is the
+    // sort key for a click on that last column; without it the column sorts
+    // as an empty string and the row order is left alone.
+    custom: Option<&dyn Fn(&net::HistEntry) -> String>,
 ) -> (Vec<net::HistEntry>, bool) {
     let mut rows: Vec<net::HistEntry> = history.iter().rev().filter(|e| keep(e)).cloned().collect();
     table::sort_rows(&mut rows, sort, |e, col| match col {
@@ -265,7 +269,7 @@ pub(crate) fn history_view(
         15 => format!("{:020}", e.ts),
         16 => format!("{:05}", e.listener_port),
         17 => format!("{:010}", e.diffs),
-        _ => String::new(),
+        _ => custom.map_or_else(String::new, |text| text(e)),
     });
     // Every matching row is kept: the table body is virtualised, so only the
     // visible rows are laid out (Burp shows the whole history too).
@@ -399,16 +403,25 @@ pub(crate) fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cm
 /// only"; every column is sortable and resizable, and the view is virtualized.
 pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
     let total = app.shared.history.len();
+    app.bambdas.ensure_loaded();
+    // Publish a finished run before the cache key is taken, so the table shows
+    // its result in this frame instead of waiting for another repaint.
+    app.bambdas.tables.history.poll();
 
     // N-02: the filtered view is rebuilt only when a filter or sort input
     // changed. New traffic in the default newest-first order is put on top
     // of the cached view instead, and frames share the view (an Arc), so a
-    // frame never copies the history.
+    // frame never copies the history. The Bambda verdict is a filter input too
+    // (R-16), so its run version is part of the key.
     let key = format!(
-        "{}|{}|{}",
+        "{}|{}|{}|{}|{}",
         app.hist_filter.key(),
         app.hist_table.sort_col,
-        app.hist_table.sort_asc
+        app.hist_table.sort_asc,
+        app.bambdas.tables.history.filter_version(),
+        // Sorting by the custom column depends on its values, so a new run of
+        // it is a change too.
+        app.bambdas.tables.history.column_version()
     );
     let newest_first = (app.hist_table.sort_col == 0 && !app.hist_table.sort_asc)
         || app.hist_table.sort_col == usize::MAX;
@@ -416,12 +429,20 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
         || total < app.hist_cache_len
         || (total > app.hist_cache_len && !newest_first)
     {
+        let bambda_column = app.bambdas.tables.history.column_run();
+        let custom_column = |e: &net::HistEntry| {
+            crate::bambda_tables::cell_text(bambda_column.as_deref().and_then(|a| a.cell(e.id)))
+        };
         let (rows, truncated) = {
             app.shared.history.with_rows(|history| {
                 history_view(
                     history,
-                    |e| app.hist_filter.matches(e, &app.shared),
+                    |e| {
+                        app.hist_filter.matches(e, &app.shared)
+                            && app.bambdas.tables.history.keeps(e.id)
+                    },
                     &app.hist_table,
+                    Some(&custom_column),
                 )
             })
         };
@@ -434,6 +455,7 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
             app.shared.history.with_rows(|history| {
                 history_new_rows(history, app.hist_cache_len, |e| {
                     app.hist_filter.matches(e, &app.shared)
+                        && app.bambdas.tables.history.keeps(e.id)
                 })
             })
         };
@@ -455,10 +477,34 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
                 .color(c(theme::BAD)),
         );
     }
+    // R-16: apply a Bambda filter or add a Bambda custom column to this table.
+    {
+        let shared = app.shared.clone();
+        let stamp = webprobe_core::bambda_rows::Stamp {
+            rows: total,
+            last_id: app.shared.history.max_id(),
+        };
+        let crate::bambda_ui::State {
+            scripts, tables, ..
+        } = &mut app.bambdas;
+        crate::bambda_tables::bar(
+            ui,
+            crate::bambda_tables::Table::History,
+            &mut tables.history,
+            scripts,
+            stamp,
+            || {
+                webprobe_core::bambda_rows::history_snapshot(
+                    &shared.history,
+                    webprobe_core::bambda::MAX_TABLE_ROWS,
+                )
+            },
+        );
+    }
     ui.add_space(2.0);
 
     // Burp's HTTP history columns, in Burp's order (live 52685 window).
-    let columns = [
+    let mut columns = vec![
         table::Column::new("#", 54.0),
         table::Column::new("Host", 150.0),
         table::Column::new("Method", 56.0),
@@ -479,6 +525,15 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
         // "Diff count", Proxy history (build 52685 burp.Zxwu.java:56); off by default.
         table::Column::new("Diff count", 64.0),
     ];
+    // The Bambda custom column is last, like a Burp "Add column" column, and
+    // `history_view` sorts it by the text the script returned.
+    let bambda_column = match app.bambdas.tables.history.column_label() {
+        Some(label) => {
+            columns.push(table::Column::new(label.to_string(), 160.0));
+            Some(columns.len() - 1)
+        }
+        None => None,
+    };
     if app.hist_table.hidden.len() < columns.len() {
         let mut v = vec![true; columns.len()];
         v[17] = false;
@@ -559,6 +614,9 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
     // table_body returns (the row closure cannot borrow `app` mutably).
     let mut pending_menu: Option<(net::HistEntry, &'static str)> = None;
     let ext_shared = app.shared.clone();
+    // R-16 custom column values; borrowed outside the closure, which must not
+    // take `app` while `app.hist_table` is mutably borrowed.
+    let bambda_cells = &app.bambdas.tables.history;
     table::table_body(
         ui,
         "proxy_history",
@@ -606,7 +664,7 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
                         Some(k) if selected != Some(e.id) => highlight_colours(k).1,
                         _ => theme::ink_dim(),
                     });
-                    let cells = [
+                    let mut cells = vec![
                         (0, e.id.to_string(), ink),
                         (1, history_host(e), ink),
                         (2, e.method.clone(), ink),
@@ -630,6 +688,13 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
                         (16, e.listener_port.to_string(), ink),
                         (17, e.diffs.to_string(), ink),
                     ];
+                    if let Some(index) = bambda_column {
+                        cells.push((
+                            index,
+                            crate::bambda_tables::cell_text(bambda_cells.cell(e.id)),
+                            ink,
+                        ));
+                    }
                     table::cells(ui, &columns, &col_state, row_height, &cells);
                 })
                 .response

@@ -2,10 +2,15 @@
 //! from the command line.
 //!
 //!     webprobe-headless proxy [--port N] [--project FILE] [--seconds N]
+//!                             [--bambda-filter FILE] [--bambda-column FILE]
 //!         Run the intercepting proxy (with the live passive scan) and print
 //!         one line per exchange. With --project, the history and issues are
 //!         saved to FILE when it stops (after N seconds, or on Ctrl+C /
-//!         end of standard input).
+//!         end of standard input). --bambda-filter keeps only the exchanges
+//!         a Bambda VIEW_FILTER script returns true for; --bambda-column
+//!         appends the value of a CUSTOM_COLUMN script as a last field
+//!         (R-16). A script that fails to compile or throws prints its
+//!         error to stderr and the run continues unfiltered.
 //!
 //!     webprobe-headless scan URL... [--crawl] [--speed fast|normal|thorough]
 //!                           [--report FILE.html|FILE.xml]
@@ -22,15 +27,17 @@
 //!
 //! Only point it at hosts you are authorised to test.
 
+use std::collections::HashMap;
 use std::io::BufRead;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
+use webprobe_core::bambda::{Cell, Kind, Program, Verdict};
 use webprobe_core::{burp_config, net, project, rest_api, scan, scan_config, scan_library};
 use webprobe_report::report;
 
-const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
+const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N] [--bambda-filter FILE] [--bambda-column FILE]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
 
 fn usage() -> ! {
     eprintln!("{USAGE}");
@@ -241,6 +248,143 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
     project::save(std::path::Path::new(path), &data).map_err(String::from)
 }
 
+/// R-16: the Bambda filter and custom column of headless proxy mode. Rows are
+/// evaluated in bounded chunks; a script that fails to compile or throws is
+/// reported and the run continues, so a broken script never stops the proxy.
+struct BambdaPrint {
+    filter: Option<(Program, String)>,
+    column: Option<(Program, String)>,
+}
+
+/// Per-batch deadline: the same bound the desktop tables use.
+const BAMBDA_BATCH: Duration = Duration::from_secs(10);
+
+fn cell_text(cell: Option<&Cell>) -> String {
+    match cell {
+        Some(Cell::Text(text)) => text.clone(),
+        Some(Cell::Failed(error)) => format!("Error: {error}"),
+        None => String::new(),
+    }
+}
+
+impl BambdaPrint {
+    fn new(filter: Option<&str>, column: Option<&str>) -> Self {
+        Self {
+            filter: Self::load(filter, Kind::Filter),
+            column: Self::load(column, Kind::Column),
+        }
+    }
+
+    fn load(path: Option<&str>, kind: Kind) -> Option<(Program, String)> {
+        let path = path?;
+        let name = std::path::Path::new(path)
+            .file_name()
+            .map_or_else(|| path.to_string(), |n| n.to_string_lossy().into_owned());
+        let source = match std::fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(e) => {
+                eprintln!("bambda: cannot read {path}: {e}");
+                return None;
+            }
+        };
+        let (java, api) = match (
+            webprobe_core::paths::java(),
+            webprobe_core::paths::montoya_jar(),
+        ) {
+            (Ok(java), Ok(api)) => (java, api),
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("bambda: {path} needs a JDK 17+ and the Montoya API jar: {e}");
+                return None;
+            }
+        };
+        match Program::compile(&java, &api, kind, &source, BAMBDA_BATCH) {
+            Ok(program) => Some((program, name)),
+            Err(e) => {
+                eprintln!("bambda: {path}: {e}");
+                None
+            }
+        }
+    }
+
+    /// The lines to print for these rows, in order.
+    fn render(&mut self, rows: &[net::HistEntry]) -> Vec<String> {
+        let mut out = Vec::new();
+        for chunk in rows.chunks(webprobe_core::bambda::MAX_TABLE_ROWS) {
+            let (exchanges, skipped) = webprobe_core::bambda_rows::history_rows(chunk);
+            for id in &skipped {
+                eprintln!("bambda: exchange {id} is larger than one batch; printed unfiltered");
+            }
+            let mut keep: Option<HashMap<u64, bool>> = None;
+            if let Some((program, name)) = self.filter.take() {
+                match program.apply(Kind::Filter, &exchanges, BAMBDA_BATCH) {
+                    Ok(outcome) => {
+                        if outcome.row_errors > 0 {
+                            eprintln!(
+                                "bambda filter {name}: {} row(s) threw; those rows are printed",
+                                outcome.row_errors
+                            );
+                        }
+                        keep = Some(
+                            outcome
+                                .verdicts
+                                .iter()
+                                .map(|(id, verdict)| (*id, *verdict != Verdict::Hide))
+                                .collect(),
+                        );
+                        self.filter = Some((program, name));
+                    }
+                    Err(e) => {
+                        eprintln!("bambda filter {name} failed: {e}; printing unfiltered")
+                    }
+                }
+            }
+            let mut cells: Option<HashMap<u64, String>> = None;
+            if let Some((program, name)) = self.column.take() {
+                match program.apply(Kind::Column, &exchanges, BAMBDA_BATCH) {
+                    Ok(outcome) => {
+                        if outcome.row_errors > 0 {
+                            eprintln!("bambda column {name}: {} row error(s)", outcome.row_errors);
+                        }
+                        cells = Some(
+                            outcome
+                                .cells
+                                .iter()
+                                .map(|(id, cell)| (*id, cell_text(Some(cell))))
+                                .collect(),
+                        );
+                        self.column = Some((program, name));
+                    }
+                    Err(e) => {
+                        eprintln!("bambda column {name} failed: {e}; no column from here")
+                    }
+                }
+            }
+            for entry in chunk {
+                if keep
+                    .as_ref()
+                    .is_some_and(|keep| keep.get(&entry.id) == Some(&false))
+                {
+                    continue;
+                }
+                let mut line = format!(
+                    "{}\t{}\t{}\t{}\t{}",
+                    entry.id,
+                    entry.method,
+                    net::history_host(entry),
+                    entry.path,
+                    entry.status
+                );
+                if let Some(cells) = &cells {
+                    line.push('\t');
+                    line.push_str(cells.get(&entry.id).map_or("", String::as_str));
+                }
+                out.push(line);
+            }
+        }
+        out
+    }
+}
+
 fn proxy(mut args: Vec<String>) {
     let flags = take_burp_flags(&mut args);
     let (listener, http, api, scan_configs) = load_burp_configs(&flags);
@@ -262,6 +406,10 @@ fn proxy(mut args: Vec<String>) {
     let project_file = take_project_file(&mut args);
     let seconds: Option<u64> =
         take_opt(&mut args, "--seconds").map(|s| s.parse().unwrap_or_else(|_| usage()));
+    // R-16: the headless entry point applies the same Bambda filter and custom
+    // column the desktop tables do.
+    let bambda_filter = take_opt(&mut args, "--bambda-filter");
+    let bambda_column = take_opt(&mut args, "--bambda-column");
     if !args.is_empty() {
         usage();
     }
@@ -314,30 +462,18 @@ fn proxy(mut args: Vec<String>) {
             flag.store(true, Ordering::SeqCst);
         });
     }
+    let mut printer = BambdaPrint::new(bambda_filter.as_deref(), bambda_column.as_deref());
     let mut printed = 0usize;
     loop {
         // Copy the new rows out first: printing to a slow pipe must not hold
         // the history lock every proxy thread needs to record.
-        let fresh: Vec<String> = {
+        let (fresh, total) = {
             let history = shared.history.snapshot();
-            let rows = history
-                .iter()
-                .skip(printed)
-                .map(|e| {
-                    format!(
-                        "{}\t{}\t{}\t{}\t{}",
-                        e.id,
-                        e.method,
-                        net::history_host(e),
-                        e.path,
-                        e.status
-                    )
-                })
-                .collect();
-            printed = history.len();
-            rows
+            let total = history.len();
+            (history.into_iter().skip(printed).collect::<Vec<_>>(), total)
         };
-        for row in fresh {
+        printed = total;
+        for row in printer.render(&fresh) {
             println!("{row}");
         }
         let done = stdin_closed.load(Ordering::SeqCst)
@@ -476,6 +612,59 @@ mod tests {
 
     fn strings(args: &[&str]) -> Vec<String> {
         args.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn hist_entry(id: u64) -> net::HistEntry {
+        net::HistEntry {
+            id,
+            method: "GET".into(),
+            host: "example.test".into(),
+            path: "/".into(),
+            status: "200".into(),
+            req_raw: webprobe_core::body::Body::from(&b"GET / HTTP/1.1\r\n\r\n"[..]),
+            ..net::HistEntry::default()
+        }
+    }
+
+    /// R-16: the two Bambda flags are consumed like every other option, and a
+    /// missing script file leaves the run unfiltered instead of aborting it.
+    #[test]
+    fn bambda_flags_are_consumed_and_a_broken_script_does_not_stop_the_run() {
+        let mut args = strings(&[
+            "--bambda-filter",
+            "f.bambda",
+            "--bambda-column",
+            "c.bambda",
+            "--seconds",
+            "2",
+        ]);
+        assert_eq!(
+            take_opt(&mut args, "--bambda-filter").as_deref(),
+            Some("f.bambda")
+        );
+        assert_eq!(
+            take_opt(&mut args, "--bambda-column").as_deref(),
+            Some("c.bambda")
+        );
+        assert_eq!(args, strings(&["--seconds", "2"]));
+
+        let missing = std::env::temp_dir().join("webprobe-r16-missing.bambda");
+        let mut print = BambdaPrint::new(Some(missing.to_str().unwrap()), None);
+        assert!(print.filter.is_none());
+        assert_eq!(
+            print.render(&[hist_entry(1), hist_entry(2)]),
+            vec![
+                "1\tGET\thttp://example.test\t/\t200".to_string(),
+                "2\tGET\thttp://example.test\t/\t200".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn bambda_cell_text_shows_values_and_row_errors() {
+        assert_eq!(cell_text(Some(&Cell::Text("fixture".into()))), "fixture");
+        assert_eq!(cell_text(Some(&Cell::Failed("boom".into()))), "Error: boom");
+        assert_eq!(cell_text(None), "");
     }
 
     #[test]

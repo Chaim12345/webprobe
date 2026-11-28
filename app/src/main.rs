@@ -7,6 +7,7 @@ use webprobe_core::analysis;
 use webprobe_core::burp_config;
 use webprobe_core::codec;
 mod analysis_ui;
+mod bambda_tables;
 mod bambda_ui;
 use webprobe_core::collaborator;
 use webprobe_core::compare;

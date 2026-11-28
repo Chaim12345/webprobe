@@ -8,24 +8,25 @@ use eframe::egui::{self, RichText, Ui};
 
 use crate::theme::{self, c};
 
-/// One column description.
+/// One column description. The label is owned, so a Bambda custom column can
+/// carry the script's name.
 pub struct Column {
-    pub label: &'static str,
+    pub label: String,
     pub width: f32,
     pub align_right: bool,
 }
 
 impl Column {
-    pub fn new(label: &'static str, width: f32) -> Self {
+    pub fn new(label: impl Into<String>, width: f32) -> Self {
         Self {
-            label,
+            label: label.into(),
             width,
             align_right: false,
         }
     }
-    pub fn right(label: &'static str, width: f32) -> Self {
+    pub fn right(label: impl Into<String>, width: f32) -> Self {
         Self {
-            label,
+            label: label.into(),
             width,
             align_right: true,
         }
@@ -100,7 +101,7 @@ pub fn column_chooser(ui: &mut Ui, columns: &[Column], state: &mut TableState) {
             ui.label(RichText::new("show:").size(12.0).color(theme::ink_hint()));
             for (i, col) in columns.iter().enumerate() {
                 let mut on = state.is_visible(i);
-                if ui.checkbox(&mut on, col.label).changed() {
+                if ui.checkbox(&mut on, &col.label).changed() {
                     // `hidden` stores visibility per column (true = shown).
                     if state.hidden.len() < columns.len() {
                         state.hidden.resize(columns.len(), true);
@@ -287,7 +288,7 @@ fn table_body_inner<R, F>(
                         egui::WidgetInfo::labeled(
                             egui::accesskit::Role::ColumnHeader,
                             true,
-                            col.label,
+                            &col.label,
                         )
                     });
                     if resp.hovered() {
@@ -353,7 +354,7 @@ fn table_body_inner<R, F>(
         .show(|ui| {
             for (i, col) in columns.iter().enumerate() {
                 let mut on = state.is_visible(i);
-                if ui.checkbox(&mut on, col.label).changed() {
+                if ui.checkbox(&mut on, &col.label).changed() {
                     if state.hidden.len() < columns.len() {
                         state.hidden.resize(columns.len(), true);
                     }

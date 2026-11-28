@@ -38,7 +38,10 @@ impl Preview {
 #[derive(Default)]
 pub struct State {
     loaded: bool,
-    scripts: Vec<Script>,
+    pub(crate) scripts: Vec<Script>,
+    /// R-16: the filter and custom-column runs of the History, Logger and
+    /// WebSocket tables. They live here so no `App` field is added (ADR 0002).
+    pub tables: crate::bambda_tables::Tables,
     editor: Option<Script>,
     import_path: String,
     export_path: String,
@@ -66,6 +69,14 @@ fn store() -> Store {
     )
 }
 impl State {
+    /// Load the library once without visiting this page: the tables' Bambda
+    /// pickers list the saved scripts.
+    pub fn ensure_loaded(&mut self) {
+        if !self.loaded {
+            self.reload();
+        }
+    }
+
     fn reload(&mut self) {
         self.loaded = true;
         match store().load() {
@@ -187,7 +198,7 @@ pub fn show(app: &mut crate::App, ui: &mut Ui) {
     }
     egui::ScrollArea::vertical().id_salt("bambda_library_page").show(ui, |ui| {
         ui.heading("Bambda library");
-        ui.label("Java filters and custom columns for HTTP history. Preview only: scripts are not applied to the history table yet.");
+        ui.label("Java filters and custom columns. Preview here; apply a saved filter or column to the HTTP history, Logger or WebSockets history table from that table's own Bambda row.");
         ui.add_space(4.0);
         ui.label(RichText::new("Scripts can access your files and network. Importing or saving never runs code. Only preview code you trust.").color(crate::theme::c(crate::theme::BAD)));
         ui.add_enabled_ui(!busy, |ui| {

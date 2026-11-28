@@ -2,7 +2,7 @@
 
 ## Status
 
-This file describes the evaluator backend. The next milestone adds a library/editor and explicit preview, documented in [R-16-bambda-library-preview.md](R-16-bambda-library-preview.md). History-table application and automatic execution on new traffic are still not implemented; R-16 remains open.
+This file describes the evaluator backend. The next milestone adds a library/editor and explicit preview, documented in [R-16-bambda-library-preview.md](R-16-bambda-library-preview.md). Table application landed 2026-11-28 (#253): `Program::apply` and `Outcome::interpret` fold one batch into a filter verdict or a custom-column cell per row, and `webprobe_core::bambda_rows` builds the bounded per-table snapshots. Automatic execution on new traffic is still not implemented: a table run is explicit and covers the newest 200 rows.
 
 ## Contract
 

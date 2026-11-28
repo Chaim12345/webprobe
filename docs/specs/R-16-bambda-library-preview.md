@@ -2,7 +2,7 @@
 
 ## Scope
 
-Extensions > Bambda library provides a local script library and editor for Java HTTP-history filters and custom columns. This is a preview-only milestone. It does not apply filters or custom columns to the HTTP history table, run on new traffic, or implement every Montoya method. R-16 is not complete.
+Extensions > Bambda library provides a local script library and editor for Java HTTP-history filters and custom columns. This milestone added the library, the editor and the preview; applying a script to a table came next (see "Applying a script to a table" below). It does not run on new traffic and does not implement every Montoya method.
 
 Importing, loading, saving, exporting and deleting never compile or evaluate source. The user must acknowledge that Java can access local files and network, then press Compile and preview. This is trusted local code, not a sandbox. Source edits and selecting/importing another script reset that acknowledgement.
 
@@ -15,6 +15,16 @@ File input/output is capped at 256 KiB, source at 128 KiB and names at 200 chara
 Caller-selected paths must be regular files; devices, FIFOs, sockets, directories and symlinks are rejected before opening. File operations are still synchronous. This check is not a defense against a concurrent local filesystem swap or a slow regular file on a network filesystem. Atomic exports never open an existing destination. A FIFO regression covers import, save, export and delete rejection.
 
 The editor guards unsaved text when creating, selecting or importing another script. Delete requires its own confirmation and removes the saved copy, not the editor text.
+
+## Applying a script to a table
+
+Since 2026-11-28 (#253) each of the HTTP history, Logger and WebSockets history tables has its own Bambda row under that table's filter bar: a filter picker, a custom-column picker, Apply and Cancel. Applying runs the chosen saved script in a worker thread over the newest 200 rows of the table (all of them when the table is smaller). The run is explicit, never automatic: selecting a script changes nothing until Apply is pressed. A compile or row error is shown under the bar, the previous run stays applied, and a row the script did not judge (newer than the run, outside the window, or larger than one batch) stays visible. A row whose script threw stays visible and is counted.
+
+The custom column is appended as the last column of its table; it shows the value the script returned or that row's error, and the HTTP history table sorts on it. The Logger and WebSockets tables do not sort by any column. The Logger's CSV export writes the rows its Bambda filter keeps, not the unfiltered log. Rows leaving a table's window after a run are shown unfiltered with a count of what changed, until Apply runs again.
+
+A WebSocket message reaches a script as a synthetic `POST /websocket` request whose body is the message payload, with `X-Webprobe-Direction` and `X-Webprobe-Opcode` headers; the Montoya `WebSocketMessage` API is not exposed. A WebSocket row reports port 443 and TLS regardless of the socket, because the recorded message carries no origin. Logger rows whose messages were dropped (older tool traffic, cleared history) are skipped rather than invented.
+
+Headless proxy mode applies the same two functions: `--bambda-filter FILE` prints only the exchanges the filter returns true for, and `--bambda-column FILE` appends the column value as the last tab-separated field. A script that fails to compile there prints its diagnostic to stderr and the run continues without it.
 
 ## Worker and result state
 
