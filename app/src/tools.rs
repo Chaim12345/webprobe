@@ -4045,6 +4045,41 @@ mod tests {
         assert!(std::fs::symlink_metadata(&lock).is_ok(), "live lock kept");
         let _ = std::fs::remove_dir_all(&d);
     }
+
+    /// #248: the user options file holds the REST API keys, so the save path
+    /// must create it owner-only even when it did not exist before.
+    #[cfg(unix)]
+    #[test]
+    fn saved_user_options_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("wp-user-options-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("user-options.json");
+        let api = webprobe_core::burp_config::ApiConfig {
+            enabled: true,
+            keys: vec!["secret-api-key".to_string()],
+            ..Default::default()
+        };
+        let json = webprobe_core::burp_config::export_user_options(&api);
+        webprobe_core::util::write_private(
+            &path,
+            serde_json::to_string_pretty(&json).unwrap().as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "an options file with API keys must be owner-only from its first write"
+        );
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("secret-api-key"),
+            "the keys are what makes the file sensitive"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]

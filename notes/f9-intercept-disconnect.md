@@ -45,14 +45,15 @@ closed its side) and no claim about connection-reuse corruption.
   handles, stop and join the acceptor, drop held entries, then give workers a **bounded**
   `PROXY_SETTLE` (3 s) window in which finished handles are joined. Anything still running at the
   end prints `F9-PROXY-WORKERS-DETACHED` and the parent rejects it: child termination is
-  containment, not clean worker termination.
-- **C — positive evidence before expected failure.** The characterisation asserts
-  `released=false`, `held_after_3s == 1`, `accepts_before == 0`, `parsed_before == 0`,
-  `accepts_at_cancel == 0`, `parsed_at_cancel == 0`, `forwards == 1` and
-  `parsed_after_forward == parsed_at_cancel + 1` before the final target assertion. The parent
-  requires `F9-CASE-EVIDENCE-COMPLETE` and `F9-TARGET-CHECK` in the child stdout, in that order,
-  plus `F9-TARGET-FAILURE` on stderr, so an unrelated assertion failure cannot satisfy the
-  expected-failure match. The characterisation label is unchanged.
+  containment, not clean worker termination. A finished worker whose join returns a panic
+  payload prints `F9-PROXY-WORKER-PANICKED`, which the parent rejects too.
+- **C — evidence before the pass/fail assertions.** The target-behaviour regression prints
+  `F9-EVIDENCE released=…`, `held_after` and the origin counters before asserting. The parent
+  requires `F9-ISOLATION-OK`, `F9-EVIDENCE released=true` and the per-case
+  `CASE-COMPLETE: {HELD}` line (and `CASE-COMPLETE` for the control case). A failure is reported
+  by the assertions themselves (`F9-TARGET-FAILURE: …`); there is no expected-failure match
+  anymore, because the case now passes only when the held request is released and the origin
+  was never contacted.
 - **D/E — not applicable to this branch** (233 capture fixture work; see that branch's note).
 - **F — retained.** Guarded child through `finish`, file-backed child logs, exact one-case summary
   checks, canonicalised child environment plus sentinels plus the `ca.json` artefact, fail-closed

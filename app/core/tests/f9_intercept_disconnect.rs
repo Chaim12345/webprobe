@@ -1,11 +1,11 @@
 //! F9: what happens to a held intercepted HTTP request when its client goes
-//! away. Source-only artifact for review: nothing here has been built or run.
+//! away. The fixture runs in CI: each case spawns this test binary with an
+//! isolated child environment (see below).
 //!
-//! `held_request_is_released_when_the_client_disconnects` records
-//! the CURRENT behaviour (a request stays held and is still forwardable after
-//! the client closed). It is a characterisation, not a fix guard: it passes
-//! precisely because the defect exists. A future target-behaviour regression
-//! (held request released, nothing sent) is planned once a fix is approved.
+//! `held_request_is_released_when_the_client_disconnects` is a
+//! target-behaviour regression: a held request must be released when its
+//! client closed, and nothing may reach the origin afterwards. It replaced
+//! the earlier characterisation of the defect once the F9 fix landed.
 //!
 //! Every case is a parent wrapper that never constructs `Shared`. The parent
 //! creates a unique tempdir with a fake HOME, a fake XDG_CONFIG_HOME and an
@@ -39,6 +39,7 @@ const SENTINEL_XDG: &[u8] = b"f9-sentinel-xdg: not a CA\n";
 const CONTROL: &str = "control_normal_request_reaches_the_origin_and_returns";
 const HELD: &str = "held_request_is_released_when_the_client_disconnects";
 const DETACHED: &str = "F9-PROXY-WORKERS-DETACHED";
+const WORKER_PANIC: &str = "F9-PROXY-WORKER-PANICKED";
 
 // ---------- child-process CA isolation ----------
 
@@ -528,7 +529,11 @@ impl Drop for Proxy {
             let mut still = Vec::new();
             for handle in pending {
                 if handle.is_finished() {
-                    let _ = handle.join();
+                    // A worker that panicked is a failed cleanup, not a clean
+                    // join: report it instead of discarding the join result.
+                    if handle.join().is_err() {
+                        println!("{WORKER_PANIC}");
+                    }
                 } else {
                     still.push(handle);
                 }
@@ -744,6 +749,11 @@ fn control_normal_request_reaches_the_origin_and_returns() {
         !run.stdout.contains(DETACHED),
         "a production worker could not be joined; child termination is containment, not acceptance",
     );
+    assert!(
+        !run.stdout.contains(WORKER_PANIC),
+        "a proxy worker panicked during teardown\nstdout:\n{}",
+        run.stdout,
+    );
     assert_single_case(&run.stdout, true);
     assert!(
         run.stdout.contains("F9-ISOLATION-OK"),
@@ -789,6 +799,11 @@ fn held_request_is_released_when_the_client_disconnects() {
     assert!(
         !run.stdout.contains(DETACHED),
         "a production worker could not be joined; child termination is containment, not acceptance",
+    );
+    assert!(
+        !run.stdout.contains(WORKER_PANIC),
+        "a proxy worker panicked during teardown\nstdout:\n{}",
+        run.stdout,
     );
     assert_single_case(&run.stdout, true);
     assert!(

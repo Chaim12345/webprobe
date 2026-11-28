@@ -457,6 +457,25 @@ mod tests {
         assert!(parse_interaction("{}").is_none());
     }
 
+    /// #251: a wrapped key that is not a valid RSA-OAEP-SHA256 ciphertext for
+    /// this key is an error, not a panic and not an empty success. The move to
+    /// `rsa` 0.10 changed the unwrap call; this pins the failure path.
+    #[test]
+    fn invalid_oaep_ciphertext_is_an_error() {
+        use rsa::traits::PublicKeyParts;
+        let key = rsa::PrivateKey::new(&mut crate::tls::OsRandom, 1024).unwrap();
+        // A full-size block of zeros cannot carry a valid OAEP encoding.
+        let garbage = B64.encode(vec![0u8; key.size()]);
+        let err = decrypt_messages(&key, &garbage, &[]).unwrap_err();
+        assert!(err.starts_with("aes_key unwrap:"), "{err}");
+        // A block longer than the modulus fails the size check first.
+        let oversized = B64.encode(vec![0u8; key.size() + 1]);
+        assert!(decrypt_messages(&key, &oversized, &[]).is_err());
+        // The key field itself still reports its own base64 errors.
+        let err = decrypt_messages(&key, "not base64!", &[]).unwrap_err();
+        assert!(err.starts_with("aes_key base64:"), "{err}");
+    }
+
     /// Live round trip against a public server (network; run with
     /// `cargo test interactsh -- --ignored`).
     #[test]

@@ -2514,6 +2514,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// #247: a project that does not exist yet is private from its first
+    /// save. The project holds captured traffic, cookies and findings.
+    #[cfg(unix)]
+    #[test]
+    fn first_save_creates_a_private_project_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("wp-perm-new-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("new.json");
+        assert!(!path.exists());
+        save(&path, &ProjectData::default()).unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "the first save must not inherit the process umask"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Review finding 12: saves to different files are queued, not merged,
     /// so a settings snapshot can never replace a pending project autosave.
     #[test]

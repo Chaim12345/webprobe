@@ -10,8 +10,8 @@ Three evidence classes, kept apart on purpose:
 - **B. Historical log observations** — from runs at the pin, with the tree state
   named per item. They are log observations, including their own contradictions;
   they are **not** acceptance evidence for the current head.
-- **C. Proposal** — the change on this branch. Unqualified: no build, test,
-  check or lint has been run on it.
+- **C. Proposal** — the change on this branch, merged in #236. CI now
+  builds and tests it; section D records what that does and does not cover.
 
 ---
 
@@ -94,7 +94,7 @@ records `4 passed; 0 failed`.
 - Differing hashes between runs do **not** by themselves identify which test or
   code path wrote the sentinel.
 
-## C. Proposal (unqualified; no run on this head)
+## C. Proposal (merged in #236; exercised by CI)
 
 ### 1. Unwind-safe child
 
@@ -172,8 +172,12 @@ where the residual one still reaches it.
 
 ## D. Limits
 
-- No `cargo build`, `test`, `check` or `clippy` was run on this head; every
-  statement in section C is a code claim, not a result.
+- The change is built and tested in CI: `cargo test --workspace --locked`
+  runs the `ca_isolation`, `session_contracts`, `pipeline_matrix` and
+  `intruder_baseline` cases and the support TLS tests. The section C
+  statements remain code claims about what the fixture checks; the CI run
+  shows it compiles and passes, not that it covers every entrypoint in the
+  inventory.
 - Windows/macOS path behaviour is unverified. GUI CA retire/import flows in
   `app/src/proxy_settings.rs` were read, not executed.
 - The historical numbers in section B are log observations at the pin, with the
