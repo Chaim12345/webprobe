@@ -347,10 +347,9 @@ mod tests {
     #[test]
     fn http2_is_on_until_the_project_turns_it_off() {
         let shared = crate::net::Shared::new();
-        let http2 =
-            |shared: &crate::net::Shared| shared_config(shared).lock().unwrap().http.http2_enabled;
+        let http2 = |shared: &crate::net::Shared| shared_config(shared).lock().http.http2_enabled;
         assert!(http2(&shared), "Burp's default is on");
-        shared_config(&shared).lock().unwrap().http.http2_enabled = false;
+        shared_config(&shared).lock().http.http2_enabled = false;
         assert!(!http2(&shared));
     }
 

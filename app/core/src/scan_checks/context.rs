@@ -81,12 +81,10 @@ impl ScanCtx {
     ) -> ScanCtx {
         let stored_report = crate::scan_config::shared_config(&shared)
             .lock()
-            .unwrap()
             .check_enabled(STORED_INPUT_ID);
         let host_hdr = util::get_header(&parts.headers, "Host").unwrap_or_default();
         let http2_enabled = crate::scan_config::shared_config(&shared)
             .lock()
-            .unwrap()
             .http
             .http2_enabled;
         let mut cx = ScanCtx {
@@ -195,7 +193,6 @@ impl ScanCtx {
         (is_burp_issue(issue) || self.shared.extra_checks.load(Ordering::SeqCst))
             && crate::scan_config::shared_config(&self.shared)
                 .lock()
-                .unwrap()
                 .issue_allowed(issue, true)
     }
 
@@ -209,7 +206,7 @@ impl ScanCtx {
         }
         {
             let cfg_slot = crate::scan_config::shared_config(&self.shared);
-            let config = cfg_slot.lock().unwrap();
+            let config = cfg_slot.lock();
             issues.retain(|i| config.issue_allowed(&i.name, true));
         }
         add_issues(&self.shared, issues);

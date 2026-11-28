@@ -58,6 +58,30 @@ def struct_fields(path, name):
     return len(re.findall(r"(?m)^\s*(?:pub(?:\([a-z:]+\))?\s+)?[a-z_][a-z_0-9]*\s*:", body))
 
 
+def test_ca_default_shared(app):
+    """Sites where a test could still resolve the real user CA.
+
+    Tests must build `Shared` with `Shared::in_memory()` (or `with_ca_dir`).
+    The desktop crate's real entry points (`src/main.rs`, `src/bin/`) keep the
+    persisted CA and are not test code. A file that deliberately exercises the
+    constructor marks itself `// test-ca-exempt: <reason>`.
+    """
+    roots = [os.path.join(app, "core", "tests"), os.path.join(app, "src")]
+    sites = 0
+    for root in roots:
+        for f in rust_files(root, tests=True):
+            rel = os.path.relpath(f, app)
+            if rel in (os.path.join("src", "main.rs"), os.path.join("core", "tests", "ca_isolation.rs")):
+                continue
+            if rel.startswith(os.path.join("src", "bin")):
+                continue
+            raw = read(f, tests=True)
+            if "test-ca-exempt" in raw:
+                continue
+            sites += len(re.findall(r"\bShared::new\(", re.sub(r"//[^\n]*", "", raw)))
+    return sites
+
+
 def measure(app):
     core, desktop = os.path.join(app, "core", "src"), os.path.join(app, "src")
     crates = [core, desktop, os.path.join(app, "support", "src"), os.path.join(app, "report", "src")]
@@ -77,6 +101,8 @@ def measure(app):
             "console_prints_core": count([core], r"\b(?:e?println|dbg)!"),
             "path_mounts_core": count([core], r"#\[path\s*="),
             "allow_attributes": count(crates, r"#!?\[(?:cfg_attr\([^\]]*,\s*)?allow\(", tests=True),
+            # F13: no test may build the persisted CA (tests/ca_isolation.rs).
+            "test_ca_default_shared": test_ca_default_shared(app),
         },
     }
 

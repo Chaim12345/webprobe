@@ -65,12 +65,7 @@ pub(crate) fn event_log_window(app: &mut App, ctx: &egui::Context) {
         .open(&mut open)
         .default_size(egui::vec2(760.0, 320.0))
         .show(ctx, |ui| {
-            let lines: Vec<String> = app
-                .shared
-                .events
-                .lock()
-                .map(|e| e.clone())
-                .unwrap_or_default();
+            let lines: Vec<String> = app.shared.events.lock().clone();
             let columns = [
                 table::Column::new("Time", 90.0),
                 table::Column::new("Type", 70.0),

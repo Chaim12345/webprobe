@@ -868,10 +868,7 @@ pub fn settings_panel(ui: &mut Ui, x: &mut IntruderExtra) -> bool {
 /// Column labels must be `&'static str`; each distinct label leaks once.
 fn intern(label: &str) -> &'static str {
     static TABLE: OnceLock<Mutex<HashMap<String, &'static str>>> = OnceLock::new();
-    let mut t = TABLE
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .unwrap();
+    let mut t = TABLE.get_or_init(|| Mutex::new(HashMap::new())).lock();
     if let Some(s) = t.get(label) {
         return s;
     }
@@ -881,7 +878,7 @@ fn intern(label: &str) -> &'static str {
 }
 
 fn send_row_to_repeater(app: &mut App, r: &ResultRow, target: &(String, u16, bool)) {
-    let mut reps = app.shared.repeaters.lock().unwrap();
+    let mut reps = app.shared.repeaters.lock();
     let id = app.shared.rep.new_tab_id();
     reps.push(crate::net::RepTab {
         id,

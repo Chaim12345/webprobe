@@ -1663,6 +1663,9 @@ impl PayloadSource {
     }
 }
 
+/// Requests one Intruder attack will send before the cap kicks in (N-04 guard).
+pub const REQUEST_LIMIT: usize = 100_000;
+
 // ---------- attack plan: sets resolved against the template ----------
 
 /// One payload set as the request matrix consumes it.

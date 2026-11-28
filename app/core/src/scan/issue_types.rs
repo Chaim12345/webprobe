@@ -106,7 +106,7 @@ pub fn add_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     if issues.is_empty() {
         return;
     }
-    let mut iss = shared.issues.lock().unwrap();
+    let mut iss = shared.issues.lock();
     for issue in issues.iter_mut() {
         issue.id = shared.next_issue_id.fetch_add(1, Ordering::SeqCst);
         // Issues renamed after construction (the Collaborator matcher)

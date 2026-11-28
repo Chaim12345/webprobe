@@ -614,8 +614,8 @@ pub fn run_parallel(
     let _tool = net::tool_scope("Repeater");
     let n_items = items.len();
     let gate = std::sync::Arc::new(std::sync::Barrier::new(n_items));
-    let arrival = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let on_item = std::sync::Mutex::new(on_item);
+    let arrival = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
+    let on_item = crate::sync::Mutex::new(on_item);
     let on_item = &on_item;
     std::thread::scope(|s| {
         for (n, item) in items.iter().enumerate() {
@@ -674,14 +674,14 @@ pub fn run_parallel(
                     Ok(resp)
                 })();
                 let at = {
-                    let mut done = arrival.lock().unwrap();
+                    let mut done = arrival.lock();
                     done.push(n);
                     done.len()
                 };
                 let mut r = finish_item(shared, item, &req, outcome.map(|resp| (resp, None)), hook);
                 r.arrival = Some((at, n_items));
                 r.elapsed_ms = t0.elapsed().as_millis();
-                on_item.lock().unwrap()(n, r);
+                on_item.lock()(n, r);
             });
         }
     });
@@ -897,14 +897,14 @@ mod tests {
         );
     }
 
-    type LabLog = std::sync::Arc<std::sync::Mutex<Vec<(usize, String)>>>;
+    type LabLog = std::sync::Arc<crate::sync::Mutex<Vec<(usize, String)>>>;
 
     /// A lab recording (connection index, request line) for each request,
     /// answering keep-alive.
     fn h1_lab() -> (u16, LabLog) {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
-        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
         let seen = log.clone();
         std::thread::spawn(move || {
             for (idx, s) in l.incoming().flatten().enumerate() {
@@ -924,7 +924,7 @@ mod tests {
                                 .unwrap_or("")
                                 .to_string();
                             let body = format!("conn{idx} {line}");
-                            seen.lock().unwrap().push((idx, line));
+                            seen.lock().push((idx, line));
                             let _ = s.write_all(
                                 format!(
                                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
@@ -958,7 +958,7 @@ mod tests {
         const SENDERS: usize = 20;
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
-        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
         let seen = events.clone();
         std::thread::spawn(move || {
             // Accept every connection before any reading starts: a
@@ -995,11 +995,11 @@ mod tests {
                             }
                         }
                     }
-                    seen.lock().unwrap().push("prefix");
+                    seen.lock().push("prefix");
                     // Every prefix is in: now the last bytes may come.
                     gate.wait();
                     if let Ok(1) = s.read(&mut byte) {
-                        seen.lock().unwrap().push("last");
+                        seen.lock().push("last");
                         let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
                     }
                 });
@@ -1021,13 +1021,13 @@ mod tests {
                 websocket: false,
             })
             .collect();
-        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let got = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
         let keep = got.clone();
         let end = run_parallel(&shared, &items, &cancel, move |n, r| {
-            keep.lock().unwrap().push((n, r))
+            keep.lock().push((n, r))
         });
         assert_eq!(end, SequenceEnd::Completed);
-        let got = got.lock().unwrap();
+        let got = got.lock();
         assert_eq!(got.len(), 20);
         assert!(
             got.iter()
@@ -1037,7 +1037,7 @@ mod tests {
             got.iter()
                 .all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == 20))
         );
-        let ev = events.lock().unwrap();
+        let ev = events.lock();
         assert_eq!(ev.iter().filter(|e| **e == "prefix").count(), 20, "{ev:?}");
         assert_eq!(ev.iter().filter(|e| **e == "last").count(), 20, "{ev:?}");
         let last_prefix = ev.iter().rposition(|e| *e == "prefix").unwrap();
@@ -1105,13 +1105,13 @@ mod tests {
             http2: false,
             websocket: false,
         };
-        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let got = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
         let keep = got.clone();
         let end = run_parallel(&shared, &[good, bad], &cancel, move |n, r| {
-            keep.lock().unwrap().push((n, r))
+            keep.lock().push((n, r))
         });
         assert_eq!(end, SequenceEnd::Completed);
-        let got = got.lock().unwrap();
+        let got = got.lock();
         assert_eq!(got.len(), 2);
         assert!(
             got.iter()
@@ -1147,7 +1147,7 @@ mod tests {
             SequenceEnd::Completed
         );
         assert_eq!(
-            log.lock().unwrap().clone(),
+            log.lock().clone(),
             vec![
                 (0, "GET /a HTTP/1.1".into()),
                 (0, "GET /b HTTP/1.1".into()),
@@ -1176,12 +1176,12 @@ mod tests {
             got.iter().map(|(n, _)| *n).collect::<Vec<_>>(),
             vec![0, 1, 2]
         );
-        log.lock().unwrap().clear();
+        log.lock().clear();
         assert_eq!(
             run_sequence(&shared, &items, false, &cancel, |_, _| {}),
             SequenceEnd::Completed
         );
-        let conns: Vec<usize> = log.lock().unwrap().iter().map(|(c, _)| *c).collect();
+        let conns: Vec<usize> = log.lock().iter().map(|(c, _)| *c).collect();
         assert_eq!(conns, vec![1, 2, 3], "a new connection per request");
     }
 
@@ -1215,7 +1215,7 @@ mod tests {
             ),
             item(2, "127.0.0.1", port, &get("/z", port)),
         ];
-        log.lock().unwrap().clear();
+        log.lock().clear();
         let mut got = Vec::new();
         assert_eq!(
             run_sequence(&shared, &items, false, &cancel, |n, r| got
@@ -1223,7 +1223,7 @@ mod tests {
             SequenceEnd::UnknownHost(0)
         );
         assert_eq!(got.len(), 1);
-        assert!(log.lock().unwrap().is_empty());
+        assert!(log.lock().is_empty());
         // Cancelled after the first response: the second never goes out.
         let items = vec![
             item(1, "127.0.0.1", port, &get("/p", port)),
@@ -1236,7 +1236,6 @@ mod tests {
         assert_eq!(end, SequenceEnd::Cancelled(1));
         assert_eq!(
             log.lock()
-                .unwrap()
                 .iter()
                 .map(|(_, l)| l.as_str())
                 .collect::<Vec<_>>(),

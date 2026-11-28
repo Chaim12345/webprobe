@@ -23,9 +23,10 @@
     "console_prints_core": 2,
     "path_mounts_core": 8,
     "result_string_core": 90,
-    "shared_fields": 92,
+    "shared_fields": 91,
+    "test_ca_default_shared": 0,
     "thread_locals": 12,
-    "thread_sleeps": 33,
+    "thread_sleeps": 32,
     "thread_spawns": 16
   }
 }

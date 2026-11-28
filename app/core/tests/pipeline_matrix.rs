@@ -38,10 +38,10 @@ fn reviewer_live_get_post_chunked_and_single_request_matrix() {
         // reply is a complete keep-alive Content-Length response; only the
         // final exchange says "Connection: close".
         let upstream = std::thread::spawn(move || {
-            let seen: Arc<std::sync::Mutex<Vec<Vec<u8>>>> = Default::default();
+            let seen: Arc<webprobe_core::sync::Mutex<Vec<Vec<u8>>>> = Default::default();
             let deadline = Instant::now() + Duration::from_secs(5);
             let mut handlers = vec![];
-            while seen.lock().unwrap().len() < count && Instant::now() < deadline {
+            while seen.lock().len() < count && Instant::now() < deadline {
                 let Ok((mut s, _)) = up.accept() else {
                     std::thread::sleep(Duration::from_millis(5));
                     continue;
@@ -66,7 +66,7 @@ fn reviewer_live_get_post_chunked_and_single_request_matrix() {
                             return;
                         }
                         let (n, last) = {
-                            let mut g = seen.lock().unwrap();
+                            let mut g = seen.lock();
                             g.push(bytes);
                             (g.len(), g.len() >= count)
                         };
@@ -87,7 +87,7 @@ fn reviewer_live_get_post_chunked_and_single_request_matrix() {
                 h.join().unwrap();
             }
 
-            seen.lock().unwrap().clone()
+            seen.lock().clone()
         });
         let (pp, worker) = proxy(shared.clone());
         let mut c = client(pp);
@@ -503,8 +503,11 @@ fn response_edits_do_not_rewrite_incomplete_response_evidence() {
     let reply: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc";
     let shared = shared();
     shared.intercept_on.store(false, Ordering::SeqCst);
-    shared.response_rules.lock().unwrap().enabled = true;
-    shared.response_rules.lock().unwrap().content_type_on = false;
+    shared.response_rules.lock().update(|r| r.enabled = true);
+    shared
+        .response_rules
+        .lock()
+        .update(|r| r.content_type_on = false);
     for (scope, from, to) in [
         (
             MrScope::ResponseHeader,
@@ -515,7 +518,12 @@ fn response_edits_do_not_rewrite_incomplete_response_evidence() {
     ] {
         let mut rule = MrRule::new(scope);
         (rule.match_, rule.replacement) = (from.into(), to.into());
-        shared.mr_response.lock().unwrap().push(rule);
+        {
+            let mut rules = shared.mr_response.lock().rules().to_vec();
+            rules.push(rule);
+            *shared.mr_response.lock() =
+                std::sync::Arc::new(webprobe_core::rules::CompiledMrRules::new(rules));
+        }
     }
     let (port, upstream) = one_shot_upstream(reply);
     let (pp, worker) = proxy(shared.clone());

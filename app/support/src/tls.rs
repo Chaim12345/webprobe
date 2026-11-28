@@ -215,15 +215,23 @@ pub struct MitmAuthority {
     /// fresh 2048-bit RSA key per host cost a key generation on every new
     /// site (Burp's generated certificates share one key too).
     leaf_key: std::sync::OnceLock<KeyPair>,
+    /// False for a CA held only in memory (tests): it touched no path.
+    persisted: bool,
 }
 
 impl MitmAuthority {
     /// The persistent CA (created on first run), or an in-memory one in tests.
     pub fn new() -> Result<Self, String> {
-        if cfg!(test) {
+        if cfg!(test) || cfg!(feature = "test-ca") {
             return Self::load_or_create(None);
         }
         Self::load_or_create(default_ca_dir())
+    }
+
+    /// True when this CA exists only in memory, so no path was read or
+    /// written. Tests assert this to prove the test CA is isolated.
+    pub fn is_in_memory(&self) -> bool {
+        !self.persisted
     }
 
     /// A CA held only in memory. Test harnesses use this so no test can read
@@ -241,7 +249,10 @@ impl MitmAuthority {
                 crate::util::read_text_file_capped(f, crate::util::MAX_TEXT_FILE_BYTES)
         {
             match Self::from_saved(&text) {
-                Ok(ca) => return Ok(ca),
+                Ok(mut ca) => {
+                    ca.persisted = dir.is_some();
+                    return Ok(ca);
+                }
                 Err(_) => {
                     tracing::warn!(target: "webprobe", event_code = "tls.ca.unreadable", "Ignoring unreadable CA file");
                 }
@@ -269,7 +280,9 @@ impl MitmAuthority {
                 tracing::error!(target: "webprobe", event_code = "tls.ca.save_failed", "Could not persist CA; it will change on next start");
             }
         }
-        Self::from_seed(&seed, ca_key)
+        let mut ca = Self::from_seed(&seed, ca_key)?;
+        ca.persisted = dir.is_some();
+        Ok(ca)
     }
 
     fn from_saved(text: &str) -> Result<Self, String> {
@@ -334,6 +347,7 @@ impl MitmAuthority {
             next_serial: AtomicI32::new(leaf_seed),
             hosts: Mutex::new(HashMap::new()),
             leaf_key: std::sync::OnceLock::new(),
+            persisted: false,
         })
     }
 
@@ -358,6 +372,7 @@ impl MitmAuthority {
             next_serial: AtomicI32::new(leaf_seed),
             hosts: Mutex::new(HashMap::new()),
             leaf_key: std::sync::OnceLock::new(),
+            persisted: false,
         })
     }
 
@@ -395,7 +410,7 @@ impl MitmAuthority {
         } else {
             host.to_string()
         };
-        let mut hosts = self.hosts.lock().unwrap();
+        let mut hosts = self.hosts.lock();
         if let Some(config) = hosts.get(&key) {
             return Ok(config.clone());
         }

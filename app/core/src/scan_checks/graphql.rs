@@ -161,7 +161,6 @@ impl RequestCheck for GraphqlEndpointDiscovered {
                 .state()
                 .openapi_hosts
                 .lock()
-                .unwrap()
                 .insert(format!("graphql|{scheme}://{}:{}", cx.host, cx.port))
         {
             return;
@@ -815,7 +814,6 @@ impl RequestCheck for BackupFile {
                 .state()
                 .openapi_hosts
                 .lock()
-                .unwrap()
                 .insert(format!("backup|{}:{}{path}", cx.host, cx.port))
         {
             return;

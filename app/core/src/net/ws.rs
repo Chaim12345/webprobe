@@ -294,7 +294,7 @@ impl WsWatch {
         secure: bool,
         upgrade: &[u8],
     ) -> Option<Arc<WsWatch>> {
-        let exts = shared.ext_hooks.lock().unwrap().active_hooks();
+        let exts = shared.ext_hooks.lock().active_hooks();
         if exts.is_empty() {
             return None;
         }
@@ -578,12 +578,10 @@ pub fn ws_message(
     // WebSocket match and replace (Proxy settings), before interception as
     // for HTTP messages.
     if (!shared.ws_rules_in_scope_only.load(Ordering::SeqCst) || ws_in_scope(shared, host))
-        && let Some(new) = crate::ws_rules::apply(
-            &shared.ws_rules.lock().unwrap(),
-            client_to_server,
-            binary,
-            &payload,
-        )
+        && let Some(new) = shared
+            .ws_rules
+            .lock()
+            .apply(client_to_server, binary, &payload)
     {
         payload = new;
         changed = true;
@@ -591,7 +589,7 @@ pub fn ws_message(
     if hold {
         let id = shared.next_queue_item_id();
         let (tx, rx) = mpsc::channel::<Option<String>>();
-        shared.queue.lock().unwrap().push(InterceptItem::new(
+        shared.queue.lock().push(InterceptItem::new(
             id,
             host,
             0,
@@ -644,7 +642,7 @@ pub fn ws_message(
     if !changed {
         return Ok(msg.raw);
     }
-    shared.ws_edited.lock().unwrap().insert(hid);
+    shared.ws_edited.lock().insert(hid);
     // One final frame, RSV bits clear, masked when it goes to the server.
     Ok(build_ws_frame(0x80 | opcode, &payload, client_to_server))
 }
@@ -698,7 +696,7 @@ pub fn ws_setup(
     response: &[u8],
 ) -> WsSetup {
     let (tx, rx) = mpsc::channel();
-    shared.ws_live.lock().unwrap().insert(
+    shared.ws_live.lock().insert(
         socket,
         LiveWs {
             host: host.to_string(),
@@ -728,7 +726,8 @@ pub fn handle_websocket<C: ProxyIo>(shared: Arc<Shared>, mut client: C, req: Vec
             return;
         }
     };
-    let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    let req_rules = shared.mr_request.lock().clone();
+    let mut req_out = req_rules.apply(&req_session);
     if shared.ws_strip_extensions.load(Ordering::SeqCst) {
         req_out = ws_strip_extensions(&req_out);
     }
@@ -919,7 +918,7 @@ pub fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(
             std::thread::sleep(Duration::from_millis(2));
         }
     }
-    shared.ws_live.lock().unwrap().remove(&socket);
+    shared.ws_live.lock().remove(&socket);
 }
 
 /// The client stream is borrowed: the caller keeps the concrete TLS
@@ -940,7 +939,8 @@ pub fn handle_tls_websocket<C: ProxyIo>(
             return;
         }
     };
-    let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    let req_rules = shared.mr_request.lock().clone();
+    let mut req_out = req_rules.apply(&req_session);
     if shared.ws_strip_extensions.load(Ordering::SeqCst) {
         req_out = ws_strip_extensions(&req_out);
     }

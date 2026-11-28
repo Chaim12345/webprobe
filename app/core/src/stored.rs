@@ -109,7 +109,7 @@ fn point_key(p: &InsertionPoint) -> String {
 impl StoredInputs {
     /// Forget everything (a new scan run).
     pub fn clear(&self) {
-        *self.inner.lock().unwrap() = Inner::default();
+        *self.inner.lock() = Inner::default();
     }
 
     /// Start a batch: cleared once here, kept across its items. False when
@@ -132,18 +132,18 @@ impl StoredInputs {
 
     /// Register an audited item; its index names it from now on.
     pub fn add_item(&self, item: Item) -> usize {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock();
         g.items.push(item);
         g.items.len() - 1
     }
 
     pub fn item(&self, idx: usize) -> Option<Item> {
-        self.inner.lock().unwrap().items.get(idx).cloned()
+        self.inner.lock().items.get(idx).cloned()
     }
 
     /// The token of `point` of item `item` (the same one each time).
     pub(crate) fn token(&self, item: usize, point: &InsertionPoint) -> String {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock();
         let key = (item, point_key(point));
         if let Some(t) = g.by_point.get(&key) {
             return t.clone();
@@ -167,7 +167,7 @@ impl StoredInputs {
     /// Keep the exchange that first carried `token` (evidence for the
     /// stored-input issue).
     pub(crate) fn note_injection(&self, token: &str, request: &[u8], response: Option<&[u8]>) {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock();
         if let Some(&idx) = g.tokens.get(token)
             && g.points[idx].2.is_empty()
         {
@@ -186,7 +186,7 @@ impl StoredInputs {
             return Vec::new();
         }
         let own = find_tokens(request);
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.inner.lock();
         let mut new = Vec::new();
         for t in found {
             if own.contains(&t) {
@@ -212,7 +212,7 @@ impl StoredInputs {
 
     /// Every recorded pair, in the order found.
     pub(crate) fn pairs(&self) -> Vec<Pair> {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock();
         g.pairs
             .iter()
             .map(|&(pidx, r)| {
@@ -282,7 +282,7 @@ impl StoredInputs {
                     None => 0,
                 })
         }
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock();
         let Some(&(pidx, retrieval)) = g.pairs.get(index) else {
             return Ok(None);
         };
@@ -314,11 +314,11 @@ impl StoredInputs {
 
     #[cfg(test)]
     pub(crate) fn has_pair(&self, index: usize) -> bool {
-        self.inner.lock().unwrap().pairs.get(index).is_some()
+        self.inner.lock().pairs.get(index).is_some()
     }
 
     pub fn is_empty(&self) -> bool {
-        let g = self.inner.lock().unwrap();
+        let g = self.inner.lock();
         g.items.is_empty() && g.pairs.is_empty()
     }
 }

@@ -225,7 +225,6 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
 
     let limits = crate::scan_config::shared_config(shared)
         .lock()
-        .unwrap()
         .crawl
         .clone();
     let started = std::time::Instant::now();
@@ -419,7 +418,7 @@ mod tests {
                     .unwrap_or("")
                     .to_string();
                 let path = line.split_whitespace().nth(1).unwrap_or("/").to_string();
-                s2.lock().unwrap().push(path.clone());
+                s2.lock().push(path.clone());
                 let body = match path.as_str() {
                     "/" => "<a href=\"/a\">a</a>",
                     "/a" => "<a href=\"/b\">b</a>",
@@ -431,7 +430,7 @@ mod tests {
         let shared = Shared::new();
         {
             let cfg_slot = crate::scan_config::shared_config(&shared);
-            let mut c = cfg_slot.lock().unwrap();
+            let mut c = cfg_slot.lock();
             c.crawl = crate::scan_config::CrawlLimits {
                 max_depth: 1,
                 max_locations: 100,
@@ -441,7 +440,7 @@ mod tests {
             };
         }
         let _ = crawl(&shared, &format!("http://127.0.0.1:{port}/"));
-        let paths = seen.lock().unwrap().clone();
+        let paths = seen.lock().clone();
         assert!(
             paths.contains(&"/".to_string()) && paths.contains(&"/a".to_string()),
             "{paths:?}"
@@ -1302,7 +1301,6 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         .to_string();
     let limits = crate::scan_config::shared_config(shared)
         .lock()
-        .unwrap()
         .crawl
         .clone();
     let started = std::time::Instant::now();

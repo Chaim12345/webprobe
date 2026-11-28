@@ -1,9 +1,10 @@
 //! Regression coverage for source #7 behavior lost during the parity port.
 use super::*;
+use crate::sync::Mutex;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Barrier, Mutex};
+use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 fn read_head(r: &mut impl Read) -> Vec<u8> {
@@ -58,7 +59,7 @@ fn source_http_proxy_uses_absolute_form_without_connect_for_both_h1_modes() {
             req
         });
         let shared = Shared::new();
-        *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+        *shared.upstream.lock() = crate::upstream::UpstreamConfig {
             kind: crate::upstream::UpstreamKind::Http,
             host: "127.0.0.1".into(),
             port: port.to_string(),
@@ -70,15 +71,11 @@ fn source_http_proxy_uses_absolute_form_without_connect_for_both_h1_modes() {
         let got = Mutex::new(Vec::new());
         let cancel = AtomicBool::new(false);
         if parallel {
-            run_parallel(&shared, &[item], &cancel, |_, r| {
-                got.lock().unwrap().push(r)
-            });
+            run_parallel(&shared, &[item], &cancel, |_, r| got.lock().push(r));
         } else {
-            run_sequence(&shared, &[item], false, &cancel, |_, r| {
-                got.lock().unwrap().push(r)
-            });
+            run_sequence(&shared, &[item], false, &cancel, |_, r| got.lock().push(r));
         }
-        assert!(got.lock().unwrap()[0].error.is_none());
+        assert!(got.lock()[0].error.is_none());
         assert!(
             server
                 .join()
@@ -160,7 +157,7 @@ fn source_tls_h1_last_byte_waits_for_every_prefix() {
                     // Withhold the last TLS handshake. Other clients cannot
                     // release their barrier before the first prefixes are checked.
                     let start = std::time::Instant::now();
-                    while seen.lock().unwrap().len() < N - 1 {
+                    while seen.lock().len() < N - 1 {
                         assert!(start.elapsed() < Duration::from_secs(3));
                         std::thread::sleep(Duration::from_millis(5));
                     }
@@ -190,11 +187,11 @@ fn source_tls_h1_last_byte_waits_for_every_prefix() {
                         .set_read_timeout(Some(Duration::from_secs(4)))
                         .unwrap();
                 }
-                seen.lock().unwrap().push("prefix");
+                seen.lock().push("prefix");
                 gate.wait();
                 tls.read_exact(&mut byte).unwrap();
                 assert_eq!(byte, [b'\n']);
-                seen.lock().unwrap().push("last");
+                seen.lock().push("last");
                 tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                     .unwrap();
             }));
@@ -212,11 +209,11 @@ fn source_tls_h1_last_byte_waits_for_every_prefix() {
         .collect();
     let got = Mutex::new(Vec::new());
     run_parallel(&shared, &items, &AtomicBool::new(false), |_, r| {
-        got.lock().unwrap().push(r)
+        got.lock().push(r)
     });
-    assert!(got.lock().unwrap().iter().all(|r| r.error.is_none()));
+    assert!(got.lock().iter().all(|r| r.error.is_none()));
     server.join().unwrap();
-    let ev = events.lock().unwrap();
+    let ev = events.lock();
     assert_eq!(ev.len(), N * 2);
     assert!(ev[..N].iter().all(|e| *e == "prefix"));
 }
@@ -288,11 +285,11 @@ fn source_error_path_runs_post_request_macro_once_and_logs_error() {
             .unwrap();
     });
     let shared = Shared::new();
-    shared.macros.lock().unwrap().push(net::Macro {
+    shared.macros.lock().push(net::Macro {
         name: "after".into(),
         request: format!("GET /after HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
     });
-    shared.session_rules.lock().unwrap().push(net::SessionRule {
+    shared.session_rules.lock().push(net::SessionRule {
         action: "post-request macro".into(),
         value: "after".into(),
         tools: vec!["Repeater".into()],
@@ -313,7 +310,6 @@ fn source_error_path_runs_post_request_macro_once_and_logs_error() {
         shared
             .events
             .lock()
-            .unwrap()
             .iter()
             .any(|e| e.contains("post-request macro after: ok"))
     );
@@ -328,7 +324,7 @@ fn source_session_failure_is_not_silently_replaced_by_original_request() {
         read_head(&mut s);
     });
     let shared = Shared::new();
-    shared.session_rules.lock().unwrap().push(net::SessionRule {
+    shared.session_rules.lock().push(net::SessionRule {
         action: "check session".into(),
         tools: vec!["Repeater".into()],
         ..net::SessionRule::new()

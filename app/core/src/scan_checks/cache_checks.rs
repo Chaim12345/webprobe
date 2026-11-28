@@ -409,7 +409,7 @@ impl WebCachePoisoning {
         let key = format!("{scheme}|{}:{}|{}", cx.host, cx.port, kind.label());
         // Zg0y.ZT: one attempt once the host is known to honour the
         // headers (Zggr.Z_Y / Z_l), else 3/5/7 by accuracy.
-        let attempts = if known_overrides().lock().unwrap().contains(&key) {
+        let attempts = if known_overrides().lock().contains(&key) {
             1
         } else {
             match cx.settings.accuracy {
@@ -431,7 +431,7 @@ impl WebCachePoisoning {
                 return;
             };
             if probe.reflected {
-                known_overrides().lock().unwrap().insert(key);
+                known_overrides().lock().insert(key);
                 self.report_override(cx, &probe, base_status, None);
                 self.try_poison(cx, &probe, base_status);
                 return;
@@ -456,7 +456,7 @@ impl WebCachePoisoning {
             last = Some(probe);
         }
         if let (true, Some(probe), Some((crq, crs))) = (consistent, last, control) {
-            known_overrides().lock().unwrap().insert(key);
+            known_overrides().lock().insert(key);
             self.try_poison(cx, &probe, base_status);
             self.report_override(cx, &probe, base_status, Some((&crq, &crs)));
         }

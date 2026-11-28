@@ -274,14 +274,14 @@ mod tests {
             })
             .collect();
         let cancel = AtomicBool::new(false);
-        let got = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let got = Arc::new(crate::sync::Mutex::new(Vec::new()));
         let keep = got.clone();
         let end = send_group::run_parallel(&shared, &items, &cancel, move |n, r| {
-            keep.lock().unwrap().push((n, r))
+            keep.lock().push((n, r))
         });
         assert_eq!(end, SequenceEnd::Completed);
         server.join().unwrap();
-        let got = got.lock().unwrap();
+        let got = got.lock();
         assert_eq!(got.len(), N);
         for (n, r) in got.iter() {
             let body = String::from_utf8_lossy(

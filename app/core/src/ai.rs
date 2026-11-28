@@ -103,11 +103,11 @@ impl AiChat {
         if text.trim().is_empty() || self.busy.load(Ordering::SeqCst) {
             return;
         }
-        self.messages.lock().unwrap().push(ChatMsg {
+        self.messages.lock().push(ChatMsg {
             role: "user".into(),
             text,
         });
-        let history = self.messages.lock().unwrap().clone();
+        let history = self.messages.lock().clone();
         let (endpoint, model, key) = (
             self.endpoint.clone(),
             self.model.clone(),
@@ -121,7 +121,7 @@ impl AiChat {
                 Ok(t) => t,
                 Err(e) => format!("[error] {e}"),
             };
-            msgs.lock().unwrap().push(ChatMsg {
+            msgs.lock().push(ChatMsg {
                 role: "assistant".into(),
                 text,
             });
@@ -244,7 +244,7 @@ mod tests {
         {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        let msgs = chat.messages.lock().unwrap().clone();
+        let msgs = chat.messages.lock().clone();
         eprintln!(
             "MODEL {} REPLY ({:?}):\n{}",
             chat.model,

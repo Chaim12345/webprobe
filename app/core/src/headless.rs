@@ -393,7 +393,6 @@ pub fn js_crawl(
 ) -> Result<Vec<String>, String> {
     let limits = crate::scan_config::shared_config(shared)
         .lock()
-        .unwrap()
         .crawl
         .clone();
     let started = std::time::Instant::now();

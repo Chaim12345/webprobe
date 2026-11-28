@@ -2,11 +2,10 @@
 // net::Shared can hold them without naming scan. Owned by the scan and
 // fresh by construction: crawl_and_audit swaps a new one in at run start.
 
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Condvar, Mutex as StdMutex};
-
 use crate::sync::Mutex;
+use std::collections::HashSet;
+use std::sync::Condvar;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Dedup sets the active checks share for one scan run (and, until the
 /// next run starts, the session: standalone audits of an already-probed
@@ -35,7 +34,7 @@ impl ScanDedup {
     /// browser budget. Used where a new run keeps the same ScanDedup
     /// (standalone scans); crawl runs get a new ScanDedup instead.
     pub fn reset_dom(&self) {
-        self.dom_hits.lock().unwrap().clear();
+        self.dom_hits.lock().clear();
         self.dom_budget.reset();
     }
 }
@@ -54,7 +53,7 @@ pub const DOM_MAX_PROBES_PER_RUN: usize = 100;
 pub struct DomRunBudget {
     max_concurrent: usize,
     max_probes: usize,
-    slots: StdMutex<usize>,
+    slots: Mutex<usize>,
     slot_free: Condvar,
     probes_spent: AtomicUsize,
 }
@@ -72,7 +71,7 @@ pub struct DomBrowserPermit<'a> {
 
 impl Drop for DomBrowserPermit<'_> {
     fn drop(&mut self) {
-        let mut slots = self.budget.slots.lock().unwrap();
+        let mut slots = self.budget.slots.lock();
         *slots = slots.saturating_sub(1);
         drop(slots);
         self.budget.slot_free.notify_one();
@@ -84,7 +83,7 @@ impl DomRunBudget {
         Self {
             max_concurrent,
             max_probes,
-            slots: StdMutex::new(0),
+            slots: Mutex::new(0),
             slot_free: Condvar::new(),
             probes_spent: AtomicUsize::new(0),
         }
@@ -101,7 +100,7 @@ impl DomRunBudget {
     /// while `max_concurrent` browsers are already running. `stopped` is
     /// the scan's stop flag; None means give up without spawning.
     pub fn acquire_browser(&self, stopped: &dyn Fn() -> bool) -> Option<DomBrowserPermit<'_>> {
-        let mut slots = self.slots.lock().unwrap();
+        let mut slots = self.slots.lock();
         loop {
             if stopped() {
                 return None;
@@ -113,7 +112,7 @@ impl DomRunBudget {
             let (guard, _) = self
                 .slot_free
                 .wait_timeout(slots, std::time::Duration::from_millis(200))
-                .unwrap();
+                .unwrap_or_else(|e| e.into_inner());
             slots = guard;
         }
     }

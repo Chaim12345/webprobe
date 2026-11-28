@@ -52,16 +52,17 @@ pub(crate) fn effective_server_name(host: &str) -> String {
 /// What a TLS lab connection saw: its index, the ClientHello server name
 /// and each request's head.
 #[cfg(test)]
-pub(crate) type SniLog = std::sync::Arc<std::sync::Mutex<Vec<(usize, Option<String>, String)>>>;
+pub(crate) type SniLog = std::sync::Arc<crate::sync::Mutex<Vec<(usize, Option<String>, String)>>>;
 
 /// A loopback HTTPS lab for tests: every connection (served on its own
 /// thread, keep-alive) records the SNI it received and each request head,
 /// and answers `200 ok`.
 #[cfg(test)]
 pub(crate) fn tls_sni_lab(shared: &super::Shared) -> (u16, SniLog) {
+    use crate::sync::Mutex;
     use std::io::Write;
     use std::net::TcpListener;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::Duration;
 
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -86,7 +87,7 @@ pub(crate) fn tls_sni_lab(shared: &super::Shared) -> (u16, SniLog) {
                     let head = String::from_utf8_lossy(&head).into_owned();
                     let sni = tls.conn.server_name().map(str::to_string);
                     let close = head.to_ascii_lowercase().contains("connection: close");
-                    seen.lock().unwrap().push((idx, sni, head));
+                    seen.lock().push((idx, sni, head));
                     let _ = tls.write_all(
                         format!(
                             "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n{}\r\nok",
@@ -148,7 +149,6 @@ mod tests {
         assert!(c.resp.is_some(), "{:?}", c.error);
         let seen: Vec<(usize, Option<String>, String)> = log
             .lock()
-            .unwrap()
             .iter()
             .map(|(i, s, h)| (*i, s.clone(), h.lines().next().unwrap_or("").to_string()))
             .collect();

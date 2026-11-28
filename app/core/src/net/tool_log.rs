@@ -47,7 +47,7 @@ pub fn tool_sink<'a>(
     Some(ToolSink {
         shared,
         url: request_url(host, port, https, request),
-        settings: shared.streaming.lock().unwrap().clone(),
+        settings: shared.streaming.lock().clone(),
     })
 }
 
@@ -132,7 +132,7 @@ pub fn jar_request<'a>(
     let Some(tool) = TOOL.with(|t| t.get()) else {
         return request.into();
     };
-    let jar = shared.cookie_jar.lock().unwrap();
+    let jar = shared.cookie_jar.lock();
     if !jar.applies_to(tool) || jar.cookies.is_empty() {
         return request.into();
     }
@@ -150,7 +150,7 @@ pub fn session_request<'a>(
     let Some(tool) = TOOL.with(|t| t.get()) else {
         return Ok(request);
     };
-    if shared.session_rules.lock().unwrap().is_empty() {
+    if shared.session_rules.lock().is_empty() {
         return Ok(request);
     }
     apply_session_rules_for(shared, tool, &request, port, https).map(Into::into)
@@ -159,7 +159,7 @@ pub fn session_request<'a>(
 /// Post-request macros for the tool working on this thread.
 pub fn session_after(shared: &Shared, host: &str) {
     if let Some(tool) = TOOL.with(|t| t.get())
-        && !shared.session_rules.lock().unwrap().is_empty()
+        && !shared.session_rules.lock().is_empty()
     {
         // Macros send requests on this thread; each exchange rewrites the
         // "last exchange was reusable" flag the proxy engine reads for the
@@ -175,7 +175,7 @@ pub fn jar_response(shared: &Shared, host: &str, request: &[u8], up: &Upstream) 
     let (Some(tool), Some(resp)) = (TOOL.with(|t| t.get()), up.resp.as_deref()) else {
         return;
     };
-    let mut jar = shared.cookie_jar.lock().unwrap();
+    let mut jar = shared.cookie_jar.lock();
     if jar.updates_from(tool) {
         let path = util::parse_http(request).path;
         jar.update_from_response(host, &path, resp, util::now_secs());
@@ -267,7 +267,7 @@ pub fn log_tool_exchange(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let mut log = shared.tool_log.lock().unwrap();
+    let mut log = shared.tool_log.lock();
     if log.len() >= TOOL_LOG_MAX {
         log.remove(0);
     }

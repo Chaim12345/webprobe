@@ -41,7 +41,7 @@ impl ScanRun {
         record.url = record.url.chars().take(500).collect();
         record.diagnostic = record.diagnostic.chars().take(500).collect();
         record.proven_hits.truncate(50);
-        let mut records = self.dom_outcomes.lock().unwrap();
+        let mut records = self.dom_outcomes.lock();
         if let Some(old) = records.iter_mut().find(|r| r.url == record.url) {
             *old = record;
         } else if records.len() < 100 {
@@ -49,13 +49,13 @@ impl ScanRun {
         }
     }
     pub fn is_busy(&self) -> bool {
-        *self.busy.lock().unwrap()
+        *self.busy.lock()
     }
 
     /// Block until no scan runs, or until `timeout` passes. True when idle.
     pub fn wait_idle(&self, timeout: Option<Duration>) -> bool {
         let deadline = timeout.map(|t| Instant::now() + t);
-        let mut busy = self.busy.lock().unwrap();
+        let mut busy = self.busy.lock();
         while *busy {
             match deadline {
                 None => busy = self.idle.wait(busy).unwrap_or_else(|p| p.into_inner()),
@@ -76,12 +76,12 @@ impl ScanRun {
     }
 
     fn claim(&self) -> bool {
-        let mut busy = self.busy.lock().unwrap();
+        let mut busy = self.busy.lock();
         if *busy {
             return false;
         }
         *busy = true;
-        self.dom_outcomes.lock().unwrap().clear();
+        self.dom_outcomes.lock().clear();
         true
     }
 
@@ -89,7 +89,7 @@ impl ScanRun {
         // The planned total assumes every check runs; settle it at the end.
         self.total
             .store(self.done.load(Ordering::SeqCst), Ordering::SeqCst);
-        *self.busy.lock().unwrap() = false;
+        *self.busy.lock() = false;
         self.idle.notify_all();
     }
 }

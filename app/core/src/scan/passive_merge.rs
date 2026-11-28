@@ -38,7 +38,7 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     if issues.is_empty() {
         return;
     }
-    let mut iss = shared.issues.lock().unwrap();
+    let mut iss = shared.issues.lock();
     let key = passive_merge_key;
     let before = issues.len();
     let mut seen = std::collections::BTreeSet::new();
@@ -154,7 +154,7 @@ mod id_sequence_tests {
             ..Default::default()
         };
         add_passive_issues(&shared, vec![issue("one.test"), issue("two.test")]);
-        let ids: Vec<u64> = shared.issues.lock().unwrap().iter().map(|i| i.id).collect();
+        let ids: Vec<u64> = shared.issues.lock().iter().map(|i| i.id).collect();
         assert_eq!(ids, vec![1, 2], "issues number from 1 on their own");
         // The next proxy history row is still #1: no gaps from findings.
         assert_eq!(shared.next_id.load(Ordering::SeqCst), 1);

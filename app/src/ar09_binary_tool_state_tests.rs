@@ -13,12 +13,13 @@
 //! Loopback only. The send-path cases are CHARACTERISATIONS of the current
 //! lossy conversion, not a fix and not GUI proof.
 
+use crate::sync::Mutex;
 use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -447,7 +448,7 @@ impl Capture {
                         a.fetch_add(1, Ordering::SeqCst);
                         let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
                         let record = read_client(&mut stream, &s);
-                        r.lock().unwrap().push(record);
+                        r.lock().push(record);
                         let _ = stream.write_all(
                             b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                         );
@@ -483,7 +484,6 @@ impl Capture {
             if let Some(wire) = self
                 .records
                 .lock()
-                .unwrap()
                 .iter()
                 .find(|r| r.complete)
                 .map(|r| r.wire.clone())
@@ -543,13 +543,21 @@ impl Drop for RunGuard {
     }
 }
 
+/// The isolation harness hands the child its own CA dir in the environment;
+/// load that dir explicitly instead of the persisted user CA. The artifact
+/// proof then shows this process never touched the real `~/.config/webprobe`.
+fn owned_shared() -> std::sync::Arc<net::Shared> {
+    let dir = std::env::var_os("WEBPROBE_CA_DIR").map(std::path::PathBuf::from);
+    net::Shared::with_ca_dir(dir).expect("load the isolation harness's CA dir")
+}
+
 // ---------- child bodies ----------
 
 /// Real Repeater path: `request_for_tools` -> `send_following` ->
 /// `send_once` -> `req.as_bytes()` -> socket.
 fn repeater_body() {
     let mut capture = Capture::start();
-    let shared = net::Shared::new();
+    let shared = owned_shared();
     let text = crate::ui::request_for_tools(&raw_request());
     let edited = text.replacen("POST /ar09", "POST /ar09?edited=1", 1);
     let service = crate::repeater_ops::Service::new("127.0.0.1", capture.port, false);
@@ -595,7 +603,7 @@ fn repeater_body() {
 /// (dispatcher and `execute_probe`) -> `update_content_length` -> socket.
 fn intruder_body() {
     let mut capture = Capture::start();
-    let shared = net::Shared::new();
+    let shared = owned_shared();
     let text = crate::ui::request_for_tools(&raw_request());
     let template = text.replacen("POST /ar09", "POST /ar09\u{a7}p\u{a7}", 1);
     let state = intruder_run::start(

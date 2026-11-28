@@ -206,11 +206,80 @@ impl Default for MrRule {
 /// restamped to the new body length (as Burp does), unless the message is
 /// chunked or never had a body.
 pub fn apply_rules(bytes: &[u8], rules: &[MrRule]) -> Vec<u8> {
+    apply_with(bytes, rules.iter().map(|r| (r, None)))
+}
+
+/// A rule list with each regex compiled once, when the list is edited.
+/// [`apply`](Self::apply) never compiles during a message.
+#[derive(Clone, Default)]
+pub struct CompiledMrRules {
+    rules: Vec<MrRule>,
+    regexes: Vec<Option<Regex>>,
+}
+
+impl CompiledMrRules {
+    pub fn new(rules: Vec<MrRule>) -> Self {
+        let regexes = rules
+            .iter()
+            .map(|r| {
+                (r.enabled && r.is_regex && !r.match_.is_empty())
+                    .then(|| compile(&r.match_))
+                    .flatten()
+            })
+            .collect();
+        Self { rules, regexes }
+    }
+
+    pub fn rules(&self) -> &[MrRule] {
+        &self.rules
+    }
+
+    pub fn into_rules(self) -> Vec<MrRule> {
+        self.rules
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.rules.len()
+    }
+
+    pub fn apply(&self, bytes: &[u8]) -> Vec<u8> {
+        apply_with(
+            bytes,
+            self.rules
+                .iter()
+                .zip(&self.regexes)
+                .map(|(r, re)| (r, re.as_ref())),
+        )
+    }
+}
+
+impl std::ops::Deref for CompiledMrRules {
+    type Target = [MrRule];
+
+    fn deref(&self) -> &Self::Target {
+        &self.rules
+    }
+}
+
+impl From<Vec<MrRule>> for CompiledMrRules {
+    fn from(rules: Vec<MrRule>) -> Self {
+        Self::new(rules)
+    }
+}
+
+fn apply_with<'a>(
+    bytes: &[u8],
+    rules: impl Iterator<Item = (&'a MrRule, Option<&'a Regex>)>,
+) -> Vec<u8> {
     let mut current: Option<Vec<u8>> = None;
     let mut body_edited = false;
-    for rule in rules {
+    for (rule, precompiled) in rules {
         let input = current.as_deref().unwrap_or(bytes);
-        if let Some(next) = apply_rule(input, rule) {
+        if let Some(next) = apply_rule_with(input, rule, precompiled) {
             body_edited |= matches!(
                 rule.scope,
                 MrScope::RequestBody
@@ -283,7 +352,7 @@ impl<'a> MatchEngine<'a> {
     }
 }
 
-fn apply_rule(bytes: &[u8], rule: &MrRule) -> Option<Vec<u8>> {
+fn apply_rule_with(bytes: &[u8], rule: &MrRule, precompiled: Option<&Regex>) -> Option<Vec<u8>> {
     if !rule.enabled {
         return None;
     }
@@ -294,7 +363,10 @@ fn apply_rule(bytes: &[u8], rule: &MrRule) -> Option<Vec<u8>> {
     if rule.adds_header() {
         return Some(add_header(bytes, &parts, rule.replacement.as_bytes()));
     }
-    let engine = MatchEngine::new(rule)?;
+    let engine = match precompiled {
+        Some(re) => MatchEngine::Regex(re.clone()),
+        None => MatchEngine::new(rule)?,
+    };
 
     match rule.scope {
         MrScope::RequestFirstLine => {
@@ -972,5 +1044,39 @@ mod tests {
         assert_eq!(v.len(), 2);
         edit_rules(&mut v, RuleEdit::Remove(0), false);
         assert_eq!(v[0].match_, "");
+    }
+
+    #[test]
+    fn compiled_rules_match_the_list_and_freeze_at_compile_time() {
+        let rules = vec![
+            rule(
+                MrScope::RequestHeader,
+                r"^X-Test: (\d+)$",
+                "X-Test: $1!",
+                true,
+            ),
+            rule(MrScope::RequestBody, "secret", "REDACTED", false),
+        ];
+        let req = b"GET / HTTP/1.1\r\nX-Test: 42\r\n\r\nsecret";
+        let compiled = CompiledMrRules::new(rules.clone());
+        assert_eq!(compiled.apply(req), apply_rules(req, &rules));
+        assert_eq!(compiled.rules(), rules.as_slice());
+
+        let mut later = rules.clone();
+        later[1].replacement = "CHANGED".into();
+        assert_eq!(
+            compiled.apply(req),
+            apply_rules(req, &rules),
+            "an edit must rebuild the compiled set, not mutate it in place"
+        );
+        assert_ne!(compiled.apply(req), apply_rules(req, &later));
+    }
+
+    #[test]
+    fn an_invalid_compiled_regex_never_matches() {
+        let compiled =
+            CompiledMrRules::new(vec![rule(MrScope::RequestHeader, "(unclosed", "x", true)]);
+        let req = b"GET / HTTP/1.1\r\nX: (unclosed\r\n\r\n";
+        assert_eq!(compiled.apply(req), req);
     }
 }

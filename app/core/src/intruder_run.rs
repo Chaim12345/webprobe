@@ -335,8 +335,75 @@ pub fn unescape_expression(s: &str) -> String {
     out
 }
 
+/// Grep - Match and Grep - Extract patterns compiled once per attack: the
+/// response path never builds a regex. Built from [`AttackSettings`] when
+/// the attack starts.
+#[derive(Clone, Default)]
+pub struct CompiledGrep {
+    match_regex: Vec<Option<regex::Regex>>,
+    extract_regex: Vec<Option<regex::Regex>>,
+}
+
+impl CompiledGrep {
+    pub fn new(grep_match: &GrepMatch, grep_extract: &GrepExtract) -> Self {
+        Self {
+            match_regex: compile_match(grep_match),
+            extract_regex: compile_extract(grep_extract),
+        }
+    }
+
+    pub fn grep_match_flags(&self, cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
+        grep_match_flags_with(&self.match_regex, cfg, response)
+    }
+
+    pub fn extract_all(&self, cfg: &GrepExtract, response: &[u8]) -> Vec<Option<String>> {
+        extract_all_with(&self.extract_regex, cfg, response)
+    }
+}
+
+fn compile_match(cfg: &GrepMatch) -> Vec<Option<regex::Regex>> {
+    cfg.items
+        .iter()
+        .map(|item| {
+            if !cfg.regex || item.is_empty() {
+                return None;
+            }
+            let pattern = if cfg.case_sensitive {
+                item.clone()
+            } else {
+                format!("(?i){item}")
+            };
+            regex::Regex::new(&pattern).ok()
+        })
+        .collect()
+}
+
+fn compile_extract(cfg: &GrepExtract) -> Vec<Option<regex::Regex>> {
+    cfg.items
+        .iter()
+        .map(|item| {
+            item.regex.as_ref().and_then(|pattern| {
+                let pattern = if item.case_sensitive {
+                    format!("(?s){pattern}")
+                } else {
+                    format!("(?si){pattern}")
+                };
+                regex::Regex::new(&pattern).ok()
+            })
+        })
+        .collect()
+}
+
 /// Grep - Match: one flag per expression. Invalid regexes never match.
 pub fn grep_match_flags(cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
+    grep_match_flags_with(&compile_match(cfg), cfg, response)
+}
+
+fn grep_match_flags_with(
+    compiled: &[Option<regex::Regex>],
+    cfg: &GrepMatch,
+    response: &[u8],
+) -> Vec<bool> {
     let text = String::from_utf8_lossy(response);
     let hay = if cfg.exclude_headers {
         &text[body_offset(&text)..]
@@ -350,17 +417,16 @@ pub fn grep_match_flags(cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
     };
     cfg.items
         .iter()
-        .map(|item| {
+        .enumerate()
+        .map(|(i, item)| {
             if item.is_empty() {
                 return false;
             }
             if cfg.regex {
-                let pattern = if cfg.case_sensitive {
-                    item.clone()
-                } else {
-                    format!("(?i){item}")
-                };
-                regex::Regex::new(&pattern).is_ok_and(|re| re.is_match(hay))
+                compiled
+                    .get(i)
+                    .and_then(|re| re.as_ref())
+                    .is_some_and(|re| re.is_match(hay))
             } else if cfg.case_sensitive {
                 hay.contains(item.as_str())
             } else {
@@ -372,6 +438,23 @@ pub fn grep_match_flags(cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
 
 /// burp.Zx92: one extract item against one response.
 pub fn extract_value(item: &ExtractItem, response: &[u8], max_len: usize) -> Option<String> {
+    let compiled = item.regex.as_ref().and_then(|pattern| {
+        let pattern = if item.case_sensitive {
+            format!("(?s){pattern}")
+        } else {
+            format!("(?si){pattern}")
+        };
+        regex::Regex::new(&pattern).ok()
+    });
+    extract_value_with(item, compiled.as_ref(), response, max_len)
+}
+
+fn extract_value_with(
+    item: &ExtractItem,
+    compiled: Option<&regex::Regex>,
+    response: &[u8],
+    max_len: usize,
+) -> Option<String> {
     let text = String::from_utf8_lossy(response);
     let from = if item.exclude_headers {
         body_offset(&text)
@@ -379,13 +462,8 @@ pub fn extract_value(item: &ExtractItem, response: &[u8], max_len: usize) -> Opt
         0
     };
     let len = text.len();
-    let (start, end) = if let Some(pattern) = &item.regex {
-        let pattern = if item.case_sensitive {
-            format!("(?s){pattern}")
-        } else {
-            format!("(?si){pattern}")
-        };
-        let re = regex::Regex::new(&pattern).ok()?;
+    let (start, end) = if item.regex.is_some() {
+        let re = compiled?;
         let caps = re.captures_at(&text, from)?;
         let g = caps.get(1)?;
         (g.start(), g.end())
@@ -445,9 +523,25 @@ pub fn extract_value(item: &ExtractItem, response: &[u8], max_len: usize) -> Opt
 
 /// Grep - Extract: one value per item (`None` = no match).
 pub fn extract_all(cfg: &GrepExtract, response: &[u8]) -> Vec<Option<String>> {
+    extract_all_with(&compile_extract(cfg), cfg, response)
+}
+
+fn extract_all_with(
+    compiled: &[Option<regex::Regex>],
+    cfg: &GrepExtract,
+    response: &[u8],
+) -> Vec<Option<String>> {
     cfg.items
         .iter()
-        .map(|i| extract_value(i, response, cfg.max_len))
+        .enumerate()
+        .map(|(i, item)| {
+            extract_value_with(
+                item,
+                compiled.get(i).and_then(|re| re.as_ref()),
+                response,
+                cfg.max_len,
+            )
+        })
         .collect()
 }
 
@@ -764,6 +858,8 @@ pub struct RunState {
     /// [`RunState::drain_rows`] moves them into `rows`.
     row_rx: Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Arc<ResultRow>>>>,
     pub settings: AttackSettings,
+    /// The grep patterns from `settings`, compiled once for this attack.
+    pub grep: CompiledGrep,
     pub sets: usize,
     pub kind: AttackType,
     pub target: (String, u16, bool),
@@ -806,11 +902,11 @@ impl RunState {
     /// results flow back over a channel; the egui side drains it once per
     /// frame, tests and headless callers drain on demand).
     pub fn drain_rows(&self) {
-        let mut guard = self.row_rx.lock().unwrap();
+        let mut guard = self.row_rx.lock();
         let Some(rx) = guard.as_mut() else {
             return;
         };
-        let mut rows = self.rows.lock().unwrap();
+        let mut rows = self.rows.lock();
         while let Ok(row) = rx.try_recv() {
             rows.push(row);
         }
@@ -819,7 +915,7 @@ impl RunState {
     /// The result rows, drained first.
     pub fn snapshot_rows(&self) -> Vec<Arc<ResultRow>> {
         self.drain_rows();
-        self.rows.lock().unwrap().clone()
+        self.rows.lock().clone()
     }
 }
 
@@ -837,15 +933,15 @@ enum Source {
 }
 
 /// Cap on a recursive-grep attack (it has no natural end without a stop rule).
-pub const RECURSIVE_LIMIT: usize = net::INTRUDER_REQUEST_LIMIT;
+pub const RECURSIVE_LIMIT: usize = intruder::REQUEST_LIMIT;
 
-fn analyse(row: &mut ResultRow, settings: &AttackSettings) {
+fn analyse(row: &mut ResultRow, settings: &AttackSettings, grep: &CompiledGrep) {
     let Some(resp) = &row.response else { return };
     if settings.grep_match.enabled {
-        row.matches = grep_match_flags(&settings.grep_match, resp);
+        row.matches = grep.grep_match_flags(&settings.grep_match, resp);
     }
     if settings.grep_extract.enabled {
-        row.extracts = extract_all(&settings.grep_extract, resp);
+        row.extracts = grep.extract_all(&settings.grep_extract, resp);
     }
     if settings.grep_payloads.enabled {
         // "Match against pre-URL-encoded payloads" off: look for the payload
@@ -911,7 +1007,7 @@ pub fn start(
         }
         None => {
             let attacks =
-                intruder::requests_specs(&template, kind, &specs, net::INTRUDER_REQUEST_LIMIT)?;
+                intruder::requests_specs(&template, kind, &specs, intruder::REQUEST_LIMIT)?;
             let total = attacks.len();
             let workers = settings.pool.max_concurrent.clamp(1, 999).min(total.max(1));
             (
@@ -931,6 +1027,7 @@ pub fn start(
         }
     };
     let (row_tx, row_rx) = tokio::sync::mpsc::unbounded_channel();
+    let grep = CompiledGrep::new(&settings.grep_match, &settings.grep_extract);
     let state = Arc::new(RunState {
         running: AtomicBool::new(true),
         blocking: AtomicUsize::new(0),
@@ -941,6 +1038,7 @@ pub fn start(
         rows: Mutex::new(Vec::new()),
         row_rx: Mutex::new(Some(row_rx)),
         settings,
+        grep,
         sets,
         kind,
         target,
@@ -1090,7 +1188,7 @@ fn execute_probe(
         response: resp,
         ..Default::default()
     };
-    analyse(&mut row, &state.settings);
+    analyse(&mut row, &state.settings, &state.grep);
     Arc::new(row)
 }
 
@@ -1232,7 +1330,7 @@ impl Dispatch<'_> {
     /// (burp.Zf29.ZS). A short critical section, never held across an
     /// `.await` (issue #42 constraint).
     fn throttle_wait(&self) -> Duration {
-        let mut g = self.gate.lock().unwrap();
+        let mut g = self.gate.lock();
         let now = Instant::now();
         let r = next_rand(&mut g.2);
         let delay = throttle_delay_ms(&self.state.settings.pool, g.1, r);
@@ -1340,7 +1438,7 @@ impl Dispatch<'_> {
                 return;
             }
             // A short critical section, never held across an `.await`.
-            let attack = walk.lock().unwrap().next_attack(template);
+            let attack = walk.lock().next_attack(template);
             let Some(attack) = attack else {
                 return;
             };
@@ -1367,7 +1465,7 @@ impl Dispatch<'_> {
                 return;
             };
             let extracts = if row.extracts.is_empty() && row.response.is_some() {
-                extract_all(
+                self.state.grep.extract_all(
                     &self.state.settings.grep_extract,
                     row.response.as_deref().unwrap_or(&[]),
                 )
@@ -1376,7 +1474,7 @@ impl Dispatch<'_> {
             };
             let _ = self.tx.send(row);
             state_done.done.fetch_add(1, Ordering::SeqCst);
-            walk.lock().unwrap().feed(&extracts);
+            walk.lock().feed(&extracts);
         }
     }
 }
@@ -1573,6 +1671,41 @@ mod tests {
     }
 
     const RESP: &[u8] = b"HTTP/1.1 500 Internal Server Error\r\nX-Error: header-only\r\nSet-Cookie: s=1\r\n\r\n<p>SQL syntax Error near 'x'</p><input name=\"csrf\" value=\"tok123\">";
+
+    #[test]
+    fn compiled_grep_matches_the_free_helpers_and_freezes() {
+        let mut cfg = GrepMatch {
+            enabled: true,
+            regex: true,
+            case_sensitive: false,
+            items: vec![r"tok\d+".into(), "(".into(), "ERROR".into()],
+            ..Default::default()
+        };
+        let extract = GrepExtract {
+            enabled: true,
+            items: vec![ExtractItem {
+                regex: Some(r#"VALUE="([^"]+)""#.into()),
+                ..Default::default()
+            }],
+            max_len: 100,
+        };
+        let compiled = CompiledGrep::new(&cfg, &extract);
+        assert_eq!(
+            compiled.grep_match_flags(&cfg, RESP),
+            grep_match_flags(&cfg, RESP)
+        );
+        assert_eq!(
+            compiled.extract_all(&extract, RESP),
+            extract_all(&extract, RESP)
+        );
+        assert_eq!(compiled.grep_match_flags(&cfg, RESP), [true, false, true]);
+
+        // The compiled set is a snapshot: editing the config needs a rebuild.
+        cfg.items[2] = "absent".into();
+        assert!(compiled.grep_match_flags(&cfg, RESP)[2]);
+        let rebuilt = CompiledGrep::new(&cfg, &extract);
+        assert!(!rebuilt.grep_match_flags(&cfg, RESP)[2]);
+    }
 
     #[test]
     fn grep_match_flags_each_default_expression() {
@@ -1918,7 +2051,7 @@ mod tests {
                     .next()
                     .unwrap_or("")
                     .to_string();
-                seen2.lock().unwrap().push(head);
+                seen2.lock().push(head);
                 let next = if i == 0 {
                     "baseline-only".into()
                 } else if i < 3 {
@@ -1996,9 +2129,9 @@ mod tests {
         );
         assert_eq!(rows[0].extracts, [Some("baseline-only".to_string())]);
         assert_eq!(rows[2].extracts, [Some("tok2".to_string())]);
-        assert_eq!(seen.lock().unwrap()[0], "GET /?t=x HTTP/1.1");
-        assert_eq!(seen.lock().unwrap()[1], "GET /?t=start HTTP/1.1");
-        assert_eq!(seen.lock().unwrap()[2], "GET /?t=tok1 HTTP/1.1");
+        assert_eq!(seen.lock()[0], "GET /?t=x HTTP/1.1");
+        assert_eq!(seen.lock()[1], "GET /?t=start HTTP/1.1");
+        assert_eq!(seen.lock()[2], "GET /?t=tok1 HTTP/1.1");
         assert_eq!(run.progress(), (4, None));
     }
 
@@ -2044,7 +2177,6 @@ mod tests {
                     if !head.contains(marker3.as_str()) {
                         strays3
                             .lock()
-                            .unwrap()
                             .push(head.lines().next().unwrap_or("<no bytes>").to_string());
                         return;
                     }
@@ -2096,7 +2228,7 @@ mod tests {
         assert!(!run.is_running(), "attack finished");
         let (done, total) = run.progress();
         assert_eq!((done, total), (61, Some(61)));
-        let strays = strays.lock().unwrap().clone();
+        let strays = strays.lock().clone();
         if !strays.is_empty() {
             eprintln!("issue #173: foreign connections reached the lab: {strays:?}");
         }

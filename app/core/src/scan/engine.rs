@@ -55,10 +55,7 @@ pub fn start_active_scan(
         return;
     }
     let (host, port) = net::split_h_p(&host_header, entry.port);
-    let config = crate::scan_config::shared_config(&shared)
-        .lock()
-        .unwrap()
-        .clone();
+    let config = crate::scan_config::shared_config(&shared).lock().clone();
     let points: Vec<InsertionPoint> = audit_points(&req, &config);
     if points.is_empty() {
         // Burp still runs its per-request and per-host checks (CORS,
@@ -177,7 +174,7 @@ pub fn start_active_scan(
                 "Scanner: active scan finished",
                 &[],
             );
-            let found = shared.issues.lock().map(|i| i.len()).unwrap_or(0);
+            let found = shared.issues.lock().len();
             crate::notice::toast(
                 crate::notice::Level::Success,
                 format!("Active scan finished. The report now holds {found} issue(s) in total"),
@@ -386,10 +383,7 @@ impl ExperimentalEngine {
         };
         let _tool = net::tool_scope("Scanner");
         let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let config = crate::scan_config::shared_config(shared)
-                .lock()
-                .unwrap()
-                .clone();
+            let config = crate::scan_config::shared_config(shared).lock().clone();
             let points = audit_points(&req, &config);
             let settings = checks::Settings {
                 speed: ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)),
@@ -1011,7 +1005,6 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
         // same-origin request is re-issued as a crawl item.
         let engine = crate::scan_config::shared_config(shared)
             .lock()
-            .unwrap()
             .crawl
             .engine
             .clone();

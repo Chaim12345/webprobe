@@ -380,7 +380,6 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
         app.shared
             .scope
             .lock()
-            .unwrap()
             .push(crate::net::ScopeRule::include(location.clone(), false));
         crate::feedback::toast(
             crate::feedback::Level::Success,
@@ -389,16 +388,12 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
         ui.close();
     }
     if ui.button("Remove from scope").clicked() {
-        app.shared
-            .scope
-            .lock()
-            .unwrap()
-            .push(crate::net::ScopeRule {
-                enabled: true,
-                include: false,
-                pattern: location.clone(),
-                is_regex: false,
-            });
+        app.shared.scope.lock().push(crate::net::ScopeRule {
+            enabled: true,
+            include: false,
+            pattern: location.clone(),
+            is_regex: false,
+        });
         crate::feedback::toast(
             crate::feedback::Level::Success,
             format!("Excluded {location} from target scope"),
@@ -449,7 +444,7 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
     ui.separator();
     ui.menu_button("Issues", |ui| {
         if ui.button("Report issues").clicked() {
-            let ids = issues_in_branch(&app.shared.issues.lock().unwrap(), origin, branch);
+            let ids = issues_in_branch(&app.shared.issues.lock(), origin, branch);
             if ids.is_empty() {
                 crate::feedback::toast(
                     crate::feedback::Level::Info,
@@ -461,7 +456,7 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
             ui.close();
         }
         if ui.button("Delete issues").clicked() {
-            let mut issues = app.shared.issues.lock().unwrap();
+            let mut issues = app.shared.issues.lock();
             let ids = issues_in_branch(&issues, origin, branch);
             issues.retain(|i| !ids.contains(&i.id));
             crate::feedback::toast(
@@ -490,7 +485,6 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
         app.shared
             .site_links
             .lock()
-            .unwrap()
             .retain(|(o, p)| !(o == origin && p.starts_with(branch)));
         app.hist_cache_key.clear();
         crate::feedback::toast(
@@ -502,14 +496,7 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
     ui.separator();
     let copy = |ui: &mut egui::Ui, app: &crate::App, prefix: &str| {
         let entries = site_entries(app);
-        let links: Vec<(String, String)> = app
-            .shared
-            .site_links
-            .lock()
-            .unwrap()
-            .iter()
-            .cloned()
-            .collect();
+        let links: Vec<(String, String)> = app.shared.site_links.lock().iter().cloned().collect();
         let urls = urls_in_branch(&entries, &links, origin, prefix);
         let n = urls.len();
         ui.ctx().copy_text(urls.join("\n"));

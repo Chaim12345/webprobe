@@ -46,7 +46,7 @@ fn passive_audit_runs_for_in_scope_traffic() {
     crate::scan::register_scan_hooks();
     let shared = Shared::new();
     shared.scan_enabled.store(true, Ordering::SeqCst);
-    shared.scope.lock().unwrap().push(ScopeRule {
+    shared.scope.lock().push(ScopeRule {
         enabled: true,
         include: true,
         pattern: "http://app.test".into(),
@@ -64,7 +64,7 @@ fn passive_audit_runs_for_in_scope_traffic() {
         false,
         &Default::default(),
     );
-    let n = shared.issues.lock().unwrap().len();
+    let n = shared.issues.lock().len();
     assert!(n > 0, "in-scope response audited");
     record(
         &shared,
@@ -81,7 +81,6 @@ fn passive_audit_runs_for_in_scope_traffic() {
         shared
             .issues
             .lock()
-            .unwrap()
             .iter()
             .all(|i| !i.host.contains("other.test")),
         "out-of-scope response not audited"
@@ -123,7 +122,7 @@ fn matching_responses_are_held_and_forwarded_edited() {
         .port();
     shared.proxy_port.store(pport, Ordering::SeqCst);
     shared.intercept_on.store(true, Ordering::SeqCst);
-    shared.response_rules.lock().unwrap().enabled = true;
+    shared.response_rules.lock().update(|r| r.enabled = true);
     start_proxy(shared.clone());
     while !shared.listener_running.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(10));
@@ -142,7 +141,6 @@ fn matching_responses_are_held_and_forwarded_edited() {
         if let Some(i) = shared
             .queue
             .lock()
-            .unwrap()
             .iter()
             .find(|i| matches!(i.kind, InterceptKind::Response { .. }))
             .map(|i| (i.id, i.edited.clone()))
@@ -154,7 +152,7 @@ fn matching_responses_are_held_and_forwarded_edited() {
     };
     assert!(held.1.ends_with("\r\n\r\nbody"));
     let item = {
-        let mut q = shared.queue.lock().unwrap();
+        let mut q = shared.queue.lock();
         let i = q.iter().position(|i| i.id == held.0).unwrap();
         q.remove(i)
     };
@@ -171,7 +169,7 @@ fn release_all_forwards_or_drops_every_held_message() {
     let mut rx = Vec::new();
     for i in 0..3 {
         let (tx, r) = mpsc::channel();
-        sh.queue.lock().unwrap().push(InterceptItem::new(
+        sh.queue.lock().push(InterceptItem::new(
             i,
             "h",
             80,
@@ -182,7 +180,7 @@ fn release_all_forwards_or_drops_every_held_message() {
         rx.push(r);
     }
     assert_eq!(intercept_release_all(&sh, false), 3);
-    assert!(sh.queue.lock().unwrap().is_empty());
+    assert!(sh.queue.lock().is_empty());
     let got: Vec<_> = rx.iter().map(|r| r.recv().unwrap()).collect();
     assert_eq!(
         got,
@@ -193,7 +191,7 @@ fn release_all_forwards_or_drops_every_held_message() {
         ]
     );
     let (tx, r) = mpsc::channel();
-    sh.queue.lock().unwrap().push(InterceptItem::new(
+    sh.queue.lock().push(InterceptItem::new(
         9,
         "h",
         80,
@@ -212,7 +210,7 @@ fn release_by_id_forwards_the_selected_message_with_its_edit() {
     let mut rx = Vec::new();
     for i in 0..3 {
         let (tx, r) = mpsc::channel();
-        sh.queue.lock().unwrap().push(InterceptItem::new(
+        sh.queue.lock().push(InterceptItem::new(
             i,
             "h",
             80,
@@ -227,6 +225,6 @@ fn release_by_id_forwards_the_selected_message_with_its_edit() {
     assert!(intercept_release(&sh, 2, true, None));
     assert_eq!(rx[2].recv().unwrap(), None);
     assert!(!intercept_release(&sh, 2, false, None), "already released");
-    let left: Vec<u64> = sh.queue.lock().unwrap().iter().map(|i| i.id).collect();
+    let left: Vec<u64> = sh.queue.lock().iter().map(|i| i.id).collect();
     assert_eq!(left, vec![0]);
 }

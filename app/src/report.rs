@@ -238,7 +238,7 @@ pub fn report_window(app: &mut crate::App, ctx: &egui::Context) {
         });
     if generate {
         let ids = app.eng.report.issue_ids.clone();
-        let all = app.shared.issues.lock().unwrap().clone();
+        let all = app.shared.issues.lock().clone();
         let chosen: Vec<ScanIssue> = ids
             .iter()
             .filter_map(|id| all.iter().find(|i| i.id == *id).cloned())

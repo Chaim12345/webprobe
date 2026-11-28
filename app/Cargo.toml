@@ -43,6 +43,14 @@ path = "src/bin/webprobe-headless.rs"
 [features]
 default = []
 mcp = ["dep:egui-mcp-client", "dep:tokio"]
+# `cargo test --features test-ca` keeps every test CA in memory, core
+# integration binaries included (see scripts/ci.sh and tests/ca_isolation.rs).
+test-ca = ["webprobe-core/test-ca"]
+
+[dev-dependencies]
+# Unit tests in this crate build webprobe-core without cfg(test); this feature
+# makes its Shared::new() use an in-memory CA, never the user's real one.
+webprobe-core = { path = "core", features = ["test-ca"] }
 
 [patch.crates-io]
 egui-mcp-client = { path = "../vendor/egui-mcp-client" }

@@ -34,17 +34,12 @@ pub(crate) fn supported(shared: &Shared, host: &str, sink: bool) -> Result<(), S
         || shared.upstream_for(host).kind != crate::upstream::UpstreamKind::None
         || shared.h2c_upgrade.load(Ordering::SeqCst)
         || H2_CHOICE.with(|c| c.get().is_some_and(|c| c.want_h2 == Some(true)))
-        || !shared.streaming.lock().unwrap().urls.is_empty()
-        || !shared.cookie_jar.lock().unwrap().cookies.is_empty()
-        || !shared.session_rules.lock().unwrap().is_empty()
-        || !shared.mr_request.lock().unwrap().is_empty()
-        || !shared.mr_response.lock().unwrap().is_empty()
-        || !shared
-            .ext_hooks
-            .lock()
-            .unwrap()
-            .as_any_mut()
-            .is::<NoExtHooks>()
+        || !shared.streaming.lock().urls.is_empty()
+        || !shared.cookie_jar.lock().cookies.is_empty()
+        || !shared.session_rules.lock().is_empty()
+        || !shared.mr_request.lock().is_empty()
+        || !shared.mr_response.lock().is_empty()
+        || !shared.ext_hooks.lock().as_any_mut().is::<NoExtHooks>()
     {
         return Err("budgeted transport incomplete: configured boundary unsupported".into());
     }
@@ -680,7 +675,7 @@ mod tests {
                     .resp
                     .is_none()
                 );
-                shared.upstream.lock().unwrap().kind = crate::upstream::UpstreamKind::Http;
+                shared.upstream.lock().kind = crate::upstream::UpstreamKind::Http;
                 assert!(
                     send_raw(
                         &shared,
@@ -773,8 +768,7 @@ mod tests {
                             );
                         }
                         1 => {
-                            shared.upstream.lock().unwrap().kind =
-                                crate::upstream::UpstreamKind::Http;
+                            shared.upstream.lock().kind = crate::upstream::UpstreamKind::Http;
                             let _ = send_raw(
                                 &shared,
                                 "127.0.0.1",

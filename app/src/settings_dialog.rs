@@ -399,14 +399,11 @@ fn manage_menu(app: &mut App, ui: &mut Ui) {
 fn scan_configuration(app: &mut App, ui: &mut Ui) {
     let mut config = webprobe_core::scan_config::shared_config(&app.shared)
         .lock()
-        .unwrap()
         .clone();
     let before = config.clone();
     scan_config_editor(ui, &mut config, "settings");
     if config != before {
-        *webprobe_core::scan_config::shared_config(&app.shared)
-            .lock()
-            .unwrap() = config;
+        *webprobe_core::scan_config::shared_config(&app.shared).lock() = config;
     }
 }
 

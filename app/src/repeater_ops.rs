@@ -426,13 +426,7 @@ pub fn redirect_request(
 /// Burp's scope test (Zex.ZU): an include rule must match and no exclude
 /// rule may. Unlike `net::in_scope`, an empty scope holds nothing.
 pub fn burp_in_scope(shared: &net::Shared, url: &str) -> bool {
-    shared
-        .scope
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|r| r.enabled && r.include)
-        && net::in_scope(shared, url)
+    shared.scope.lock().iter().any(|r| r.enabled && r.include) && net::in_scope(shared, url)
 }
 
 /// Whether a redirection is followed under `mode` (Zx37 policies), given
@@ -526,7 +520,7 @@ fn send_once(
         service.origin(),
         req.split_whitespace().nth(1).unwrap_or("/")
     );
-    let settings = shared.streaming.lock().unwrap().clone();
+    let settings = shared.streaming.lock().clone();
     let mut sink = webprobe_core::streaming::LiveSink::new(&url, settings, cancelled, progress);
     let mut up = if service.https {
         net::send_tls_raw_with(shared, &service.host, service.port, &bytes, Some(&mut sink))
@@ -1597,7 +1591,7 @@ pub fn apply_tab_command(
     selected: usize,
     cmd: TabCommand,
 ) -> usize {
-    let mut reps = shared.repeaters.lock().unwrap();
+    let mut reps = shared.repeaters.lock();
     let sel_id = reps.get(selected).map(|t| t.id);
     match cmd {
         TabCommand::Rename => {
@@ -1635,7 +1629,6 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
         .shared
         .repeaters
         .lock()
-        .unwrap()
         .iter()
         .map(|r| (r.id, r.name.clone()))
         .collect();
@@ -1747,7 +1740,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
             .clicked()
         {
             let id = app.shared.rep.new_tab_id();
-            let mut reps = app.shared.repeaters.lock().unwrap();
+            let mut reps = app.shared.repeaters.lock();
             reps.push(new_tab(id, "", 80, false, String::new()));
             app.repeater.sel = reps.len() - 1;
         }
@@ -1755,7 +1748,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
     if cancel_rename {
         app.rops.renaming = None;
     } else if let Some((id, name)) = commit {
-        rename_tab(&mut app.shared.repeaters.lock().unwrap(), id, &name);
+        rename_tab(&mut app.shared.repeaters.lock(), id, &name);
         app.rops.renaming = None;
     }
     // Drag-and-drop reorder: drop on another tab's slot.
@@ -1785,7 +1778,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
         if ui.input(|i| i.pointer.any_released()) {
             app.rops.drag_from = None;
             if let Some(t) = target.filter(|t| *t != from) {
-                let mut reps = app.shared.repeaters.lock().unwrap();
+                let mut reps = app.shared.repeaters.lock();
                 let sel_id = reps.get(app.repeater.sel).map(|r| r.id);
                 move_tab(&mut reps, from, t);
                 app.repeater.sel = sel_id
@@ -1828,7 +1821,7 @@ pub fn settings_menu(ui: &mut Ui, app: &mut crate::App) {
 
 /// The selected tab's request, target service and response.
 pub fn current_tab(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>)> {
-    let reps = app.shared.repeaters.lock().unwrap();
+    let reps = app.shared.repeaters.lock();
     let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     let service = Service::of_tab(&r.host, r.port, r.https, &r.request)?;
     Some((r.request.clone(), service, r.response.clone()))
@@ -1837,7 +1830,7 @@ pub fn current_tab(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>
 /// The response belongs to the terminal wire hop, not necessarily the
 /// request still shown in the editor. History navigation uses the same index.
 fn redirect_source(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>)> {
-    let reps = app.shared.repeaters.lock().unwrap();
+    let reps = app.shared.repeaters.lock();
     let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     let (req, service) = if let Some(Some(source)) = r.response_sources.get(r.hist_pos) {
         (
@@ -1874,7 +1867,7 @@ pub fn load_redirect(app: &mut crate::App) -> bool {
     let Some((next, next_req)) = next_redirect(&req, &svc, &resp, app.rops.process_cookies) else {
         return false;
     };
-    let mut reps = app.shared.repeaters.lock().unwrap();
+    let mut reps = app.shared.repeaters.lock();
     let i = app.repeater.sel.min(reps.len().saturating_sub(1));
     let t = &mut reps[i];
     t.request = next_req;
@@ -1971,17 +1964,14 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::ToOrganizer => {
             let first = req.lines().next().unwrap_or("").to_string();
-            app.shared.organizer.lock().unwrap().add(
-                &first,
-                "",
-                &req,
-                &resp_text,
-                util::now_secs(),
-            );
+            app.shared
+                .organizer
+                .lock()
+                .add(&first, "", &req, &resp_text, util::now_secs());
             toast(Level::Success, "Sent to Organizer");
         }
         RepAction::ChangeMethod => {
-            let mut reps = app.shared.repeaters.lock().unwrap();
+            let mut reps = app.shared.repeaters.lock();
             let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let changed = toggle_request_method(&reps[i].request);
             reps[i].request = changed;
@@ -1997,7 +1987,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                     .collect();
                 format!("----WebKitFormBoundary{tail}")
             };
-            let mut reps = app.shared.repeaters.lock().unwrap();
+            let mut reps = app.shared.repeaters.lock();
             let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let changed = toggle_body_encoding(&reps[i].request, &boundary);
             if changed == reps[i].request {
@@ -2032,7 +2022,6 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .shared
                 .repeaters
                 .lock()
-                .unwrap()
                 .get(app.repeater.sel)
                 .and_then(|t| previous_response(&t.history));
             match previous {
@@ -2058,7 +2047,6 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .shared
                 .repeaters
                 .lock()
-                .unwrap()
                 .get(app.repeater.sel)
                 .and_then(|t| previous_request(&t.history));
             match previous {
@@ -2086,7 +2074,6 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .shared
                 .repeaters
                 .lock()
-                .unwrap()
                 .get(app.repeater.sel)
                 .map(|t| t.id)
                 .unwrap_or(0);
@@ -2139,7 +2126,7 @@ pub fn poll_paste_url(app: &mut crate::App, ui: &mut Ui) {
         .load(std::sync::atomic::Ordering::SeqCst);
     match paste_url_as_request(&text, keep_alive) {
         Ok((svc, req)) => {
-            let mut reps = app.shared.repeaters.lock().unwrap();
+            let mut reps = app.shared.repeaters.lock();
             let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let t = &mut reps[i];
             t.request = req;
@@ -2168,7 +2155,6 @@ pub fn held_rows(shared: &net::Shared) -> Vec<HeldRow> {
     shared
         .queue
         .lock()
-        .unwrap()
         .iter()
         .map(|i| {
             let (kind, dir, method, url, tls) = match i.kind {
@@ -2461,7 +2447,7 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         .show_rows(ui, 20.0, total, |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
             let window = history.rows_at(&st.ws_rows.2[range.clone()]);
-            let edited = shared.ws_edited.lock().unwrap();
+            let edited = shared.ws_edited.lock();
             for (k, e) in range.zip(window.iter()) {
                 let sel = st.ws_sel == Some(e.id);
                 let cells = [
@@ -2573,13 +2559,12 @@ pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntr
     let tls = shared
         .ws_live
         .lock()
-        .unwrap()
         .get(&e.socket)
         .map(|l| l.tls)
         .unwrap_or(false);
     let session = webprobe_core::ws_repeater::from_history(shared, e.socket, &e.host, tls);
     let id = shared.rep.new_tab_id();
-    shared.repeaters.lock().unwrap().push(net::RepTab {
+    shared.repeaters.lock().push(net::RepTab {
         id,
         name: format!("WS {id}"),
         host: session.host.clone(),
@@ -2619,7 +2604,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
     let i = app
         .repeater
         .sel
-        .min(shared.repeaters.lock().unwrap().len().saturating_sub(1));
+        .min(shared.repeaters.lock().len().saturating_sub(1));
     let ui_state_id = ui.scope_id().with(("ws_rep_ui", session_id));
     // (to_server, binary)
     let (mut to_server, mut binary): (bool, bool) = ui
@@ -2666,8 +2651,8 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
             {
                 let copy = wsr::clone_session(&shared, &session);
                 let id = shared.rep.new_tab_id();
-                let request = shared.repeaters.lock().unwrap()[i].request.clone();
-                shared.repeaters.lock().unwrap().push(net::RepTab {
+                let request = shared.repeaters.lock()[i].request.clone();
+                shared.repeaters.lock().push(net::RepTab {
                     id,
                     name: format!("WS {id}"),
                     host: copy.host.clone(),
@@ -2711,7 +2696,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
         egui::CollapsingHeader::new(RichText::new("Upgrade request").size(12.5))
             .id_salt(("ws_hs", session_id))
             .show(ui, |ui| {
-                let mut hs = session.handshake.lock().unwrap().clone();
+                let mut hs = session.handshake.lock().clone();
                 if ui
                     .add(
                         egui::TextEdit::multiline(&mut hs)
@@ -2721,7 +2706,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
                     )
                     .changed()
                 {
-                    *session.handshake.lock().unwrap() = hs;
+                    *session.handshake.lock() = hs;
                 }
             });
     }
@@ -2739,7 +2724,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
             ui.selectable_value(&mut binary, false, "Text");
             ui.selectable_value(&mut binary, true, "Binary (hex)");
         });
-        let mut text = shared.repeaters.lock().unwrap()[i].request.clone();
+        let mut text = shared.repeaters.lock()[i].request.clone();
         if ui
             .add(
                 egui::TextEdit::multiline(&mut text)
@@ -2749,7 +2734,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
             )
             .changed()
         {
-            shared.repeaters.lock().unwrap()[i].request = text.clone();
+            shared.repeaters.lock()[i].request = text.clone();
         }
         if ui
             .add(
@@ -3036,7 +3021,7 @@ mod tests {
             "javac: {}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let shared = net::Shared::new();
+        let shared = net::Shared::in_memory();
         let sc = Arc::new(
             JavaSidecar::spawn_with(
                 dir.to_str().unwrap(),
@@ -3168,7 +3153,7 @@ mod tests {
                 panic!("Repeater must not call proxy-only hooks")
             }
         }
-        let shared = net::Shared::new();
+        let shared = net::Shared::in_memory();
         ext_host::with_host(&shared, |h| {
             h.extensions.push(LoadedExtension::new(Dropper))
         });
@@ -3198,7 +3183,7 @@ mod tests {
         use std::io::{Read, Write};
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
-        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let seen = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
         let seen2 = seen.clone();
         std::thread::spawn(move || {
             for s in l.incoming() {
@@ -3230,7 +3215,7 @@ mod tests {
                     }
                 }
                 let text = String::from_utf8_lossy(&buf).into_owned();
-                seen2.lock().unwrap().push(text.clone());
+                seen2.lock().push(text.clone());
                 let first = text.lines().next().unwrap_or("").to_string();
                 let resp = if first.contains(" /start ") {
                     "HTTP/1.1 302 Found\r\nLocation: step2\r\nSet-Cookie: sid=abc\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
@@ -3245,7 +3230,7 @@ mod tests {
                 let _ = s.write_all(resp.as_bytes());
             }
         });
-        let shared = net::Shared::new();
+        let shared = net::Shared::in_memory();
         let service = svc("127.0.0.1", port, false);
         let req = format!(
             "POST /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nbody"
@@ -3263,7 +3248,7 @@ mod tests {
         assert!(
             String::from_utf8_lossy(never.response.as_deref().unwrap()).starts_with("HTTP/1.1 302")
         );
-        seen.lock().unwrap().clear();
+        seen.lock().clear();
         let r = send_following(
             &shared,
             &req,
@@ -3275,7 +3260,7 @@ mod tests {
         );
         assert_eq!(r.followed, 2, "302 then 307");
         assert!(String::from_utf8_lossy(r.response.as_deref().unwrap()).ends_with("done"));
-        let log = seen.lock().unwrap().clone();
+        let log = seen.lock().clone();
         assert!(log[0].starts_with("POST /start "));
         assert!(
             log[1].starts_with("GET /step2 ") && log[1].contains("Cookie: sid=abc"),
@@ -3326,7 +3311,7 @@ mod tests {
                 let _ = s.write_all(format!("HTTP/1.1 302 Found\r\nLocation: {loc}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes());
             }
         });
-        let shared = net::Shared::new();
+        let shared = net::Shared::in_memory();
         let service = svc("127.0.0.1", port, false);
         let req = format!(
             "POST /a/start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 1\r\n\r\nx"
@@ -3344,7 +3329,6 @@ mod tests {
         shared
             .scope
             .lock()
-            .unwrap()
             .push(net::ScopeRule::include("/b/step", false));
         let r = send_following(
             &shared,

@@ -505,7 +505,7 @@ pub fn given_mode(def: &Definition) -> &GivenMode {
 mod tests {
     use super::*;
     use crate::bcheck::{InteractionKind, parse};
-    use std::sync::Mutex;
+    use crate::sync::Mutex;
 
     struct Lab {
         sent: Mutex<Vec<RequestData>>,
@@ -513,7 +513,7 @@ mod tests {
     }
     impl Transport for Lab {
         fn send(&self, req: &RequestData) -> Result<ResponseData, String> {
-            self.sent.lock().unwrap().push(req.clone());
+            self.sent.lock().push(req.clone());
             Ok((self.responder)(req))
         }
     }
@@ -574,7 +574,7 @@ mod tests {
         assert_eq!(issues[0].confidence, "certain");
         assert!(issues[0].detail.contains("/.git/config"));
         // both run-for-each paths were probed
-        let sent = lab.sent.lock().unwrap();
+        let sent = lab.sent.lock();
         assert_eq!(sent.len(), 2);
         assert!(sent.iter().any(|r| r.url.ends_with("/.git/config~")));
     }
@@ -638,7 +638,7 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].severity, "high");
         // the probe request carried the collaborator referer
-        let sent = lab.sent.lock().unwrap();
+        let sent = lab.sent.lock();
         assert!(
             sent[0]
                 .headers
@@ -683,10 +683,7 @@ mod tests {
         };
         let issues = run_definition(&def, &b, Some(&ip), &lab, None).unwrap();
         assert!(issues.is_empty());
-        assert!(
-            lab.sent.lock().unwrap().is_empty(),
-            "no probe should be sent"
-        );
+        assert!(lab.sent.lock().is_empty(), "no probe should be sent");
     }
 
     #[test]
@@ -716,7 +713,7 @@ mod tests {
         assert_eq!(issues[0].confidence, "tentative");
         // payload was appended to the base value, URL-encoded for the wire
         // as Burp does; the receiving application decodes it
-        let sent = lab.sent.lock().unwrap();
+        let sent = lab.sent.lock();
         assert!(
             sent[0].url.contains("n=1%7B%7B1337*1337%7D%7D"),
             "url: {}",
@@ -743,7 +740,7 @@ mod tests {
             base_value: "base".into(),
         };
         let _ = run_definition(&def, &b, Some(&ip), &lab, None).unwrap();
-        let sent = lab.sent.lock().unwrap();
+        let sent = lab.sent.lock();
         assert_eq!(
             sent[0].body, "q=base%26z%3D9&keep=1",
             "siblings must survive"
@@ -808,7 +805,7 @@ mod tests {
         let b = base("https://lab.local:9443/base", "", 200);
         let issues = run_definition(&def, &b, None, &lab, None).unwrap();
         assert_eq!(issues.len(), 1);
-        let sent = lab.sent.lock().unwrap();
+        let sent = lab.sent.lock();
         assert_eq!(sent[0].method, "GET");
         // the raw request's own Host header wins over the base authority
         assert_eq!(sent[0].url, "https://lab.local/raw-path?x=1");
@@ -834,7 +831,7 @@ mod tests {
         };
         let b = base("https://lab.local:9443/base", "", 200);
         let _ = run_definition(&def, &b, None, &lab, None).unwrap();
-        let sent = lab.sent.lock().unwrap();
+        let sent = lab.sent.lock();
         assert_eq!(sent[0].url, "https://lab.local:9443/p");
     }
 
@@ -856,7 +853,7 @@ mod tests {
             base_value: "base".into(),
         };
         let _ = run_definition(&def, &b, Some(&ip), &lab, None).unwrap();
-        let sent = lab.sent.lock().unwrap();
+        let sent = lab.sent.lock();
         assert!(
             sent[0].url.contains("q=baseAB"),
             "appends accumulate: {}",

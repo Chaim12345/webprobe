@@ -23,7 +23,7 @@ impl ProxyHistory {
     pub fn push(&self, e: HistEntry) {
         let e = e.spilled();
         self.max_id.fetch_max(e.id, Ordering::SeqCst);
-        self.rows.lock().unwrap().push(e);
+        self.rows.lock().push(e);
     }
 
     /// Append several entries (bodies spilled), in order.
@@ -32,7 +32,7 @@ impl ProxyHistory {
         for e in &entries {
             self.max_id.fetch_max(e.id, Ordering::SeqCst);
         }
-        self.rows.lock().unwrap().extend(entries);
+        self.rows.lock().extend(entries);
     }
 
     /// Replace every entry (project load), bodies spilled.
@@ -40,11 +40,11 @@ impl ProxyHistory {
         let entries: Vec<HistEntry> = entries.into_iter().map(HistEntry::spilled).collect();
         let max = entries.iter().map(|e| e.id).max().unwrap_or(0);
         self.max_id.store(max, Ordering::SeqCst);
-        *self.rows.lock().unwrap() = entries;
+        *self.rows.lock() = entries;
     }
 
     pub fn clear(&self) {
-        self.rows.lock().unwrap().clear();
+        self.rows.lock().clear();
         self.max_id.store(0, Ordering::SeqCst);
     }
 
@@ -63,7 +63,7 @@ impl ProxyHistory {
     /// every frame and held the lock while doing it, so proxy threads
     /// stalled behind the UI at large histories.
     pub fn rows_since(&self, cursor: usize, cursor_id: u64) -> (Vec<HistEntry>, usize, u64, bool) {
-        let rows = self.rows.lock().unwrap();
+        let rows = self.rows.lock();
         let valid = cursor <= rows.len()
             && (cursor == 0 || rows.get(cursor - 1).map(|e| e.id) == Some(cursor_id));
         let start = if valid { cursor } else { 0 };
@@ -74,7 +74,7 @@ impl ProxyHistory {
     }
 
     pub fn len(&self) -> usize {
-        self.rows.lock().unwrap().len()
+        self.rows.lock().len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -84,39 +84,34 @@ impl ProxyHistory {
     /// (number of entries, id of the newest): changes whenever entries are
     /// added or removed, for caches keyed on the history.
     pub fn stamp(&self) -> (usize, u64) {
-        let rows = self.rows.lock().unwrap();
+        let rows = self.rows.lock();
         (rows.len(), rows.last().map(|e| e.id).unwrap_or(0))
     }
 
     /// The entry with `id`.
     pub fn get(&self, id: u64) -> Option<HistEntry> {
-        self.rows
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|e| e.id == id)
-            .cloned()
+        self.rows.lock().iter().find(|e| e.id == id).cloned()
     }
 
     /// The newest entry.
     pub fn last(&self) -> Option<HistEntry> {
-        self.rows.lock().unwrap().last().cloned()
+        self.rows.lock().last().cloned()
     }
 
     /// Every entry, oldest first. Cheap: bodies are shared handles.
     pub fn snapshot(&self) -> Vec<HistEntry> {
-        self.rows.lock().unwrap().clone()
+        self.rows.lock().clone()
     }
 
     /// Read access for the length of `f`. Keep `f` short: proxy threads
     /// wait for this lock to record traffic.
     pub fn with_rows<R>(&self, f: impl FnOnce(&[HistEntry]) -> R) -> R {
-        f(&self.rows.lock().unwrap())
+        f(&self.rows.lock())
     }
 
     /// Keep the entries `keep` accepts; returns how many were removed.
     pub fn retain(&self, keep: impl FnMut(&HistEntry) -> bool) -> usize {
-        let mut rows = self.rows.lock().unwrap();
+        let mut rows = self.rows.lock();
         let before = rows.len();
         rows.retain(keep);
         let removed = before - rows.len();
@@ -130,7 +125,7 @@ impl ProxyHistory {
     /// Change the entry with `id` in place (notes, highlight); false when
     /// there is none. Bodies set by `f` are spilled.
     pub fn update(&self, id: u64, f: impl FnOnce(&mut HistEntry)) -> bool {
-        let mut rows = self.rows.lock().unwrap();
+        let mut rows = self.rows.lock();
         let Some(e) = rows.iter_mut().find(|e| e.id == id) else {
             return false;
         };
@@ -145,7 +140,7 @@ impl ProxyHistory {
         mut pick: impl FnMut(&HistEntry) -> bool,
         mut f: impl FnMut(&mut HistEntry),
     ) -> usize {
-        let mut rows = self.rows.lock().unwrap();
+        let mut rows = self.rows.lock();
         let mut n = 0;
         for e in rows.iter_mut().filter(|e| pick(e)) {
             f(e);

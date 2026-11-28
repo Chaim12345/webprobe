@@ -10,10 +10,11 @@
 //! `insecure_mode` is set the base path carries the key, like Burp:
 //! `/{key}/v0.1/scan`. The key is never written to any log or response.
 
+use crate::sync::Mutex;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
@@ -302,9 +303,9 @@ fn start_scan(
             }),
         );
     }
-    let first_issue = shared.issues.lock().unwrap().len();
+    let first_issue = shared.issues.lock().len();
     let id = {
-        let mut st = state.lock().unwrap();
+        let mut st = state.lock();
         let mut hosts: Vec<String> = urls.iter().map(|u| host_only(u)).collect();
         hosts.sort();
         hosts.dedup();
@@ -335,8 +336,8 @@ fn start_scan(
             scan::crawl_and_audit(&shared2, &urls, true);
             shared2.scan.wait_idle(None);
         }));
-        let end_issue = shared2.issues.lock().unwrap().len();
-        let mut st = state2.lock().unwrap();
+        let end_issue = shared2.issues.lock().len();
+        let mut st = state2.lock();
         st.tasks[id].end_issue = Some(end_issue);
         st.tasks[id].status = if result.is_ok() {
             "succeeded".to_string()
@@ -363,7 +364,7 @@ fn scan_status(
     let Ok(n) = id.parse::<usize>() else {
         return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
-    let st = state.lock().unwrap();
+    let st = state.lock();
     let Some(task) = st.tasks.get(n) else {
         return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
@@ -373,7 +374,7 @@ fn scan_status(
     let hosts = task.hosts.clone();
     drop(st);
     let events: Vec<Value> = {
-        let issues = shared.issues.lock().unwrap();
+        let issues = shared.issues.lock();
         let end = end_issue.map_or(issues.len(), |end| end.min(issues.len()));
         let start = first_issue.min(end);
         issues[start..end]

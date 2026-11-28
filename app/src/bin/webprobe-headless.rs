@@ -156,14 +156,14 @@ fn apply_scan_configs(shared: &net::Shared, configs: &[scan_library::LibraryConf
         eprintln!("not applied by WebProbe: {line}");
     }
     let slot = scan_config::shared_config(shared);
-    let base = slot.lock().unwrap().clone();
+    let base = slot.lock().clone();
     let applied = scan_library::apply(
         &refs,
         &base,
         shared.scan_speed.load(Ordering::SeqCst),
         shared.scan_accuracy.load(Ordering::SeqCst),
     );
-    *slot.lock().unwrap() = applied.config;
+    *slot.lock() = applied.config;
     shared.scan_speed.store(applied.speed, Ordering::SeqCst);
     shared
         .scan_accuracy
@@ -232,7 +232,6 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
         issues: shared
             .issues
             .lock()
-            .unwrap()
             .iter()
             .map(project::ProjectIssue::from_issue)
             .collect(),
@@ -268,7 +267,6 @@ fn proxy(mut args: Vec<String>) {
     let shared = net::Shared::new();
     webprobe_core::scan_config::shared_config(&shared)
         .lock()
-        .unwrap()
         .http
         .http2_enabled = http.http2_enabled;
     apply_scan_configs(&shared, &scan_configs);
@@ -289,7 +287,7 @@ fn proxy(mut args: Vec<String>) {
             }
         }
     }
-    *shared.api_config.lock().unwrap() = api;
+    *shared.api_config.lock() = api;
     shared.proxy_port.store(port, Ordering::SeqCst);
     net::start_proxy(shared.clone());
     let started = Instant::now();
@@ -347,7 +345,7 @@ fn proxy(mut args: Vec<String>) {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    let issues = shared.issues.lock().unwrap().clone();
+    let issues = shared.issues.lock().clone();
     for i in &issues {
         eprintln!("issue: {}", issue_json(i));
     }
@@ -385,7 +383,6 @@ fn scan_urls(mut args: Vec<String>) {
     // too, not only in proxy mode.
     webprobe_core::scan_config::shared_config(&shared)
         .lock()
-        .unwrap()
         .http
         .http2_enabled = http.http2_enabled;
     apply_scan_configs(&shared, &scan_configs);
@@ -393,7 +390,7 @@ fn scan_urls(mut args: Vec<String>) {
     scan::crawl_and_audit(&shared, &args, !crawl);
     // crawl_and_audit returns once the last item's audit has finished.
     shared.scan.wait_idle(None);
-    let issues = shared.issues.lock().unwrap().clone();
+    let issues = shared.issues.lock().clone();
     for i in &issues {
         println!("{}", issue_json(i));
     }

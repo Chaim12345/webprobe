@@ -15,7 +15,6 @@ pub fn passive_check(e: &HistEntry) -> Vec<ScanIssue> {
 pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
     let filter = crate::scan_config::shared_config(shared)
         .lock()
-        .unwrap()
         .issues
         .clone();
     passive_check_filtered(shared, e, filter.as_ref())
@@ -25,7 +24,7 @@ pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
 /// apply, but the issue selection is live passive's own
 /// (`Shared::live_passive_issues`), not the scan configuration's.
 pub fn passive_check_live(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
-    let filter = shared.live_passive_issues.lock().unwrap().clone();
+    let filter = shared.live_passive_issues.lock().clone();
     passive_check_filtered(shared, e, filter.as_ref())
 }
 
@@ -34,10 +33,7 @@ pub fn passive_check_filtered(
     e: &HistEntry,
     issues: Option<&webprobe_support::scan_filter::IssueFilter>,
 ) -> Vec<ScanIssue> {
-    let config = crate::scan_config::shared_config(shared)
-        .lock()
-        .unwrap()
-        .clone();
+    let config = crate::scan_config::shared_config(shared).lock().clone();
     let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
     // R-11: "Issues reported" (passive scan type, individual selection).
     if let Some(f) = issues {

@@ -60,16 +60,16 @@ pub struct WsSession {
 
 impl WsSession {
     pub fn state(&self) -> WsRepState {
-        self.state.lock().unwrap().clone()
+        self.state.lock().clone()
     }
 
     fn set_state(&self, s: WsRepState) {
-        *self.state.lock().unwrap() = s;
+        *self.state.lock() = s;
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn messages(&self) -> Vec<WsRepMessage> {
-        self.messages.lock().unwrap().clone()
+        self.messages.lock().clone()
     }
 
     /// Changes whenever the state or the message list changes.
@@ -78,7 +78,7 @@ impl WsSession {
     }
 
     fn push(&self, m: WsRepMessage) {
-        self.messages.lock().unwrap().push(m);
+        self.messages.lock().push(m);
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -108,7 +108,7 @@ pub fn new_session(
     handshake: &str,
     attached: Option<u64>,
 ) -> Arc<WsSession> {
-    let state = if attached.is_some_and(|s| shared.ws_live.lock().unwrap().contains_key(&s)) {
+    let state = if attached.is_some_and(|s| shared.ws_live.lock().contains_key(&s)) {
         WsRepState::Connected
     } else {
         WsRepState::Disconnected
@@ -137,7 +137,7 @@ pub fn new_session(
 /// connection while that is live, else ready to open a new one with the
 /// connection's upgrade request.
 pub fn from_history(shared: &Shared, socket: u64, host: &str, tls_hint: bool) -> Arc<WsSession> {
-    let live = shared.ws_live.lock().unwrap().get(&socket).cloned();
+    let live = shared.ws_live.lock().get(&socket).cloned();
     if let Some(live) = live {
         return new_session(
             shared,
@@ -166,7 +166,7 @@ pub fn from_history(shared: &Shared, socket: u64, host: &str, tls_hint: bool) ->
 /// Burp's "Clone": a new session with the same target and upgrade request,
 /// on a connection of its own.
 pub fn clone_session(shared: &Shared, s: &WsSession) -> Arc<WsSession> {
-    let hs = s.handshake.lock().unwrap().clone();
+    let hs = s.handshake.lock().clone();
     new_session(shared, &s.host, s.port, s.tls, &hs, None)
 }
 
@@ -183,7 +183,6 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
     let hs = s
         .handshake
         .lock()
-        .unwrap()
         .replace("\r\n", "\n")
         .replace('\n', "\r\n");
     let hs = if hs.ends_with("\r\n\r\n") {
@@ -202,8 +201,8 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
     conn.set_nonblocking(true).map_err(|e| e.to_string())?;
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
     let stop = Arc::new(AtomicBool::new(false));
-    *s.out.lock().unwrap() = Some(tx);
-    *s.stop.lock().unwrap() = Some(Arc::clone(&stop));
+    *s.out.lock() = Some(tx);
+    *s.stop.lock() = Some(Arc::clone(&stop));
     s.set_state(WsRepState::Connected);
     let (session, shared) = (Arc::clone(s), Arc::clone(shared));
     crate::util::spawn_contained("ws_repeater", move || {
@@ -331,7 +330,6 @@ pub fn send(
             let live = shared
                 .ws_live
                 .lock()
-                .unwrap()
                 .get(&socket)
                 .cloned()
                 .ok_or("The proxied connection has closed")?;
@@ -343,7 +341,7 @@ pub fn send(
             if !to_server {
                 return Err("A connection opened from Repeater can only send to the server".into());
             }
-            let out = s.out.lock().unwrap().clone().ok_or("Not connected")?;
+            let out = s.out.lock().clone().ok_or("Not connected")?;
             if s.state() != WsRepState::Connected {
                 return Err("Not connected".into());
             }
@@ -362,10 +360,10 @@ pub fn send(
 
 /// Close the session's own connection (attached sessions just detach).
 pub fn close(s: &WsSession) {
-    if let Some(stop) = s.stop.lock().unwrap().take() {
+    if let Some(stop) = s.stop.lock().take() {
         stop.store(true, Ordering::SeqCst);
     }
-    *s.out.lock().unwrap() = None;
+    *s.out.lock() = None;
 }
 
 /// Parse "41 42 ff" / "4142ff" hex into bytes (the binary editor).

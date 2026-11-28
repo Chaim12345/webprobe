@@ -224,7 +224,7 @@ impl CompareUi {
             .name("sitemap-compare".into())
             .spawn(move || {
                 let right = right.unwrap_or_else(|| smc::rerequest(&shared, &left, &stop, &done));
-                *result.lock().unwrap() = Some(Ok(smc::compare(&left, &right, &m, &r)));
+                *result.lock() = Some(Ok(smc::compare(&left, &right, &m, &r)));
                 shared.wake();
             })
             .expect("site map comparison thread");
@@ -289,7 +289,7 @@ pub fn window(app: &mut crate::App, ctx: &egui::Context) {
     let shared = app.shared.clone();
     let st = &mut app.eng.compare;
     // Pick up a finished job.
-    let finished = st.job.as_ref().map(|job| job.result.lock().unwrap().take());
+    let finished = st.job.as_ref().map(|job| job.result.lock().take());
     match finished {
         Some(Some(res)) => {
             match res {

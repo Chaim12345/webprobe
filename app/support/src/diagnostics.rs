@@ -110,14 +110,15 @@ mod tests {
 #[cfg(test)]
 mod subscriber_tests {
     use super::*;
+    use crate::sync::Mutex;
     use std::io::Write;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     #[derive(Clone)]
     struct Capture(Arc<Mutex<Vec<u8>>>);
     impl Write for Capture {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
+            self.0.lock().extend_from_slice(buf);
             Ok(buf.len())
         }
         fn flush(&mut self) -> std::io::Result<()> {
@@ -144,7 +145,7 @@ mod subscriber_tests {
                     status = 200_u16, response_bytes = 42_usize, "Collaborator poll received");
                 tracing::info!(target: "unreviewed_dependency", "secret-dependency-output");
             });
-            let out = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+            let out = String::from_utf8(bytes.lock().clone()).unwrap();
             assert_eq!(out.contains("net.upstream.slow"), debug);
             assert_eq!(out.contains("oast.poll.received"), debug);
             assert!(!out.contains("secret-dependency-output"));
@@ -171,7 +172,7 @@ mod subscriber_tests {
             emit(Level::Warn, "scan.busy", "Scan already running", &[]);
             emit(Level::Error, "scan.failed", "Scan failed", &[]);
         });
-        let out = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        let out = String::from_utf8(bytes.lock().clone()).unwrap();
         for expected in [
             "INFO",
             "WARN",

@@ -25,7 +25,7 @@ fn tool_requests_are_logged_under_the_tool_name_and_untagged_ones_are_not() {
 
     // No tool scope (the proxy's own forwarding, tests): nothing recorded.
     assert!(send_raw(&shared, "127.0.0.1", port, request).resp.is_some());
-    assert!(shared.tool_log.lock().unwrap().is_empty());
+    assert!(shared.tool_log.lock().is_empty());
 
     {
         let _tool = tool_scope("Repeater");
@@ -39,7 +39,7 @@ fn tool_requests_are_logged_under_the_tool_name_and_untagged_ones_are_not() {
     }
     send_raw(&shared, "127.0.0.1", port, request);
 
-    let log = shared.tool_log.lock().unwrap();
+    let log = shared.tool_log.lock();
     assert_eq!(
         log.iter().map(|e| e.tool).collect::<Vec<_>>(),
         ["Repeater", "Scanner", "Repeater"]

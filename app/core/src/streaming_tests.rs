@@ -173,7 +173,7 @@ fn url_prefix_streams_length_and_close_delimited_bodies() {
             framing,
             vec![b"{\"a\":1}\n".to_vec(), b"{\"b\":2}\n".to_vec()],
         );
-        shared.streaming.lock().unwrap().urls = vec![format!("http://127.0.0.1:{port}/feed/")];
+        shared.streaming.lock().urls = vec![format!("http://127.0.0.1:{port}/feed/")];
         let mut c = client(&shared, port, path);
         read_until(&mut c, "{\"a\":1}");
         go.send(()).unwrap();
@@ -189,17 +189,24 @@ fn url_prefix_streams_length_and_close_delimited_bodies() {
 fn streaming_passes_intercept_and_match_replace_and_says_so_once() {
     let shared = proxy();
     shared.intercept_on.store(true, Ordering::SeqCst);
-    shared.response_rules.lock().unwrap().enabled = true;
-    shared.response_rules.lock().unwrap().content_type_on = false;
+    shared.response_rules.lock().update(|r| r.enabled = true);
+    shared
+        .response_rules
+        .lock()
+        .update(|r| r.content_type_on = false);
     let mut rule = crate::rules::MrRule::new(crate::rules::MrScope::ResponseBody);
     (rule.match_, rule.replacement) = ("event".into(), "CHANGED".into());
-    shared.mr_response.lock().unwrap().push(rule);
+    {
+        let mut rules = shared.mr_response.lock().rules().to_vec();
+        rules.push(rule);
+        *shared.mr_response.lock() = std::sync::Arc::new(crate::rules::CompiledMrRules::new(rules));
+    }
     // Requests are still intercepted: forward the one that arrives.
     let forwarder = {
         let shared = shared.clone();
         std::thread::spawn(move || {
             for _ in 0..3000 {
-                if let Some(item) = shared.queue.lock().unwrap().pop() {
+                if let Some(item) = shared.queue.lock().pop() {
                     let _ = item.tx.send(Some(item.edited.clone()));
                     return true;
                 }
@@ -219,12 +226,9 @@ fn streaming_passes_intercept_and_match_replace_and_says_so_once() {
     go.send(()).unwrap();
     read_until(&mut c, "data: event 2");
     assert!(done.recv_timeout(Duration::from_secs(30)).unwrap());
-    assert!(
-        shared.queue.lock().unwrap().is_empty(),
-        "the response was not held"
-    );
+    assert!(shared.queue.lock().is_empty(), "the response was not held");
     history_entry(&shared, "/held");
-    let events = shared.events.lock().unwrap().clone();
+    let events = shared.events.lock().clone();
     for reason in ["response interception", "response match and replace rules"] {
         let n = events
             .iter()
@@ -243,13 +247,13 @@ fn other_content_with_intercept_on_stays_buffered_and_editable() {
         vec![b"<p>original</p>".to_vec()],
     );
     shared.intercept_on.store(true, Ordering::SeqCst);
-    shared.response_rules.lock().unwrap().enabled = true;
+    shared.response_rules.lock().update(|r| r.enabled = true);
     let editor = {
         let shared = shared.clone();
         std::thread::spawn(move || {
             let mut handled = 0;
             for _ in 0..3000 {
-                if let Some(item) = shared.queue.lock().unwrap().pop() {
+                if let Some(item) = shared.queue.lock().pop() {
                     let text = item.edited.replace("original", "edited!!");
                     let _ = item.tx.send(Some(text));
                     handled += 1;
@@ -310,7 +314,7 @@ fn client_disconnect_closes_the_upstream_stream() {
 #[test]
 fn not_stored_keeps_the_head_and_skips_the_body() {
     let shared = proxy();
-    shared.streaming.lock().unwrap().store = false;
+    shared.streaming.lock().store = false;
     let (port, go, done) = server("text/event-stream", Framing::Chunked, sse(2));
     let mut c = client(&shared, port, "/nostore");
     read_until(&mut c, "data: event 1");
@@ -373,7 +377,6 @@ fn other_tools_cut_a_streaming_response_after_its_head() {
         shared
             .events
             .lock()
-            .unwrap()
             .iter()
             .any(|l| l.contains("Scanner ignored the streaming response"))
     );
@@ -385,8 +388,8 @@ fn repeater_shows_a_stream_as_it_arrives() {
     let (port, go, done) = server("text/event-stream", Framing::Chunked, sse(2));
     let _tool = crate::net::tool_scope("Repeater");
     let (seen_tx, seen) = mpsc::channel::<Vec<u8>>();
-    let shown = std::sync::Mutex::new(Vec::<u8>::new());
-    let settings = shared.streaming.lock().unwrap().clone();
+    let shown = crate::sync::Mutex::new(Vec::<u8>::new());
+    let settings = shared.streaming.lock().clone();
     let releaser = std::thread::spawn(move || {
         // Release event 2 only after the live view showed event 1.
         loop {
@@ -398,7 +401,7 @@ fn repeater_shows_a_stream_as_it_arrives() {
         }
     });
     let progress = |b: &[u8], restart: bool| {
-        let mut all = shown.lock().unwrap();
+        let mut all = shown.lock();
         if restart {
             all.clear();
         }
@@ -417,10 +420,6 @@ fn repeater_shows_a_stream_as_it_arrives() {
     assert!(sink.complete());
     let whole = sink.into_response().unwrap();
     assert!(String::from_utf8_lossy(&whole).ends_with("data: event 1\n\ndata: event 2\n\n"));
-    assert_eq!(
-        *shown.lock().unwrap(),
-        whole,
-        "the live view saw every byte once"
-    );
+    assert_eq!(*shown.lock(), whole, "the live view saw every byte once");
     assert!(done.recv_timeout(Duration::from_secs(30)).unwrap());
 }

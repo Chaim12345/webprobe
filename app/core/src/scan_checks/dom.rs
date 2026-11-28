@@ -231,7 +231,6 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
         return state
             .dom_hits
             .lock()
-            .unwrap()
             .get(&url)
             .and_then(|cell| cell.get())
             .cloned()
@@ -240,7 +239,6 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
     let cell = state
         .dom_hits
         .lock()
-        .unwrap()
         .entry(url.clone())
         .or_default()
         .clone();
@@ -865,7 +863,6 @@ fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress(
     cx.state()
         .dom_hits
         .lock()
-        .unwrap()
         .insert(url.clone(), std::sync::Arc::new(cell));
     shared.scan.record_dom(crate::scan_run::DomScanRecord {
         url,
@@ -880,10 +877,10 @@ fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress(
             config.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    *crate::scan_config::shared_config(&shared).lock() = config;
     shared.scan.stop.store(true, Ordering::SeqCst);
     run_request_checks(&cx);
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     for name in [
         "Cross-site scripting (DOM-based)",
         "Cookie manipulation (DOM-based)",
@@ -895,20 +892,15 @@ fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress(
             "missing {name}"
         );
     }
-    assert_eq!(
-        shared.scan.dom_outcomes.lock().unwrap()[0]
-            .proven_hits
-            .len(),
-        2
-    );
+    assert_eq!(shared.scan.dom_outcomes.lock()[0].proven_hits.len(), 2);
     assert!(
         listener.accept().is_err(),
         "cache-only dispatch must not send"
     );
-    cx.state().dom_hits.lock().unwrap().clear();
+    cx.state().dom_hits.lock().clear();
     assert!(dom_analysis_hits(&cx).hits.is_empty());
     assert!(
-        cx.state().dom_hits.lock().unwrap().is_empty(),
+        cx.state().dom_hits.lock().is_empty(),
         "stopped cache miss must not initialize a cell"
     );
     assert!(listener.accept().is_err());
@@ -978,7 +970,6 @@ fn dom_cancelled_dispatch_preserves_pollution_and_other_families_without_egress(
     cx.state()
         .dom_hits
         .lock()
-        .unwrap()
         .insert(url.clone(), std::sync::Arc::new(cell));
     shared.scan.record_dom(crate::scan_run::DomScanRecord {
         url,
@@ -999,10 +990,10 @@ fn dom_cancelled_dispatch_preserves_pollution_and_other_families_without_egress(
             config.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    *crate::scan_config::shared_config(&shared).lock() = config;
     shared.scan.stop.store(true, Ordering::SeqCst);
     run_request_checks(&cx);
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     for name in [
         "Cross-site scripting (DOM-based)",
         "Cookie manipulation (DOM-based)",
@@ -1015,20 +1006,15 @@ fn dom_cancelled_dispatch_preserves_pollution_and_other_families_without_egress(
             "missing {name}"
         );
     }
-    assert_eq!(
-        shared.scan.dom_outcomes.lock().unwrap()[0]
-            .proven_hits
-            .len(),
-        3
-    );
+    assert_eq!(shared.scan.dom_outcomes.lock()[0].proven_hits.len(), 3);
     assert!(
         listener.accept().is_err(),
         "cache-only dispatch must not send"
     );
-    cx.state().dom_hits.lock().unwrap().clear();
+    cx.state().dom_hits.lock().clear();
     assert!(dom_analysis_hits(&cx).hits.is_empty());
     assert!(
-        cx.state().dom_hits.lock().unwrap().is_empty(),
+        cx.state().dom_hits.lock().is_empty(),
         "stopped cache miss must not initialize a cell"
     );
     assert!(listener.accept().is_err());

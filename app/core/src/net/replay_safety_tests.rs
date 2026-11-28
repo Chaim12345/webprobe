@@ -174,7 +174,7 @@ impl Origin {
         } else {
             &self.shared.pool
         };
-        let mut pool = pool.lock().unwrap();
+        let mut pool = pool.lock();
         let conn = pool.get_mut(&key).expect("warm response must be pooled");
         conn.set_read_timeout_ms(100).unwrap();
     }
@@ -345,17 +345,12 @@ fn failed_session_validation_does_not_resend_the_pending_effectful_request() {
     ] {
         let mut origin = Origin::new(tls, reply);
         origin.warm();
-        origin
-            .shared
-            .session_rules
-            .lock()
-            .unwrap()
-            .push(SessionRule {
-                name: "validate before send".into(),
-                action: "check session".into(),
-                tools: vec!["Repeater".into()],
-                ..SessionRule::new()
-            });
+        origin.shared.session_rules.lock().push(SessionRule {
+            name: "validate before send".into(),
+            action: "check session".into(),
+            tools: vec!["Repeater".into()],
+            ..SessionRule::new()
+        });
         let _tool = tool_scope("Repeater");
         let request = format!(
             "POST /effect HTTP/1.1\r\nHost: localhost:{}\r\nContent-Length: 3\r\n\r\nx=1",

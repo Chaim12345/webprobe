@@ -524,7 +524,7 @@ impl PairCtx {
         }
         {
             let cfg_slot = crate::scan_config::shared_config(&self.shared);
-            let config = cfg_slot.lock().unwrap();
+            let config = cfg_slot.lock();
             issues.retain(|i| config.issue_allowed(&i.name, true));
         }
         #[cfg(test)]
@@ -582,10 +582,7 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
     if pairs.is_empty() {
         return;
     }
-    let config = crate::scan_config::shared_config(shared)
-        .lock()
-        .unwrap()
-        .clone();
+    let config = crate::scan_config::shared_config(shared).lock().clone();
     shared.event(
         crate::diagnostics::Level::Info,
         "scan.stored.started",
@@ -646,7 +643,7 @@ pub(crate) fn run_stored_stage_budgeted(
     // Do not clone arbitrary project sets/strings into the bounded stage.
     let enabled: [bool; 5] = {
         let config_slot = crate::scan_config::shared_config(shared);
-        let config = config_slot.lock().unwrap();
+        let config = config_slot.lock();
         std::array::from_fn(|i| {
             config.issue_allowed(STORED_CHECKS[i].issue(), true)
                 && config.check_enabled(STORED_CHECKS[i].id())

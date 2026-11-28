@@ -95,14 +95,8 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
                 let listener_port = addr
                     .rsplit_once(':')
                     .and_then(|(_, p)| p.parse::<u16>().ok());
-                let redirect = listener_port.and_then(|lp| {
-                    app.shared
-                        .listener_redirects
-                        .lock()
-                        .unwrap()
-                        .get(&lp)
-                        .cloned()
-                });
+                let redirect = listener_port
+                    .and_then(|lp| app.shared.listener_redirects.lock().get(&lp).cloned());
                 cell(
                     ui,
                     W[3],
@@ -239,11 +233,7 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
         {
             match (selected_port, parse_target(&target)) {
                 (Some(lp), Some(t)) => {
-                    app.shared
-                        .listener_redirects
-                        .lock()
-                        .unwrap()
-                        .insert(lp, t.clone());
+                    app.shared.listener_redirects.lock().insert(lp, t.clone());
                     feedback::toast(
                         Level::Success,
                         format!(
@@ -260,7 +250,7 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
             .clicked()
             && let Some(lp) = selected_port
         {
-            app.shared.listener_redirects.lock().unwrap().remove(&lp);
+            app.shared.listener_redirects.lock().remove(&lp);
         }
     });
     ui.data_mut(|d| {
@@ -401,7 +391,7 @@ pub fn ca_buttons(app: &mut App, ui: &mut Ui) {
 /// switchable) and "TLS pass through" host list.
 pub fn response_rules_and_pass_through(app: &mut App, ui: &mut Ui) {
     heading(ui, "Response interception rules");
-    let mut r = app.shared.response_rules.lock().unwrap().clone();
+    let mut r = app.shared.response_rules.lock().rules().clone();
     let before = r.clone();
     ui.checkbox(
         &mut r.enabled,
@@ -446,12 +436,12 @@ pub fn response_rules_and_pass_through(app: &mut App, ui: &mut Ui) {
         }
     });
     if r != before {
-        *app.shared.response_rules.lock().unwrap() = r;
+        *app.shared.response_rules.lock() = crate::net::CompiledResponseInterceptRules::new(r);
     }
     ui.add_space(8.0);
     heading(ui, "TLS pass through");
     ui.label(RichText::new("TLS connections to these hosts are tunnelled without interception (one per line; *.example.com matches subdomains).").size(12.5).color(theme::ink_dim()));
-    let mut text = app.shared.tls_bypass.lock().unwrap().join("\n");
+    let mut text = app.shared.tls_bypass.lock().join("\n");
     if ui
         .add(
             egui::TextEdit::multiline(&mut text)
@@ -461,7 +451,7 @@ pub fn response_rules_and_pass_through(app: &mut App, ui: &mut Ui) {
         )
         .changed()
     {
-        *app.shared.tls_bypass.lock().unwrap() = text
+        *app.shared.tls_bypass.lock() = text
             .lines()
             .map(str::trim)
             .filter(|l| !l.is_empty())
@@ -476,7 +466,7 @@ pub fn intercept_rules_table(app: &mut App, ui: &mut Ui) {
     ui.label(RichText::new("Use these settings to control which requests are stalled for viewing and editing in the Intercept tab.").size(12.5).color(theme::ink_dim()));
     let sel_id = egui::Id::unique("intercept_rule_selected");
     let mut selected: Option<usize> = ui.data_mut(|d| d.get_temp(sel_id)).unwrap_or(None);
-    let mut rules = app.shared.intercept_rules.lock().unwrap().clone();
+    let mut rules = app.shared.intercept_rules.lock().rules().to_vec();
     let before = rules.clone();
     egui::Grid::new("intercept_rules")
         .striped(true)
@@ -588,7 +578,8 @@ pub fn intercept_rules_table(app: &mut App, ui: &mut Ui) {
         }
     });
     if rules != before {
-        *app.shared.intercept_rules.lock().unwrap() = rules;
+        *app.shared.intercept_rules.lock() =
+            crate::intercept_rules::CompiledInterceptRules::new(rules);
     }
     ui.data_mut(|d| d.insert_temp(sel_id, selected));
 }
@@ -600,7 +591,6 @@ pub fn http2_setting(app: &mut App, ui: &mut Ui) {
     heading(ui, "HTTP/2");
     let mut on = webprobe_core::scan_config::shared_config(&app.shared)
         .lock()
-        .unwrap()
         .http
         .http2_enabled;
     if ui
@@ -613,7 +603,6 @@ pub fn http2_setting(app: &mut App, ui: &mut Ui) {
     {
         webprobe_core::scan_config::shared_config(&app.shared)
             .lock()
-            .unwrap()
             .http
             .http2_enabled = on;
     }
@@ -636,7 +625,7 @@ pub fn streaming_responses(app: &mut App, ui: &mut Ui) {
             .size(12.0)
             .color(theme::ink_dim()),
     );
-    let mut s = app.shared.streaming.lock().unwrap().clone();
+    let mut s = app.shared.streaming.lock().clone();
     let before = s.clone();
     let mut text = s.urls.join("\n");
     ui.label(
@@ -679,7 +668,7 @@ pub fn streaming_responses(app: &mut App, ui: &mut Ui) {
         ),
     );
     if s != before {
-        *app.shared.streaming.lock().unwrap() = s;
+        *app.shared.streaming.lock() = s;
     }
 }
 
@@ -702,7 +691,7 @@ pub fn ws_match_replace(app: &mut App, ui: &mut Ui) {
             .ws_rules_in_scope_only
             .store(in_scope, std::sync::atomic::Ordering::SeqCst);
     }
-    let mut rules = app.shared.ws_rules.lock().unwrap().clone();
+    let mut rules = app.shared.ws_rules.lock().rules().to_vec();
     let before = rules.clone();
     let mut action: Option<(usize, i32)> = None;
     egui::Grid::new("ws_mr_rules")
@@ -773,7 +762,7 @@ pub fn ws_match_replace(app: &mut App, ui: &mut Ui) {
         }
     }
     if rules != before {
-        *app.shared.ws_rules.lock().unwrap() = rules;
+        *app.shared.ws_rules.lock() = webprobe_core::ws_rules::CompiledWsRules::new(rules);
     }
 }
 

@@ -737,7 +737,6 @@ fn passive_checks_are_registered_and_switchable() {
     );
     crate::scan_config::shared_config(&shared)
         .lock()
-        .unwrap()
         .disabled_checks
         .insert("passive.jwt-private-key-disclosed".into());
     let live = names(crate::scan::passive_check_for(&shared, &e));
@@ -884,10 +883,10 @@ fn presented(head: &str) -> Option<String> {
 
 /// A loopback app: one thread per connection, fixed Content-Length bodies,
 /// no Date header, nothing random. Returns the port and the heads it saw.
-fn responder(app: App) -> (u16, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+fn responder(app: App) -> (u16, std::sync::Arc<crate::sync::Mutex<Vec<String>>>) {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = l.local_addr().unwrap().port();
-    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
     let log = seen.clone();
     std::thread::spawn(move || {
         for s in l.incoming() {
@@ -904,7 +903,7 @@ fn responder(app: App) -> (u16, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
                     }
                 }
                 let head = String::from_utf8_lossy(&buf).into_owned();
-                log.lock().unwrap().push(head.clone());
+                log.lock().push(head.clone());
                 let (status, body) = verdict(app, presented(&head).as_deref());
                 let reason = if status == 200 { "OK" } else { "Unauthorized" };
                 let _ = s.write_all(format!("HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
@@ -925,7 +924,7 @@ fn scan(
     let shared = Shared::new();
     {
         let cfg_slot = crate::scan_config::shared_config(&shared);
-        let mut cfg = cfg_slot.lock().unwrap();
+        let mut cfg = cfg_slot.lock();
         for (id, _, _) in crate::scan::check_catalogue() {
             if id != "active.jwt" {
                 cfg.disabled_checks.insert(id.to_string());
@@ -951,7 +950,7 @@ fn scan(
         );
         std::thread::sleep(Duration::from_millis(20));
     }
-    let issues = shared.issues.lock().unwrap().clone();
+    let issues = shared.issues.lock().clone();
     (shared, issues)
 }
 
@@ -1147,11 +1146,8 @@ fn active_jwt_attacks_a_bearer_token_in_a_query_parameter() {
     );
     // The attack kept the prefix.
     assert!(
-        seen.lock()
-            .unwrap()
-            .iter()
-            .any(|h| h.contains("t=Bearer%20")
-                && h.contains(&format!("{}.", Jwt::parse(&t).unwrap().header_b64))),
+        seen.lock().iter().any(|h| h.contains("t=Bearer%20")
+            && h.contains(&format!("{}.", Jwt::parse(&t).unwrap().header_b64))),
         "requests carried 'Bearer <token>'"
     );
 }
@@ -1174,7 +1170,6 @@ fn active_jwt_attacks_a_bearer_token_in_an_x_header() {
     );
     assert!(
         seen.lock()
-            .unwrap()
             .iter()
             .any(|h| h.to_ascii_lowercase().contains("x-auth-token: bearer ")),
         "requests keep the Bearer prefix"
@@ -1260,7 +1255,7 @@ fn active_jwt_jku_and_x5u_send_a_collaborator_url_and_register_the_id() {
         "nothing reported before an interaction: {:?}",
         jwt_issue_names(&issues)
     );
-    let heads = seen.lock().unwrap().clone();
+    let heads = seen.lock().clone();
     let header_of = |name: &str| -> Option<serde_json::Value> {
         heads.iter().find_map(|h| {
             let tok = presented(h)?;
@@ -1305,7 +1300,7 @@ fn active_jwt_jku_and_x5u_send_a_collaborator_url_and_register_the_id() {
     );
     assert!(shared.oob.pending().is_empty());
     assert!(
-        !seen.lock().unwrap().iter().any(|h| h.contains("oast")),
+        !seen.lock().iter().any(|h| h.contains("oast")),
         "no jku request when switched off"
     );
 }

@@ -91,7 +91,7 @@ impl Ledger {
     /// Idempotent activation never restarts the clock. Pending identity can
     /// be captured at admission without spending stage time before A4.
     pub fn activate(&self) -> Result<(), Denied> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         if state.deadline.is_none() {
             state.deadline = Some(
                 Instant::now()
@@ -113,7 +113,7 @@ impl Ledger {
         {
             return Err(Denied::InvalidReservation);
         }
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         if let Some(reason) = state.denied {
             return Err(reason);
         }
@@ -143,7 +143,7 @@ impl Ledger {
     /// Retaining a proved finding is allowed after expiry/exhaustion, under a
     /// separate ceiling. This never admits further I/O or clears denial.
     pub fn retain_proven(&self, bytes: u64) -> Result<(), Denied> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         if state.deadline.is_none() {
             return Err(Denied::NotActivated);
         }
@@ -175,7 +175,6 @@ impl Ledger {
         let left = self
             .state
             .lock()
-            .unwrap()
             .deadline
             .ok_or(Denied::NotActivated)?
             .saturating_duration_since(Instant::now());
@@ -188,7 +187,7 @@ impl Ledger {
     /// CPU-side bounded evidence copies may finish after I/O closes. This
     /// cannot admit network work or clear any terminal denial.
     pub fn retain_input(&self, bytes: u64) -> Result<(), Denied> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         if state.deadline.is_none() {
             return Err(Denied::NotActivated);
         }
@@ -206,36 +205,28 @@ impl Ledger {
     /// Sticky operational failure, not a resource exhaustion or cancellation.
     /// It forbids further admission and cannot erase an earlier denial.
     pub fn mark_incomplete(&self) {
-        self.state
-            .lock()
-            .unwrap()
-            .denied
-            .get_or_insert(Denied::Failed);
+        self.state.lock().denied.get_or_insert(Denied::Failed);
     }
     pub fn retention_lost(&self) -> bool {
-        self.state.lock().unwrap().retention_lost
+        self.state.lock().retention_lost
     }
     /// Same activated absolute deadline, never recomputed from a timeout.
     pub fn deadline(&self) -> Result<Instant, Denied> {
         self.reserve(&[])?;
-        self.state
-            .lock()
-            .unwrap()
-            .deadline
-            .ok_or(Denied::NotActivated)
+        self.state.lock().deadline.ok_or(Denied::NotActivated)
     }
     /// Advisory preallocation cap. Actual I/O must still atomically reserve
     /// its charge before growth/emission; concurrent users can spend this.
     pub fn available(&self, resource: Resource) -> Result<u64, Denied> {
         self.reserve(&[])?;
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock();
         if let Some(reason) = state.denied {
             return Err(reason);
         }
         Ok(self.ceilings[resource.index()].saturating_sub(state.used[resource.index()]))
     }
     pub fn used(&self, resource: Resource) -> u64 {
-        self.state.lock().unwrap().used[resource.index()]
+        self.state.lock().used[resource.index()]
     }
 }
 
