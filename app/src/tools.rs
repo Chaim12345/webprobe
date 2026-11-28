@@ -2997,6 +2997,10 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         let order: Vec<u64> = app.shared.repeaters.lock().iter().map(|r| r.id).collect();
         webprobe_core::send_group::to_project(&app.rep_groups, &order)
     };
+    // AR-05: live passive audits run on their own thread. Give the queued
+    // ones a moment, so a save right after the last response holds its
+    // issues; bounded, because this runs on the UI thread.
+    net::live_audit(&app.shared).wait_idle(std::time::Duration::from_millis(300));
     let locked_issues = app
         .shared
         .issues
