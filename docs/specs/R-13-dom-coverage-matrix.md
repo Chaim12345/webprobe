@@ -181,11 +181,23 @@ follow-up issue.
   page.
 - **Storage reads as sources are not planned** (see the sources table).
 
-Still open, with no decision needed: custom setters as sinks, and the
-prototype-pollution gaps listed in its row (overwrites of existing properties,
-additions missed between polls). jQuery `fn` methods attached after the
-library is published are wrapped when they are assigned, so a call in the same
-task is seen.
+- **Custom setters are not planned.** A page can define its own property
+  setter that ends in a dangerous call; the probe cannot know which
+  page-defined setters matter. The built-in sink the setter finally reaches
+  is wrapped, and that is where such a flow is reported.
+- **Prototype-pollution overwrites are not planned.** The probe sends
+  `__proto__[token]=token`, which can only add a property named after the
+  token. Detecting an overwrite would mean sending a payload that replaces a
+  real property such as `toString`, which breaks the page being tested.
+- **Additions missed between polls stay a known limit.** `Object.prototype`
+  is read every 25 ms; a property added and deleted inside one interval is
+  not seen. There is no hook for property definition on a plain object.
+
+jQuery `fn` methods attached after the library is published are wrapped when
+they are assigned, so a call in the same task is seen.
+
+With these, every row of the two tables above has a wrapped source or sink
+with a live-lab test, or says why it is not covered.
 
 ## Current inconsistency (2026-11-24)
 
