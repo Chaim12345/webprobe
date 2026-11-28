@@ -31,7 +31,7 @@ so WebProbe does not ship it.
 | siteMap | full | |
 | userInterface | partial | `registerHotKeyHandler` is accepted but the hotkey is never bound, so it does not fire; WebSocket message editors are accepted but not shown; Swing shows in the extension's own window, not inside WebProbe's |
 | utilities | partial | `rankingUtils`, `shellUtils`, Brotli |
-| websockets | partial | `createWebSocket` |
+| websockets | partial | `createWebSocket` connects from the sidecar itself: not through WebProbe's upstream proxy settings, not listed in WebSockets history, and `upgradeResponse` is empty |
 
 Session handling: extension actions are available as the rule action "invoke extension"; they receive
 an empty macro list.

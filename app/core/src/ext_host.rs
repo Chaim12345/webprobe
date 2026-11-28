@@ -1611,6 +1611,30 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// R-20: websockets().createWebSocket connects, sends text and binary
+    /// frames, delivers the replies and the close to the handler, and
+    /// reports a failed connection.
+    #[test]
+    fn montoya_create_websocket() {
+        let Some(dir) = stage_extension("CreateWebSocketExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("websocket extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("createWebSocket regression passed")),
+            "createWebSocket checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-20: an extension that registers hotkeys or asks for the project
     /// loads. The hotkeys are accepted, not bound.
     #[test]
