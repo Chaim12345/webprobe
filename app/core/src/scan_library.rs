@@ -566,12 +566,12 @@ pub fn tree_to_config(tree: &Value, base: &crate::scan_config::ScanConfig) -> Ap
     if let Some(v) = flag("crawler.customization.request_sitemap") {
         c.crawl.sitemap = v;
     }
-    for (burp, key) in crate::scan_config::INSERTION_KEYS {
-        if let Some(on) = flag(&format!("scanner.insertion_point_types.{burp}")) {
+    for t in &crate::scan_config::INSERTION_TYPES {
+        if let Some(on) = flag(&format!("scanner.insertion_point_types.{}", t.burp)) {
             if on {
-                c.disabled_insertion.remove(key);
+                c.disabled_insertion.remove(t.key);
             } else {
-                c.disabled_insertion.insert(key.to_string());
+                c.disabled_insertion.insert(t.key.to_string());
             }
         }
     }
@@ -1052,5 +1052,32 @@ mod tests {
         assert_eq!(get_path(&out, "crawler.future"), Some(&Value::from(1)));
         assert_eq!(get_path(&out, "description.uuid"), Some(&Value::from("x")));
         assert_eq!(file_name_for("a/b:c"), "a_b_c.json");
+    }
+
+    /// AR-10 / F14: the Burp-config schema and the applied-key list agree
+    /// with the one insertion point table, so a new type cannot be added to
+    /// one place and forgotten in another.
+    #[test]
+    fn insertion_point_keys_match_the_one_table() {
+        for t in &crate::scan_config::INSERTION_TYPES {
+            let path = format!("scanner.insertion_point_types.{}", t.burp);
+            assert!(APPLIED.contains(&path.as_str()), "{path} must be applied");
+            assert!(
+                TYPED
+                    .iter()
+                    .any(|(p, k)| *p == path.as_str() && *k == Kind::Bool),
+                "{path} must be typed Bool"
+            );
+        }
+        let typed: Vec<&str> = TYPED
+            .iter()
+            .filter(|(p, _)| p.starts_with("scanner.insertion_point_types."))
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(
+            typed.len(),
+            crate::scan_config::INSERTION_TYPES.len(),
+            "one schema key per insertion point type"
+        );
     }
 }

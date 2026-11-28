@@ -67,6 +67,10 @@ pub(crate) fn stored_input_issue(
 pub(crate) trait StoredCheck: Sync {
     fn id(&self) -> &'static str;
     fn issue(&self) -> &'static str;
+    /// The registration record every check kind exposes (AR-10 / F14).
+    fn meta(&self) -> CheckMeta {
+        CheckMeta::identified(self.id(), self.issue())
+    }
     fn applies_to(&self, ip: &InsertionPoint) -> bool;
     fn server_side(&self) -> bool;
     fn run(&self, cx: &PairCtx);

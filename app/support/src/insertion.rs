@@ -387,24 +387,129 @@ pub fn skipped_by_skip_all(p: &InsertionPoint) -> bool {
 
 // ---------------------------------------------------------------- vetoes
 
-/// The scan configuration's insertion point type of a base point
-/// ([`crate::scan_config::INSERTION_TYPES`], burp.Zwez's Zick list); None
+/// One Burp insertion point type: what a project stores when the type is
+/// switched off, the Settings label, and Burp's own configuration key
+/// (`scanner.insertion_point_types.<burp>`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InsertionType {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub burp: &'static str,
+}
+
+/// Every insertion point type, in the order Burp's settings list them.
+/// This is the single table: the settings UI, the Burp configuration import
+/// and export, and [`insertion_type`] all read it.
+pub static INSERTION_TYPES: [InsertionType; 8] = [
+    InsertionType {
+        key: "url",
+        label: "URL parameter values",
+        burp: "insert_url_params",
+    },
+    InsertionType {
+        key: "body",
+        label: "Body parameter values",
+        burp: "insert_body_params",
+    },
+    InsertionType {
+        key: "cookie",
+        label: "Cookie parameter values",
+        burp: "insert_cookies",
+    },
+    InsertionType {
+        key: "param_name",
+        label: "Parameter name",
+        burp: "insert_param_name",
+    },
+    InsertionType {
+        key: "header",
+        label: "HTTP headers",
+        burp: "insert_http_headers",
+    },
+    InsertionType {
+        key: "entire_body",
+        label: "Entire body",
+        burp: "insert_entire_body",
+    },
+    InsertionType {
+        key: "folder",
+        label: "URL path folders",
+        burp: "insert_url_path_folders",
+    },
+    InsertionType {
+        key: "filename",
+        label: "URL path filename",
+        burp: "insert_url_path_filename",
+    },
+];
+
+/// The insertion point type of a base point (burp.Zwez's Zick list); None
 /// for kinds that only exist nested (Zick lets every nested point through).
-pub fn insertion_type(kind: &IpKind) -> Option<&'static str> {
-    match kind {
-        IpKind::Query => Some("url"),
+pub fn insertion_type(kind: &IpKind) -> Option<&'static InsertionType> {
+    let key = match kind {
+        IpKind::Query => "url",
         IpKind::Body
         | IpKind::Json(_)
         | IpKind::Multipart { .. }
         | IpKind::XmlParam { .. }
         | IpKind::XmlTag { .. }
-        | IpKind::XmlAttr { .. } => Some("body"),
-        IpKind::Cookie => Some("cookie"),
-        IpKind::Header => Some("header"),
-        IpKind::PathFolder(_) => Some("folder"),
-        IpKind::PathFilename(_) => Some("filename"),
-        IpKind::EntireBody => Some("entire_body"),
-        IpKind::ParamName(_) => Some("param_name"),
-        IpKind::Base64 { .. } => None,
+        | IpKind::XmlAttr { .. } => "body",
+        IpKind::Cookie => "cookie",
+        IpKind::Header => "header",
+        IpKind::PathFolder(_) => "folder",
+        IpKind::PathFilename(_) => "filename",
+        IpKind::EntireBody => "entire_body",
+        IpKind::ParamName(_) => "param_name",
+        IpKind::Base64 { .. } => return None,
+    };
+    INSERTION_TYPES.iter().find(|t| t.key == key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_table_names_every_insertion_point_type() {
+        let mut keys = std::collections::BTreeSet::new();
+        let mut burp = std::collections::BTreeSet::new();
+        for t in &INSERTION_TYPES {
+            assert!(!t.key.is_empty());
+            assert!(!t.label.is_empty());
+            assert!(!t.burp.is_empty());
+            assert!(keys.insert(t.key), "duplicate key {}", t.key);
+            assert!(burp.insert(t.burp), "duplicate Burp key {}", t.burp);
+        }
+        assert_eq!(keys.len(), 8);
+    }
+
+    #[test]
+    fn every_keyed_kind_resolves_to_its_table_entry() {
+        let kinds = [
+            IpKind::Query,
+            IpKind::Body,
+            IpKind::Json(vec!["a".into()]),
+            IpKind::Multipart {
+                index: 0,
+                filename: None,
+            },
+            IpKind::XmlParam { start: 0, end: 1 },
+            IpKind::XmlTag { close: 0, end: 1 },
+            IpKind::XmlAttr { start: 0, end: 1 },
+            IpKind::Cookie,
+            IpKind::Header,
+            IpKind::PathFolder(1),
+            IpKind::PathFilename(1),
+            IpKind::EntireBody,
+            IpKind::ParamName(NameSite::Url),
+        ];
+        for kind in &kinds {
+            let t = insertion_type(kind).expect("keyed kind");
+            assert!(
+                INSERTION_TYPES.iter().any(|x| std::ptr::eq(x, t)),
+                "{kind:?} is not in the table"
+            );
+        }
+        assert!(insertion_type(&IpKind::Base64 { url: false }).is_none());
     }
 }

@@ -101,3 +101,16 @@ mod scan_resolver;
 
 #[cfg(test)]
 mod scan_lifecycle;
+
+/// Register every process-wide seam the engine exposes to its front ends:
+/// the scanner hooks `net` calls on proxied exchanges, the task runner's
+/// scan operations, the check-catalogue lookup used by scan configurations,
+/// and the browser crawl driver. The desktop app and the headless runner
+/// call this once at start-up, before the first `net::Shared`; calling it
+/// twice is harmless (each seam keeps its first registration).
+pub fn register_runtime() {
+    scan::register_scan_hooks();
+    scan::register_task_ops();
+    scan::register_type_checks();
+    headless::register_browser_crawl();
+}

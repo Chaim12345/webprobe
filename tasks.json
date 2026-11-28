@@ -1542,8 +1542,9 @@
       "title": "One extensibility pattern and a project format plan",
       "acceptance": "F14: check registries, insertion points and extension seams follow one registration pattern (alongside R-13/R-14). F15: project persistence plan for when one JSON document stops scaling (trigger documented).",
       "effort": "S",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
+      "status": "done",
+      "evidence": "core/src/scan/registry.rs: CheckMeta{id,issue,severity,confidence} + Severity/Confidence enums with the project-file serde spellings; CheckDef and a default meta() on PointCheck, RequestCheck and StoredCheck, so check_catalogue() derives from all four registries. scan::check_library() is now derived from PASSIVE_CHECKS (the hand-kept 35-entry PASSIVE_LIBRARY is gone). webprobe_support::insertion::INSERTION_TYPES is the one insertion point table (key/label/burp); INSERTION_KEYS is gone and scan_library's TYPED/APPLIED lists are pinned to it by insertion_point_keys_match_the_one_table. webprobe_core::register_runtime() is the single seam registration call used by the desktop and headless front ends. Tests: every_check_kind_exposes_one_meta_record, check_library_is_derived_from_the_registry, the insertion table tests, core/tests/ar10_registration.rs. F15 plan with the 100 MB / 1 s trigger, segmented v3 format, crash windows, migration and tests: docs/specs/ar10-extensibility-and-project-format.md. net::Shared unchanged; scripts/arch-gate.py green. Source: qa/ARCH-REVIEW-2026-11-18.md F14/F15.",
+      "completed": "2026-11-28"
     },
     {
       "id": "S-01",

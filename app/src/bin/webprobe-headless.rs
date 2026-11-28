@@ -433,10 +433,7 @@ fn scan_urls(mut args: Vec<String>) {
 
 fn main() {
     webprobe_core::diagnostics::init_stderr();
-    webprobe_core::scan::register_scan_hooks();
-    webprobe_core::scan::register_task_ops();
-    webprobe_core::scan::register_type_checks();
-    webprobe_core::headless::register_browser_crawl();
+    webprobe_core::register_runtime();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
         usage();
