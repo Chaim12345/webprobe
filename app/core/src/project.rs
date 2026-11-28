@@ -1734,6 +1734,39 @@ pub fn load(path: &Path) -> Result<ProjectData, ProjectError> {
 
 /// Render a project document as a string (header plus JSON), for tests and
 /// clipboard export.
+/// AR-02: what the engine itself holds, as project data: proxy history,
+/// scanner issues, the crawled site map and its links, WebSocket history
+/// and the cookie jar. The desktop adds its own state (tabs, settings,
+/// layout) on top; a headless run has nothing more to add.
+pub fn capture_engine(shared: &crate::net::Shared) -> ProjectData {
+    ProjectData {
+        history: shared
+            .history
+            .snapshot()
+            .iter()
+            .map(ProjectHistory::from_entry)
+            .collect(),
+        issues: shared
+            .issues
+            .lock()
+            .iter()
+            .map(ProjectIssue::from_issue)
+            .collect(),
+        crawl_items: shared
+            .crawl_items
+            .snapshot()
+            .iter()
+            .map(ProjectHistory::from_entry)
+            .collect(),
+        site_links: shared.site_links.lock().iter().cloned().collect(),
+        websockets: shared
+            .ws_history
+            .with_rows(|rows| rows.iter().map(ProjectWebsocket::from_entry).collect()),
+        cookie_jar: Some(ProjectCookieJar::from_jar(&shared.cookie_jar.lock())),
+        ..Default::default()
+    }
+}
+
 pub fn export_json(data: &ProjectData) -> Result<String, ProjectError> {
     let bytes = document_bytes(data)?;
     String::from_utf8(bytes).map_err(|source| ProjectError::DocumentNotUtf8 { source })
@@ -2620,6 +2653,57 @@ mod tests {
         .unwrap();
         assert!(old.request_body_b64.is_none());
         old.restore_request_body();
+    }
+
+    /// AR-02: a headless save holds everything the engine recorded, and the
+    /// file loads back.
+    #[test]
+    fn capture_engine_keeps_history_issues_site_map_links_and_websockets() {
+        let shared = crate::net::Shared::new();
+        let entry = |id: u64, path: &str| crate::net::HistEntry {
+            id,
+            method: "GET".into(),
+            host: "h.test".into(),
+            port: 80,
+            path: path.into(),
+            status: "200".into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: h.test\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        shared.history.push(entry(1, "/seen"));
+        shared.add_crawl_items([entry(2, "/crawled")]);
+        shared
+            .site_links
+            .lock()
+            .insert(("http://h.test".into(), "/linked".into()));
+        crate::scan::add_issues(
+            &shared,
+            vec![crate::scan::mk("low", "Found", &entry(1, "/seen"), "d")],
+        );
+        shared.ws_history.push(crate::ws_history::WsEntry {
+            id: 0,
+            ts: 1,
+            host: "h.test".into(),
+            direction: "client -> server".into(),
+            opcode: "text".into(),
+            payload: b"hi".to_vec().into(),
+            socket: 1,
+        });
+        let data = capture_engine(&shared);
+        assert_eq!(data.history.len(), 1);
+        assert_eq!(data.crawl_items.len(), 1);
+        assert_eq!(
+            data.site_links,
+            [("http://h.test".to_string(), "/linked".to_string())]
+        );
+        assert_eq!(data.issues.len(), 1);
+        assert_eq!(data.websockets.len(), 1);
+        assert!(data.cookie_jar.is_some());
+        let back = import_json(&export_json(&data).unwrap()).unwrap();
+        assert_eq!(back.crawl_items.len(), 1);
+        assert_eq!(back.websockets.len(), 1);
     }
 
     #[test]
