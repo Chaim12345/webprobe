@@ -64,6 +64,23 @@ pub fn register_browser_crawl(bc: BrowserCrawl) {
     let _ = BROWSER_CRAWL.set(bc);
 }
 
+/// A step run on the items of each crawl-and-audit, after they are stored
+/// (S-03: the enabled Bambda scan checks). Registered at start-up, so the
+/// scan engine does not depend on what the step is.
+pub type PostScan = fn(&Shared, &[HistEntry]);
+
+static POST_SCAN: std::sync::OnceLock<PostScan> = std::sync::OnceLock::new();
+
+/// Register the post-scan step (app and headless startup).
+pub fn register_post_scan(step: PostScan) {
+    let _ = POST_SCAN.set(step);
+}
+
+/// The registered post-scan step, when one is.
+pub(crate) fn post_scan() -> Option<PostScan> {
+    POST_SCAN.get().copied()
+}
+
 /// The registered browser crawl driver, when one is.
 pub fn browser_crawl() -> Option<&'static BrowserCrawl> {
     BROWSER_CRAWL.get()

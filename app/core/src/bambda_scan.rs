@@ -84,6 +84,66 @@ pub fn run_passive(
     Ok(report)
 }
 
+/// S-03: run every enabled saved passive check over `entries` and report
+/// what they raise. Returns the number of issues raised. A check that does
+/// not compile or fails is reported in the event log and skipped; with no
+/// enabled check nothing is started (no JVM).
+pub fn run_enabled(shared: &crate::net::Shared, entries: &[HistEntry]) -> usize {
+    let checks = crate::bambda_library::Store::default_store().enabled_passive_checks();
+    if checks.is_empty() || entries.is_empty() {
+        return 0;
+    }
+    let (java, api) = match (crate::paths::java(), crate::paths::montoya_jar()) {
+        (Ok(java), Ok(api)) => (java, api),
+        (Err(e), _) | (_, Err(e)) => {
+            shared.log(&format!(
+                "Enabled Bambda scan checks were skipped: they need a JDK 17+ and the Montoya API jar ({e})"
+            ));
+            return 0;
+        }
+    };
+    let mut raised = 0;
+    for check in checks {
+        let program = match Program::compile(
+            &java,
+            &api,
+            Kind::PassiveCheck,
+            &check.source,
+            Duration::from_secs(15),
+        ) {
+            Ok(program) => program,
+            Err(e) => {
+                shared.log(&format!(
+                    "Bambda scan check \"{}\" did not compile: {e}",
+                    check.name
+                ));
+                continue;
+            }
+        };
+        match run_passive(&program, entries, Duration::from_secs(10)) {
+            Ok(report) => {
+                if report.row_errors > 0 {
+                    shared.log(&format!(
+                        "Bambda scan check \"{}\": {} exchange(s) threw or returned no AuditResult",
+                        check.name, report.row_errors
+                    ));
+                }
+                raised += report.issues.len();
+                crate::scan::add_passive_issues(shared, report.issues);
+            }
+            Err(e) => shared.log(&format!("Bambda scan check \"{}\" failed: {e}", check.name)),
+        }
+    }
+    raised
+}
+
+/// Make [`run_enabled`] the scan engine's post-scan step (start-up).
+pub fn register_post_scan() {
+    crate::scan::register_post_scan(|shared, items| {
+        run_enabled(shared, items);
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -207,6 +207,78 @@ impl Store {
         Ok(())
     }
 }
+/// A script's source as a fixed-length fingerprint (SHA-256, hex). Trust
+/// in a scan check is recorded against it, so an edit withdraws the trust.
+pub fn fingerprint(source: &str) -> String {
+    use sha2::Digest;
+    crate::util::hex_encode(&sha2::Sha256::digest(source.as_bytes()))
+}
+
+/// S-03: which saved scan checks run automatically after a scan.
+///
+/// Running a check runs its Java with the user's file and network access,
+/// so it only happens for a script the user enabled, and only while its
+/// source is the one they enabled: `enabled-checks.json` in the library
+/// directory maps a script id to the fingerprint of that source.
+impl Store {
+    /// The library in WebProbe's data directory, which every entry point
+    /// shares.
+    pub fn default_store() -> Self {
+        Self::new(
+            crate::paths::Lookup::process()
+                .data_dir()
+                .join("bambda-library"),
+        )
+    }
+
+    fn trust_path(&self) -> std::path::PathBuf {
+        self.dir.join("enabled-checks.json")
+    }
+
+    fn trust(&self) -> std::collections::BTreeMap<String, String> {
+        crate::util::read_text_file_capped(&self.trust_path(), MAX_FILE_BYTES)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    /// Whether `script` is enabled as written now.
+    pub fn is_enabled(&self, script: &Script) -> bool {
+        self.trust().get(&script.id) == Some(&fingerprint(&script.source))
+    }
+
+    /// Enable `script` as written now, or disable it.
+    pub fn set_enabled(&self, script: &Script, on: bool) -> Result<(), Error> {
+        script.validate()?;
+        let mut trust = self.trust();
+        if on {
+            trust.insert(script.id.clone(), fingerprint(&script.source));
+        } else {
+            trust.remove(&script.id);
+        }
+        let json = serde_json::to_vec_pretty(&trust).map_err(std::io::Error::other)?;
+        std::fs::create_dir_all(&self.dir)?;
+        atomic_write(&self.trust_path(), &json, true)
+    }
+
+    /// The saved passive scan checks that are enabled as saved.
+    pub fn enabled_passive_checks(&self) -> Vec<Script> {
+        let trust = self.trust();
+        if trust.is_empty() {
+            return Vec::new();
+        }
+        self.load()
+            .map(|report| report.scripts)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|s| {
+                s.function == Function::ScanCheckPassive
+                    && trust.get(&s.id) == Some(&fingerprint(&s.source))
+            })
+            .collect()
+    }
+}
+
 impl Script {
     pub fn load(path: &std::path::Path) -> Result<Self, Error> {
         regular_if_exists(path)?;
