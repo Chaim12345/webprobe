@@ -1142,25 +1142,37 @@ pub fn editable_pane_ex(
     changed
 }
 
-/// Set byte `i` of `text` from a two-digit hex cell; false when the cell is
-/// not valid hex. Bytes that no longer form UTF-8 are kept lossily (the
-/// editors hold text).
+/// The bytes the Hex tab shows for editor `text`: the text's own bytes, or,
+/// when its body is the lossy view of a remembered binary body (AR-09),
+/// the message with that body's real bytes.
+pub fn hex_bytes(text: &str) -> Vec<u8> {
+    util::restore_binary_body(text.as_bytes())
+}
+
+/// Set byte `i` of the message behind `text` from a two-digit hex cell;
+/// false when the cell is not valid hex or `i` is past the end. The edit
+/// is made on the real bytes ([`hex_bytes`]). When the result is not
+/// UTF-8 the editor keeps a lossy text view and the bytes of the body are
+/// remembered, so the message is still sent as edited (AR-09). Bytes in
+/// the request line or headers that are not UTF-8 are not kept.
 pub fn set_hex_byte(text: &mut String, i: usize, cell: &str) -> bool {
     let Ok(b) = u8::from_str_radix(cell.trim(), 16) else {
         return false;
     };
-    let mut bytes = std::mem::take(text).into_bytes();
+    let mut bytes = hex_bytes(text);
     if i < bytes.len() {
         bytes[i] = b;
     } else if i == bytes.len() {
         bytes.push(b);
     } else {
-        *text = String::from_utf8_lossy(&bytes).into_owned();
         return false;
     }
     *text = match String::from_utf8(bytes) {
         Ok(s) => s,
-        Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+        Err(e) => {
+            util::remember_binary_body(e.as_bytes());
+            String::from_utf8_lossy(e.as_bytes()).into_owned()
+        }
     };
     true
 }
@@ -1172,7 +1184,9 @@ pub fn set_hex_byte(text: &mut String, i: usize, cell: &str) -> bool {
 fn hex_editor(ui: &mut Ui, id: &str, text: &mut String) -> bool {
     let font = FontId::monospace(theme::FONT_MONO);
     let ec = theme::editor_colours();
-    let len = text.len();
+    // The real bytes, not the lossy text of a binary body (AR-09).
+    let raw = hex_bytes(text);
+    let len = raw.len();
     let rows = len / 16 + 1;
     let row_h = 20.0;
     let mut changed = false;
@@ -1192,7 +1206,7 @@ fn hex_editor(ui: &mut Ui, id: &str, text: &mut String) -> bool {
                             .font(font.clone())
                             .color(ec.line_numbers),
                     );
-                    let bytes = text.as_bytes();
+                    let bytes = raw.as_slice();
                     let mut ascii = String::with_capacity(16);
                     for c in 0..16 {
                         let i = r * 16 + c;
@@ -1239,8 +1253,7 @@ fn hex_editor(ui: &mut Ui, id: &str, text: &mut String) -> bool {
             }
         });
     for (i, v) in commits {
-        let current = text
-            .as_bytes()
+        let current = hex_bytes(text)
             .get(i)
             .map(|b| format!("{b:02x}"))
             .unwrap_or_default();
@@ -1575,6 +1588,32 @@ mod tests {
         assert!(!set_hex_byte(&mut t, 1, "zz"));
         assert!(!set_hex_byte(&mut t, 9, "41"), "no gaps");
         assert_eq!(t, "PET /A");
+    }
+
+    /// AR-09: a byte that is not UTF-8, typed into the body in the Hex tab,
+    /// is what the tab shows afterwards and what gets sent, although the
+    /// editor text can only hold a lossy view of it.
+    #[test]
+    fn hex_edit_of_a_body_keeps_bytes_that_are_not_utf8() {
+        let mut t = String::from("POST /hexedit HTTP/1.1\r\nHost: h\r\n\r\nAB");
+        let body_at = t.len() - 2;
+        assert!(set_hex_byte(&mut t, body_at, "ff"));
+        assert!(t.ends_with("\u{fffd}B"), "the text is a lossy view: {t:?}");
+        let raw = hex_bytes(&t);
+        assert_eq!(&raw[body_at..], &[0xff, b'B']);
+        assert_eq!(
+            util::restore_binary_body(t.as_bytes()),
+            raw,
+            "sent as edited"
+        );
+        // A second edit works on the real bytes, not on the lossy text.
+        assert!(set_hex_byte(&mut t, body_at + 1, "00"));
+        assert_eq!(&hex_bytes(&t)[body_at..], &[0xff, 0x00]);
+        // Back to text: the bytes are the text's again.
+        assert!(set_hex_byte(&mut t, body_at, "41"));
+        assert!(set_hex_byte(&mut t, body_at + 1, "42"));
+        assert!(t.ends_with("\r\n\r\nAB"));
+        assert_eq!(hex_bytes(&t), t.as_bytes());
     }
 
     #[test]
