@@ -34,6 +34,10 @@ pub struct LogEntry {
     /// newest [`BODIES_KEPT`] rows keep them.
     pub request: Option<std::sync::Arc<[u8]>>,
     pub response: Option<std::sync::Arc<[u8]>>,
+    /// The user's note on this row (Burp's "Notes" column). Empty for none.
+    pub note: String,
+    /// The user's row highlight, an index into Burp's nine highlight colours.
+    pub highlight: Option<u8>,
 }
 
 /// How many tool rows keep their request and response bytes; older rows stay
@@ -154,6 +158,17 @@ impl Logger {
     }
 
     /// Drop every entry. Ids keep counting from where they left off.
+    /// Change the annotations of row `id`. Returns false when the row is gone.
+    pub fn annotate(&mut self, id: u64, change: impl FnOnce(&mut LogEntry)) -> bool {
+        match self.entries.iter_mut().find(|e| e.id == id) {
+            Some(entry) => {
+                change(entry);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn clear(&mut self) {
         self.entries.clear();
     }
@@ -184,7 +199,7 @@ impl Default for Logger {
 }
 
 /// L-04: the Logger table's columns, in display order (ui::logger_view).
-pub const CSV_COLUMNS: [&str; 9] = [
+pub const CSV_COLUMNS: [&str; 10] = [
     "#",
     "Time",
     "Tool",
@@ -194,6 +209,7 @@ pub const CSV_COLUMNS: [&str; 9] = [
     "Status code",
     "Length",
     "MIME type",
+    "Notes",
 ];
 
 /// One CSV field (RFC 4180): quoted when it holds a comma, quote, CR or LF,
@@ -228,6 +244,7 @@ pub fn to_csv(rows: &[LogEntry], time: impl Fn(u64) -> String) -> String {
             e.status.clone(),
             e.resp_len.to_string(),
             e.mime.clone(),
+            e.note.clone(),
         ];
         out.push_str(
             &cells
@@ -262,6 +279,25 @@ mod tests {
             mime: mime.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn annotations_are_set_by_id_and_exported() {
+        let mut log = Logger::new(10);
+        let id = log.push(sample());
+        assert!(log.annotate(id, |e| {
+            e.note = "check, \"later\"".into();
+            e.highlight = Some(2);
+        }));
+        assert!(!log.annotate(id + 1, |e| e.note = "gone".into()));
+        let row = log.get(id).unwrap().clone();
+        assert_eq!(row.highlight, Some(2));
+        let csv = to_csv(&[row], |t| t.to_string());
+        assert!(
+            csv.starts_with("#,Time,Tool,Method,Host,Path,Status code,Length,MIME type,Notes\r\n"),
+            "{csv}"
+        );
+        assert!(csv.contains("\"check, \"\"later\"\"\""), "{csv}");
     }
 
     fn sample() -> LogEntry {
@@ -514,15 +550,15 @@ mod tests {
         let lines: Vec<&str> = csv.split("\r\n").collect();
         assert_eq!(
             lines[0],
-            "#,Time,Tool,Method,Host,Path,Status code,Length,MIME type"
+            "#,Time,Tool,Method,Host,Path,Status code,Length,MIME type,Notes"
         );
         assert_eq!(
             lines[1],
-            "2,t0,Repeater,POST,b.com,\"/q\"\"uote\",404,0,JSON"
+            "2,t0,Repeater,POST,b.com,\"/q\"\"uote\",404,0,JSON,"
         );
         assert_eq!(
             lines[2],
-            "1,t7,Proxy,GET,a.com,\"/x?a=1,2\",200,120,text/html"
+            "1,t7,Proxy,GET,a.com,\"/x?a=1,2\",200,120,text/html,"
         );
         assert_eq!(lines[3], "");
         assert_eq!(lines.len(), 4);
