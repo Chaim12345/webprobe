@@ -21,7 +21,7 @@ so WebProbe does not ship it.
 | http | partial | response variation analyzer; `HttpMode` and `RequestOptions` are ignored |
 | intruder | full | generator sees the first position's base value for every position; copy-other and recursive-grep sets are not processed; `sendToIntruder` replaces the current request and ignores the tab name |
 | logging | full | |
-| organizer | partial | status is always NEW |
+| organizer | full | |
 | persistence | full | |
 | project | unsupported | |
 | proxy | full | WebSocket `send*` / `close` |

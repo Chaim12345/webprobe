@@ -1199,6 +1199,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     table::Column::new("#", 50.0),
                     table::Column::new("Time", 150.0),
                     table::Column::new("Item", 300.0),
+                    table::Column::new("Status", 100.0),
                     table::Column::new("Notes", 300.0),
                 ];
                 // Right-click move/copy targets: Inbox plus every other
@@ -1222,10 +1223,14 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                                 0 => format!("{:020}", it.id),
                                 1 => format!("{:020}", it.created),
                                 2 => it.name.clone(),
+                                3 => it.status.label().to_string(),
                                 _ => it.note.clone(),
                             });
                             let mut pick = None;
                             let mut act: Option<(u64, u8, u64)> = None;
+                            // #271: status and highlight set from the row menu.
+                            let mut status_set: Option<(u64, crate::organizer::Status)> = None;
+                            let mut highlight_set: Option<(u64, Option<u8>)> = None;
                             let sel = app.org_sel;
                             let h = ui.available_height();
                             table::table_body(
@@ -1243,7 +1248,13 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                                     );
                                     if sel == Some(it.id) {
                                         ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+                                    } else if let Some(k) = it.highlight {
+                                        ui.painter().rect_filled(rr, 0.0, highlight_colours(k).0);
                                     }
+                                    let ink = match it.highlight {
+                                        Some(k) if sel != Some(it.id) => Some(highlight_colours(k).1),
+                                        _ => None,
+                                    };
                                     let row = ui
                                         .horizontal(|ui| {
                                             table::cells(
@@ -1252,10 +1263,11 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                                                 &table::TableState::default(),
                                                 19.0,
                                                 &[
-                                                    (0, it.id.to_string(), None),
-                                                    (1, history_time(it.created), None),
-                                                    (2, it.name.clone(), None),
-                                                    (3, it.note.clone(), None),
+                                                    (0, it.id.to_string(), ink),
+                                                    (1, history_time(it.created), ink),
+                                                    (2, it.name.clone(), ink),
+                                                    (3, it.status.label().to_string(), ink),
+                                                    (4, it.note.clone(), ink),
                                                 ],
                                             );
                                         })
@@ -1265,6 +1277,28 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                                         pick = Some(it.id);
                                     }
                                     row.context_menu(|ui| {
+                                        ui.menu_button("Status", |ui| {
+                                            for status in crate::organizer::Status::ALL {
+                                                if ui.selectable_label(it.status == status, status.label()).clicked() {
+                                                    status_set = Some((it.id, status));
+                                                    ui.close();
+                                                }
+                                            }
+                                        });
+                                        ui.menu_button("Highlight", |ui| {
+                                            for (k, name) in HIGHLIGHT_NAMES.iter().enumerate() {
+                                                let (bg, _) = highlight_colours(k as u8);
+                                                if ui.add(egui::Button::new(*name).fill(bg)).clicked() {
+                                                    highlight_set = Some((it.id, Some(k as u8)));
+                                                    ui.close();
+                                                }
+                                            }
+                                            if ui.button("None").clicked() {
+                                                highlight_set = Some((it.id, None));
+                                                ui.close();
+                                            }
+                                        });
+                                        ui.separator();
                                         ui.menu_button("Move to collection", |ui| {
                                             for (cid, cname) in &targets {
                                                 if ui.button(cname).clicked() {
@@ -1287,6 +1321,12 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                             app.org_table = st;
                             if pick.is_some() {
                                 app.org_sel = pick;
+                            }
+                            if let Some((id, status)) = status_set {
+                                app.shared.organizer.lock().set_status(id, status);
+                            }
+                            if let Some((id, k)) = highlight_set {
+                                app.shared.organizer.lock().set_highlight(id, k);
                             }
                             if let Some((item_id, kind, cid)) = act {
                                 {

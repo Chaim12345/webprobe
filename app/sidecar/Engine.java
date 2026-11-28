@@ -359,6 +359,12 @@ final class Engine {
                 .as(burp.api.montoya.organizer.Organizer.class);
     }
 
+    /** The item's status as WebProbe names it; an unknown name reads as NEW. */
+    static burp.api.montoya.organizer.OrganizerItemStatus organizerStatus(String name) {
+        try { return burp.api.montoya.organizer.OrganizerItemStatus.valueOf(name); }
+        catch (IllegalArgumentException e) { return burp.api.montoya.organizer.OrganizerItemStatus.NEW; }
+    }
+
     @SuppressWarnings("unchecked")
     static List<Object> organizerItems() {
         List<Object> out = new ArrayList<>();
@@ -369,8 +375,7 @@ final class Engine {
                 HttpRequestResponse rr = Ui.pair(m);
                 out.add(Api.obj()
                         .on("id", a -> (int) Wire.num(m.get("id")))
-                        // WebProbe's Organizer has no status column: every item is new.
-                        .on("status", a -> burp.api.montoya.organizer.OrganizerItemStatus.NEW)
+                        .on("status", a -> organizerStatus(Wire.str(m, "status", "NEW")))
                         .on("request", a -> rr.request()).on("response", a -> rr.response()).on("hasResponse", a -> rr.response() != null)
                         .on("httpService", a -> rr.request().httpService()).on("url", a -> rr.request().url())
                         .on("annotations", a -> Messages.annotations(Wire.str(m, "notes", ""), HighlightColor.NONE))

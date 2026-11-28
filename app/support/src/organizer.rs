@@ -2,6 +2,58 @@
 //! responses that survives across tools. Items keep their id for their whole
 //! lifetime; removing one never renumbers the others.
 
+/// Burp's Organizer item statuses, in its menu order.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Status {
+    #[default]
+    New,
+    InProgress,
+    Postponed,
+    Done,
+    Ignored,
+}
+
+impl Status {
+    pub const ALL: [Status; 5] = [
+        Status::New,
+        Status::InProgress,
+        Status::Postponed,
+        Status::Done,
+        Status::Ignored,
+    ];
+
+    /// The text Burp shows in the Status column.
+    pub fn label(self) -> &'static str {
+        match self {
+            Status::New => "New",
+            Status::InProgress => "In progress",
+            Status::Postponed => "Postponed",
+            Status::Done => "Done",
+            Status::Ignored => "Ignored",
+        }
+    }
+
+    /// The Montoya `OrganizerItemStatus` constant; also the project-file form.
+    pub fn name(self) -> &'static str {
+        match self {
+            Status::New => "NEW",
+            Status::InProgress => "IN_PROGRESS",
+            Status::Postponed => "POSTPONED",
+            Status::Done => "DONE",
+            Status::Ignored => "IGNORED",
+        }
+    }
+
+    /// The status with this `name`; anything unknown (an older project
+    /// file has none) is New.
+    pub fn from_name(name: &str) -> Self {
+        Self::ALL
+            .into_iter()
+            .find(|s| s.name() == name)
+            .unwrap_or_default()
+    }
+}
+
 /// One saved request/response pair with user metadata.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrganizerItem {
@@ -13,6 +65,9 @@ pub struct OrganizerItem {
     pub created: u64,
     /// Owning collection id; 0 is the built-in Inbox.
     pub collection: u64,
+    pub status: Status,
+    /// Row highlight, an index into Burp's nine highlight colours.
+    pub highlight: Option<u8>,
 }
 
 /// A named user collection (Burp's Organizer "New collection").
@@ -198,6 +253,8 @@ impl Organizer {
             response: response.to_string(),
             created: now,
             collection: 0,
+            status: Status::New,
+            highlight: None,
         });
         id
     }
@@ -218,6 +275,26 @@ impl Organizer {
         match self.items.iter_mut().find(|i| i.id == id) {
             Some(item) => {
                 item.name = name.to_string();
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn set_status(&mut self, id: u64, status: Status) -> bool {
+        match self.items.iter_mut().find(|i| i.id == id) {
+            Some(item) => {
+                item.status = status;
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn set_highlight(&mut self, id: u64, highlight: Option<u8>) -> bool {
+        match self.items.iter_mut().find(|i| i.id == id) {
+            Some(item) => {
+                item.highlight = highlight;
                 true
             }
             None => false,
@@ -289,6 +366,26 @@ impl Organizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_and_highlight_are_set_by_id_and_follow_a_copy() {
+        let mut o = org();
+        let id = o.list()[0].id;
+        assert_eq!(o.get(id).unwrap().status, Status::New);
+        assert!(o.set_status(id, Status::InProgress));
+        assert!(o.set_highlight(id, Some(4)));
+        assert!(!o.set_status(9_999, Status::Done));
+        let copy = o.copy_item(id, 0).unwrap();
+        let copied = o.get(copy).unwrap();
+        assert_eq!(
+            (copied.status, copied.highlight),
+            (Status::InProgress, Some(4))
+        );
+        for status in Status::ALL {
+            assert_eq!(Status::from_name(status.name()), status);
+        }
+        assert_eq!(Status::from_name(""), Status::New);
+    }
 
     fn org() -> Organizer {
         let mut o = Organizer::new();

@@ -570,6 +570,12 @@ pub struct ProjectOrganizerItem {
     /// Owning collection id; 0 (default) is the Inbox.
     #[serde(default)]
     pub collection: u64,
+    /// NEW, IN_PROGRESS, POSTPONED, DONE or IGNORED; empty reads as NEW.
+    #[serde(default)]
+    pub status: String,
+    /// Row highlight, an index into Burp's nine highlight colours.
+    #[serde(default)]
+    pub highlight: Option<u8>,
 }
 
 /// A named Organizer collection.
@@ -2030,6 +2036,8 @@ mod tests {
                 response: Some("HTTP/1.1 403 Forbidden\r\n\r\n".into()),
                 comment: "check auth bypass".into(),
                 collection: 0,
+                status: "DONE".into(),
+                highlight: Some(1),
             }],
             organizer_collections: Vec::new(),
             intruder: ProjectIntruder {
