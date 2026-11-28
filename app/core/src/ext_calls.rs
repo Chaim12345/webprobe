@@ -171,6 +171,79 @@ fn b64(v: &Value, k: &str) -> Option<Vec<u8>> {
     util::b64_decode(s).ok()
 }
 
+/// Crawls extensions started with `Scanner.startCrawl`: id to (items found
+/// so far, finished). Kept in a tool-state slot (ADR 0002).
+/// One crawl's progress.
+#[derive(Clone, Copy, Default)]
+struct CrawlProgress {
+    items: usize,
+    done: bool,
+}
+
+#[derive(Default)]
+struct CrawlTable {
+    last_id: u64,
+    crawls: std::collections::BTreeMap<u64, CrawlProgress>,
+}
+
+#[derive(Clone, Default)]
+struct ExtensionCrawls(std::sync::Arc<crate::sync::Mutex<CrawlTable>>);
+
+/// Why `Scanner.startCrawl` did not start.
+#[derive(Debug, thiserror::Error)]
+enum StartCrawlError {
+    #[error("startCrawl needs at least one seed URL")]
+    NoSeeds,
+    #[error("startCrawl seed is not an http(s) URL: {0}")]
+    NotHttp(String),
+}
+
+/// `Scanner.startCrawl(seedUrls)`: crawl each seed on a worker thread
+/// (crawl only, nothing is audited) and add what is found to the site map.
+/// Returns the crawl's id for `scanner.crawl-status`.
+fn start_crawl(shared: &std::sync::Arc<Shared>, args: &Value) -> Result<Value, StartCrawlError> {
+    let urls: Vec<String> = args["urls"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|u| u.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    if urls.is_empty() {
+        return Err(StartCrawlError::NoSeeds);
+    }
+    if let Some(bad) = urls
+        .iter()
+        .find(|u| !u.starts_with("http://") && !u.starts_with("https://"))
+    {
+        return Err(StartCrawlError::NotHttp(bad.clone()));
+    }
+    let crawls: ExtensionCrawls = shared.tool_state.get_or_insert();
+    let id = {
+        let mut state = crawls.0.lock();
+        state.last_id += 1;
+        let id = state.last_id;
+        state.crawls.insert(id, CrawlProgress::default());
+        id
+    };
+    let (shared, crawls) = (shared.clone(), crawls.clone());
+    crate::util::spawn_contained("extension-crawl", move || {
+        for url in &urls {
+            let items = crate::crawl::crawl(&shared, url);
+            if let Some(entry) = crawls.0.lock().crawls.get_mut(&id) {
+                entry.items += items.len();
+            }
+            shared.add_crawl_items(items);
+            shared.wake();
+        }
+        if let Some(entry) = crawls.0.lock().crawls.get_mut(&id) {
+            entry.done = true;
+        }
+    });
+    Ok(json!(id))
+}
+
 /// The host link to a running WebProbe for a sidecar or helper process:
 /// sends with net::send_raw / send_tls_raw, events to the event log, engine
 /// calls to dispatch. Holds the engine weakly (the engine owns its
@@ -199,6 +272,10 @@ pub fn host_link(shared: &std::sync::Arc<Shared>) -> std::sync::Arc<crate::ext_h
         }),
         call: Box::new(move |ext, op, args| {
             let shared = c.upgrade().ok_or("WebProbe is shutting down")?;
+            // Starting a crawl needs an owned handle for its thread.
+            if op == "scanner.start-crawl" {
+                return start_crawl(&shared, args).map_err(|e| e.to_string());
+            }
             dispatch(&shared, ext, op, args)
         }),
     })
@@ -314,6 +391,21 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
                 v
             }).collect(),
         )),
+        // Progress of a crawl an extension started; `delete` forgets it
+        // (a crawl that is still running finishes on its own).
+        "scanner.crawl-status" | "scanner.crawl-delete" => {
+            let id = args["id"].as_u64().ok_or("no crawl id")?;
+            let crawls: ExtensionCrawls = shared.tool_state.get_or_insert();
+            let mut state = crawls.0.lock();
+            if op == "scanner.crawl-delete" {
+                state.crawls.remove(&id);
+                return Ok(Value::Null);
+            }
+            match state.crawls.get(&id) {
+                Some(p) => Ok(json!({"items": p.items, "done": p.done})),
+                None => Ok(json!({"items": 0, "done": true, "deleted": true})),
+            }
+        }
         // burpSuite().exportProjectOptionsAsJson(paths...): the options
         // WebProbe models in Burp's shape (the proxy listener and the
         // HTTP/2 switch), filtered to the named paths.

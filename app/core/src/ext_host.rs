@@ -2258,6 +2258,56 @@ mod tests {
         port
     }
 
+    /// R-20: Scanner.startCrawl crawls the seed in the background, reports
+    /// progress, adds what it finds to the site map, and can be deleted.
+    #[test]
+    fn montoya_start_crawl() {
+        let Some(dir) = stage_extension("StartCrawlExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let shared = crate::net::Shared::new();
+        let port = echo_responder();
+        shared.history.push(crate::net::HistEntry {
+            id: 1,
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: "/seed".into(),
+            status: "200".into(),
+            req_raw: format!("GET /seed HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            resp_raw: Some(b"HTTP/1.1 200 OK\r\n\r\nx".to_vec().into()),
+            ..Default::default()
+        });
+        let sc = JavaSidecar::spawn_with(
+            dir.to_str().unwrap(),
+            Some(crate::ext_calls::host_link(&shared)),
+        )
+        .expect("start crawl extension loads");
+        let seen = |needle: &str| sc.errors().iter().any(|l| l.contains(needle));
+        eventually_for(20, || seen("crawl after delete:").then_some(()));
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|l| l.contains("crawl status: Crawl finished items=")
+                    && !l.contains("items=0 ")),
+            "{log:#?}"
+        );
+        assert!(seen("crawl after delete: Deleted"), "{log:#?}");
+        assert!(
+            !shared.crawl_items.snapshot().is_empty(),
+            "the crawl adds its items to the site map"
+        );
+        sc.unload();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-03 stages 4-5 in one JVM: the extension's active check runs inside
     /// a WebProbe active scan (payload placed by WebProbe, request through
     /// the scan) and raises an issue; a stopped scan refuses its requests;

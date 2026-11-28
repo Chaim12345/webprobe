@@ -108,6 +108,16 @@ final class Factory {
                     return want.equals(id) || want.startsWith(id + ".");
                 }).as(burp.api.montoya.collaborator.InteractionFilter.class);
             }
+            // CrawlConfiguration.crawlConfiguration(seedUrls...): a value object.
+            case "crawlConfiguration": {
+                List<String> seeds = new java.util.ArrayList<>();
+                for (Object o : a) {
+                    if (o instanceof String[] many) seeds.addAll(java.util.Arrays.asList(many));
+                    else if (o != null) seeds.add(String.valueOf(o));
+                }
+                return Api.obj().on("seedUrls", x -> seeds).text("CrawlConfiguration " + seeds)
+                        .as(burp.api.montoya.scanner.CrawlConfiguration.class);
+            }
             // HotKey.hotKey(name, keys): a plain value object.
             case "hotKey": case "hotkey": {
                 Object[] k = a;
