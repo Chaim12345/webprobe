@@ -1611,6 +1611,30 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// R-20: Scanner.generateReport writes the given issues as XML (the
+    /// element names of Burp's issue export) and as HTML; the extension
+    /// parses the XML back and asserts on it.
+    #[test]
+    fn montoya_generate_report() {
+        let Some(dir) = stage_extension("ReportExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("report extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("report regression passed")),
+            "report checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-20: a registered audit issue handler is told about issues reported
     /// after it registered, and not about the ones already listed.
     #[test]

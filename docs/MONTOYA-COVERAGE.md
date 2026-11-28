@@ -26,7 +26,7 @@ so WebProbe does not ship it.
 | project | unsupported | |
 | proxy | full | WebSocket `send*` / `close` |
 | repeater | full | |
-| scanner | partial | `startAudit`, `startCrawl`, `generateReport`, `bChecks`; an audit issue handler hears of a new issue within about a second (the issue list is polled) |
+| scanner | partial | `startAudit`, `startCrawl`, `bChecks`; `generateReport` writes the issues it is given without their requests and responses; an audit issue handler hears of a new issue within about a second (the issue list is polled) |
 | scope | full | the change handler fires only for changes made through the API |
 | siteMap | full | |
 | userInterface | partial | `registerHotKeyHandler`; WebSocket message editors are accepted but not shown; Swing shows in the extension's own window, not inside WebProbe's |
