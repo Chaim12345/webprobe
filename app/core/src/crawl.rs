@@ -841,6 +841,8 @@ fn dom_confirmed_hit(hit: &DomHit, origin: &str, hash: &str, query: &str, stored
         "location.search" => has(query) && !has(hash) && !has(stored),
         "location.hash+location.search" => has(hash) && has(query) && !has(stored),
         "stored" => has(stored),
+        "window.name" => has(&seeded_token("wn", hash)) && !has(hash),
+        "document.referrer" => has(&seeded_token("rf", hash)) && !has(hash),
         "unknown" => hash == query && has(hash),
         _ => false,
     }
@@ -2182,8 +2184,17 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
   // application storage, so its provenance is honestly "stored". Empty
   // when no stored submission ran.
   var STOKEN = "%CANARY3%";
+  // Two more run-owned tokens seed sources the URL does not carry:
+  // NTOKEN is written to window.name before any page script runs, RTOKEN
+  // arrives in the Referer the probe navigates with. Neither contains
+  // TOKEN, so a value carrying one is attributed to that source alone.
+  var NTOKEN = "%CANARY4%";
+  var RTOKEN = "%CANARY5%";
+  try { if (NTOKEN.length > 0 && window === window.top) { window.name = NTOKEN; } } catch (e) {}
   function provenance(s) {
     if (STOKEN.length > 0 && s.indexOf(STOKEN) >= 0) { return "stored"; }
+    if (NTOKEN.length > 0 && s.indexOf(NTOKEN) >= 0) { return "window.name"; }
+    if (RTOKEN.length > 0 && s.indexOf(RTOKEN) >= 0) { return "document.referrer"; }
     var h = s.indexOf(TOKEN) >= 0;
     var q = QTOKEN.length > 0 && s.indexOf(QTOKEN) >= 0;
     if (!h && !q) { return null; }
@@ -2205,7 +2216,7 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       if (src !== null && window.__wpDomHits.length < 50) {
         // Evidence caps: values and the page URL are bounded so a hostile
         // page cannot grow a run's stored hits without limit.
-        var sv = src === "location.hash" ? String(location.hash) : src === "location.search" ? String(location.search) : src === "stored" ? s : String(location.search) + " " + String(location.hash);
+        var sv = src === "window.name" ? NTOKEN : src === "document.referrer" ? String(document.referrer) : src === "location.hash" ? String(location.hash) : src === "location.search" ? String(location.search) : src === "stored" ? s : String(location.search) + " " + String(location.hash);
         window.__wpDomHits.push({ source: src, sink: sink, sourceValue: sv.slice(0, 300), sinkValue: s.slice(0, 300), pageUrl: String(location.href).slice(0, 500) });
       }
     } catch (e) {}
@@ -2579,6 +2590,21 @@ pub(crate) fn dom_instrument_js(url: &str, canary: &str, stored: &str) -> String
         .replace("%CANARY%", canary)
         .replace("%CANARY2%", &query_token)
         .replace("%CANARY3%", stored)
+        .replace("%CANARY4%", &seeded_token("wn", &fragment_token))
+        .replace("%CANARY5%", &seeded_token("rf", &fragment_token))
+}
+
+/// The token seeded into `window.name` ("wn") or the Referer ("rf") for a
+/// probe. It is the fragment token reversed behind a prefix: derived, so
+/// the confirmation step can recompute it, and never containing the
+/// fragment token itself, so the two sources cannot be confused.
+fn seeded_token(prefix: &str, fragment_token: &str) -> String {
+    let reversed: String = fragment_token.chars().rev().collect();
+    if reversed == fragment_token {
+        // A palindrome would read as the fragment token; seed nothing.
+        return String::new();
+    }
+    format!("{prefix}{reversed}")
 }
 
 /// R-13 option (b) vertical slice: navigate to `url` with `#{canary}` in a
@@ -2791,7 +2817,16 @@ fn dom_probe_with_binary(
         let base = url.split('#').next().unwrap_or(url);
         cdp.call(
             "Page.navigate",
-            serde_json::json!({"url": format!("{base}#{canary}")}),
+            serde_json::json!({
+                "url": format!("{base}#{canary}"),
+                // A same-origin Referer carrying its own token, so a page
+                // that reads document.referrer into a sink is attributed.
+                "referrer": format!(
+                    "{}/?{}",
+                    origin_of(url).unwrap_or_default(),
+                    seeded_token("rf", bracket_token(canary).unwrap_or(canary))
+                ),
+            }),
         )?;
         // Snapshot evidence while running. If later evaluation fails or stop
         // arrives, retain only the previously confirmed bounded snapshot.
@@ -3214,6 +3249,61 @@ mod dom_route_tests {
             );
         }
         assert!(result.diagnostic.contains("confirmed"));
+    }
+
+    #[test]
+    fn window_name_and_referrer_are_attributed_sources_against_live_browser() {
+        if chromium_binary().is_none() {
+            return;
+        }
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let shared = Shared::new();
+        let stop = shared.clone();
+        let server = std::thread::spawn(move || {
+            let mut stream = loop {
+                let (mut stream, _) = l.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                    .unwrap();
+                let mut raw = [0; 4096];
+                if stream.read(&mut raw).unwrap_or(0) > 0 {
+                    break stream;
+                }
+            };
+            let body = "<html><head><link rel='icon' href='data:,'></head><script>document.write(window.name);document.body.innerHTML=document.referrer</script></html>";
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            drop(stream);
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            stop.scan.stop.store(true, Ordering::SeqCst);
+        });
+        let result = dom_analysis_probe(
+            &shared,
+            &format!("http://127.0.0.1:{port}/?__proto__[query]=query"),
+            "__proto__[hash]=hash",
+            "",
+            "127.0.0.1",
+            port,
+            false,
+            "stored",
+            || Ok(()),
+        )
+        .unwrap();
+        server.join().unwrap();
+        for (sink, source) in [
+            ("document.write", "window.name"),
+            ("element.innerHTML", "document.referrer"),
+        ] {
+            assert!(
+                result
+                    .hits
+                    .iter()
+                    .any(|h| h.sink == sink && h.source == source),
+                "missing {source} -> {sink}: {:?}",
+                result.hits
+            );
+        }
     }
 
     #[test]
