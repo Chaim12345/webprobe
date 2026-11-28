@@ -1359,6 +1359,9 @@ pub struct State {
     pub ws_sort: Option<(usize, bool)>,
     /// Show the selected message's upgrade request and response (#269).
     pub ws_handshake: bool,
+    /// WebSockets history column chooser (#269): which built-in columns
+    /// are shown.
+    pub ws_cols: crate::table::TableState,
 }
 
 impl Default for State {
@@ -1383,6 +1386,7 @@ impl Default for State {
             ws_rows: (u64::MAX, 0, Vec::new()),
             ws_sort: None,
             ws_handshake: false,
+            ws_cols: crate::table::TableState::default(),
         }
     }
 }
@@ -2515,9 +2519,26 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         header.len() - 1
     });
     let bambda_cells = &app.bambdas.tables.websocket;
+    // #269: the shared column chooser over the seven built-in columns. A
+    // Bambda custom column is switched off in its own bar, not here.
+    {
+        let built_in: Vec<crate::table::Column> = header
+            .iter()
+            .zip(widths.iter())
+            .take(7)
+            .map(|(h, w)| crate::table::Column::new(h.to_string(), *w))
+            .collect();
+        crate::table::column_chooser(ui, &built_in, &mut st.ws_cols);
+    }
+    let shown: Vec<bool> = (0..header.len())
+        .map(|i| i >= 7 || st.ws_cols.is_visible(i))
+        .collect();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         for (i, (h, w)) in header.iter().zip(widths.iter().copied()).enumerate() {
+            if !shown[i] {
+                continue;
+            }
             // The seven built-in columns sort; a Bambda column does not.
             let sortable = i < 7;
             let (r, head) = ui.allocate_exact_size(
@@ -2599,6 +2620,9 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
                     .horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
                         for (i, (t, w)) in cells.iter().zip(widths.iter().copied()).enumerate() {
+                            if !shown[i] {
+                                continue;
+                            }
                             let (r, _) =
                                 ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::hover());
                             if sel {
