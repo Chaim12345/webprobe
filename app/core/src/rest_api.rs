@@ -654,6 +654,32 @@ mod tests {
         assert!(start(&shared, &api, test_defs()).is_ok());
     }
 
+    /// #250: the import-to-start path (UI "Load user options", also
+    /// `--user-config-file`) must not open an unauthenticated scan-control
+    /// endpoint to the network. An imported file can turn on insecure_mode and
+    /// all_interfaces; `start` has to refuse the bound non-loopback socket.
+    #[test]
+    fn imported_insecure_all_interfaces_api_is_refused() {
+        let json: Value = serde_json::from_str(
+            r#"{"user_options":{"misc":{"api":{"enabled":true,"insecure_mode":true,
+                "listen_mode":"all_interfaces","keys":[],"port":0}}}}"#,
+        )
+        .unwrap();
+        let mut api = ApiConfig::default();
+        let mut notes = Vec::new();
+        crate::burp_config::apply_user_options(&json, &mut api, &mut notes);
+        assert!(
+            api.enabled && api.insecure_mode && api.listen_mode == "all_interfaces",
+            "the import applied Burp's insecure all-interfaces settings"
+        );
+        let err = start(&net::Shared::new(), &api, test_defs())
+            .expect_err("an unauthenticated non-loopback API must be refused");
+        assert!(
+            err.contains("refused") && err.contains("loopback"),
+            "refusal must name the reason: {err}"
+        );
+    }
+
     /// The knowledge base lists issue definitions, sorted by name.
     #[test]
     fn knowledge_base_lists_issue_definitions() {

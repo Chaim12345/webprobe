@@ -7,6 +7,7 @@ use crate::net::{ReadOutcome, Shared, handle_conn, read_request_outcome, ws_fram
 use std::io::{Cursor, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 /// Test shim over the pending-buffer reader the engine uses.
@@ -386,13 +387,23 @@ fn spawn_upstream(
     make: fn(&str) -> Vec<u8>,
     wait: Duration,
 ) -> (u16, std::thread::JoinHandle<Vec<String>>) {
+    spawn_upstream_until(make, wait, Arc::new(AtomicBool::new(false)))
+}
+
+/// `spawn_upstream` with a stop flag. The fake upstream leaves as soon as the
+/// flag is set, so a case that asks for a long window does not idle for it.
+fn spawn_upstream_until(
+    make: fn(&str) -> Vec<u8>,
+    wait: Duration,
+    stop: Arc<AtomicBool>,
+) -> (u16, std::thread::JoinHandle<Vec<String>>) {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     l.set_nonblocking(true).unwrap();
     let port = l.local_addr().unwrap().port();
     let t = std::thread::spawn(move || {
         let end = std::time::Instant::now() + wait;
         let mut seen = Vec::new();
-        while std::time::Instant::now() < end {
+        while std::time::Instant::now() < end && !stop.load(Ordering::Relaxed) {
             let Ok((mut s, _)) = l.accept() else {
                 std::thread::sleep(Duration::from_millis(5));
                 continue;
@@ -401,6 +412,9 @@ fn spawn_upstream(
             s.set_read_timeout(Some(Duration::from_millis(300)))
                 .unwrap();
             loop {
+                if stop.load(Ordering::Relaxed) {
+                    break;
+                }
                 let head = read_head(&mut s);
                 if head.is_empty() {
                     break;
@@ -1017,11 +1031,14 @@ fn fragmented_writes_to_an_accepted_request_never_reset() {
     // write. A reset here means the early-close tolerance would be masking
     // a healthy-path failure.
     for step in [1, 3, 7, 16_384] {
-        // The upstream stops accepting when its window ends, and the window
-        // starts before the fragmented send: on a loaded runner ~40 writes
-        // with a 1 ms pause each can outlast 400 ms, and the proxy then gets
-        // a refused connection, not a served request.
-        let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_secs(3));
+        // The upstream serves for up to 3 s, but the case stops it as soon as
+        // the request is served: with a 1 ms pause per write (well over 100
+        // one-byte writes at step 1) the send can outlast a shorter window on
+        // a loaded runner, which would show as a refused connection, not a
+        // served request.
+        let stop = Arc::new(AtomicBool::new(false));
+        let (up_port, up) =
+            spawn_upstream_until(keep_alive_reply, Duration::from_secs(3), Arc::clone(&stop));
         let (port, pt) = spawn_proxy(Shared::new());
         let mut c = client(port);
         let bytes = format!(
@@ -1038,6 +1055,7 @@ fn fragmented_writes_to_an_accepted_request_never_reset() {
         let mut got = Vec::new();
         c.read_to_end(&mut got).unwrap();
         pt.join().unwrap();
+        stop.store(true, Ordering::Relaxed);
         assert!(
             String::from_utf8_lossy(&got).starts_with("HTTP/1.1 200"),
             "step {step}: accepted request is served"
