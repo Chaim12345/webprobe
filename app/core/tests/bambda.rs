@@ -516,6 +516,25 @@ fn passive_check_raises_bambda_generated_issues_for_matching_exchanges() {
     assert_eq!(issue.confidence, "Certain");
     assert!(issue.detail.contains("Debug header"), "{}", issue.detail);
     assert_eq!(issue.evidence.len(), 1);
+    // `api` is there, as in Burp: utilities and logging work, and a call
+    // that needs the running engine fails that row only.
+    let script = r#"api.logging().logToOutput("checking " + requestResponse.request().path());
+        if (requestResponse.request().path().equals("/plain")) { api.http(); }
+        return AuditResult.auditResult(AuditIssue.auditIssue("Uses api",
+            api.utilities().urlUtils().encode("a b"), null, requestResponse.request().url(),
+            AuditIssueSeverity.INFORMATION, AuditIssueConfidence.FIRM, null, null, AuditIssueSeverity.INFORMATION));"#;
+    let p = Program::compile(&java, &api, Kind::PassiveCheck, script, LIMIT).unwrap();
+    let report = webprobe_core::bambda_scan::run_passive(&p, &entries, LIMIT).unwrap();
+    assert_eq!(
+        report.row_errors, 1,
+        "api.http() is not available to a check"
+    );
+    assert_eq!(report.issues.len(), 2);
+    assert!(
+        report.issues[0].detail.contains("a+b") || report.issues[0].detail.contains("a%20b"),
+        "{}",
+        report.issues[0].detail
+    );
     // A check that returns the wrong type does not compile.
     assert!(Program::compile(&java, &api, Kind::PassiveCheck, "return true;", LIMIT).is_err());
 }
