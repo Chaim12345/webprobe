@@ -1163,6 +1163,7 @@ fn main() {
     // API keys are never logged). Scan-configuration keys go through R-11's
     // model: each --config-file is one library entry, overlaid in order.
     let mut listener = burp_config::ProxyListener::default();
+    let mut http = burp_config::HttpOptions::default();
     let mut api = burp_config::ApiConfig::default();
     let mut scan_configs: Vec<webprobe_core::scan_library::LibraryConfig> = Vec::new();
     let read_config = |path: &str| -> String {
@@ -1178,7 +1179,7 @@ fn main() {
             std::process::exit(1);
         });
         let mut notes = Vec::new();
-        burp_config::apply_project_options(&json, &mut listener, &mut notes);
+        burp_config::apply_project_options(&json, &mut listener, &mut http, &mut notes);
         for n in notes {
             eprintln!("{f}: {n}");
         }
@@ -1225,6 +1226,11 @@ fn main() {
     // listener toggle is the UI for it.
     if !config_files.is_empty() {
         shared.proxy_port.store(listener.port, Ordering::SeqCst);
+        webprobe_core::scan_config::shared_config(&shared)
+            .lock()
+            .unwrap()
+            .http
+            .http2_enabled = http.http2_enabled;
         if !listener.running {
             eprintln!("note: proxy listener disabled by configuration");
         }

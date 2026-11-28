@@ -777,6 +777,10 @@ pub struct ProjectProxy {
     /// their own in `listeners`.
     #[serde(default = "yes", rename = "enable_http2")]
     pub listener_http2: bool,
+    /// Upstream HTTP/2 (Burp's project_options.http.http2.enable_http2,
+    /// default on). With it off the Hidden HTTP/2 check does not run.
+    #[serde(default = "yes")]
+    pub http2_enabled: bool,
     /// WebSocket match and replace (Burp's proxy.ws_match_replace_rules).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ws_match_replace_rules: Vec<crate::ws_rules::WsRule>,
@@ -801,6 +805,7 @@ impl Default for ProjectProxy {
             tls_pass_through: Vec::new(),
             streaming_responses: crate::streaming::StreamSettings::default(),
             listener_http2: true,
+            http2_enabled: true,
             ws_match_replace_rules: Vec::new(),
             ws_match_replace_disable_out_of_scope: false,
             ws_intercept_in_scope_only: false,
@@ -2107,6 +2112,7 @@ mod tests {
                     strip_chunked: true,
                 },
                 listener_http2: false,
+                http2_enabled: false,
                 ws_match_replace_rules: vec![crate::ws_rules::WsRule::new(true, "a", "b")],
                 ws_match_replace_disable_out_of_scope: true,
                 ws_intercept_in_scope_only: true,

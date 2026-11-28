@@ -157,6 +157,7 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
     ui.add_space(10.0);
     crate::proxy_settings::ws_match_replace(app, ui);
     ui.add_space(10.0);
+    crate::proxy_settings::http2_setting(app, ui);
     crate::proxy_settings::streaming_responses(app, ui);
     ui.add_space(10.0);
     facts(

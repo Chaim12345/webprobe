@@ -593,6 +593,29 @@ pub fn intercept_rules_table(app: &mut App, ui: &mut Ui) {
     ui.data_mut(|d| d.insert_temp(sel_id, selected));
 }
 
+/// Burp's project option `http.http2.enable_http2` (Zps6). With it off the
+/// Hidden HTTP/2 check does not run. WebProbe's ordinary upstream sends
+/// still offer h2; this is the check's gate, not a transport switch.
+pub fn http2_setting(app: &mut App, ui: &mut Ui) {
+    heading(ui, "HTTP/2");
+    let mut on = webprobe_core::scan_config::shared_config(&app.shared).lock().unwrap().http.http2_enabled;
+    if ui
+        .checkbox(&mut on, "Enable HTTP/2")
+        .on_hover_text(
+            "Burp's project setting (project_options.http.http2.enable_http2). \
+             With it off the Hidden HTTP/2 check does not run.",
+        )
+        .changed()
+    {
+        webprobe_core::scan_config::shared_config(&app.shared)
+            .lock()
+            .unwrap()
+            .http
+            .http2_enabled = on;
+    }
+    ui.add_space(10.0);
+}
+
 /// Burp's Settings > Network > HTTP > Streaming responses (Zrgt): the URL
 /// prefixes whose responses stream, the text/event-stream rule, and how the
 /// stored copy is kept. Streaming responses pass straight through the Proxy.

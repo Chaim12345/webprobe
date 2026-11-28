@@ -810,6 +810,7 @@ fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress(
         smtp: vec![],
         item: 0,
         stored_report: false,
+        http2_enabled: true,
     };
     let url = format!("http://127.0.0.1:{port}/cached");
     let hits = ["document.write", "document.cookie"]
@@ -951,6 +952,7 @@ fn dom_cancelled_dispatch_preserves_pollution_and_other_families_without_egress(
         smtp: vec![],
         item: 0,
         stored_report: false,
+        http2_enabled: true,
     };
     let url = format!("http://127.0.0.1:{port}/cached");
     let hits = ["document.write", "document.cookie", "Object.prototype"]
