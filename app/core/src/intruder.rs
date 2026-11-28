@@ -177,6 +177,25 @@ impl Template {
         }
         out
     }
+
+    /// [`Template::render`] with payloads as bytes, so a payload that is
+    /// not text reaches the request unchanged (AR-09).
+    pub fn render_bytes(&self, values: &[Option<&[u8]>]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for (i, literal) in self.literals.iter().enumerate() {
+            out.extend_from_slice(literal.as_bytes());
+            if let Some(default) = self.defaults.get(i) {
+                out.extend_from_slice(
+                    values
+                        .get(i)
+                        .copied()
+                        .flatten()
+                        .unwrap_or(default.as_bytes()),
+                );
+            }
+        }
+        out
+    }
 }
 
 /// One request of an attack and the payload used in each position (`None` where

@@ -235,6 +235,10 @@ pub struct AttackSettings {
 pub struct PayloadEncoding {
     pub enabled: bool,
     pub chars: String,
+    /// AR-09: payloads are ASCII hex and their decoded bytes are sent
+    /// (`00ff41` sends three bytes). A payload that is not valid hex is
+    /// sent as text. Decoded bytes are not URL-encoded.
+    pub hex: bool,
 }
 
 impl Default for PayloadEncoding {
@@ -242,11 +246,24 @@ impl Default for PayloadEncoding {
         Self {
             enabled: true,
             chars: " ./\\=<>?+&*;:\"{}|^`#".into(),
+            hex: false,
         }
     }
 }
 
 impl PayloadEncoding {
+    /// The bytes to place for `payload`: its decoded bytes when hex
+    /// payloads are on and it is valid hex, else the URL-encoded text.
+    pub fn bytes(&self, payload: &str) -> Vec<u8> {
+        if self.hex
+            && !payload.is_empty()
+            && let Ok(raw) = crate::util::hex_decode(payload)
+        {
+            return raw;
+        }
+        self.apply(payload).into_bytes()
+    }
+
     /// `payload` with every character of the set percent-encoded (each of
     /// its UTF-8 bytes, upper-case hex), the rest unchanged.
     pub fn apply(&self, payload: &str) -> String {
@@ -1141,16 +1158,15 @@ fn execute_probe(
     // restamped (Burp's "Update Content-Length header", on by default):
     // a body of another length made the server wait for missing bytes
     // or left bytes on a pooled connection.
-    let encoded: Vec<Option<String>> = attack
+    let encoded: Vec<Option<Vec<u8>>> = attack
         .payloads
         .iter()
-        .map(|p| p.as_deref().map(|v| state.settings.encoding.apply(v)))
+        .map(|p| p.as_deref().map(|v| state.settings.encoding.bytes(v)))
         .collect();
     let request = state
         .template
-        .render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
-    let bytes =
-        crate::util::update_content_length(&crate::util::restore_binary_body(request.as_bytes()));
+        .render_bytes(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
+    let bytes = crate::util::update_content_length(&crate::util::restore_binary_body(&request));
     let t0 = Instant::now();
     let (resp, attempts) = send_with_retry(
         &state.settings.retry,
@@ -1610,6 +1626,29 @@ mod tests {
 
     /// Second review, finding 4: payloads are URL-encoded with Burp's
     /// default set, and only those characters.
+    #[test]
+    fn hex_payloads_place_their_decoded_bytes_and_text_stays_text() {
+        let enc = PayloadEncoding {
+            hex: true,
+            ..PayloadEncoding::default()
+        };
+        assert_eq!(enc.bytes("00ff41"), [0x00, 0xff, 0x41]);
+        assert_eq!(enc.bytes("00 FF 41"), [0x00, 0xff, 0x41]);
+        // Not hex: sent as text, URL-encoded as usual.
+        assert_eq!(enc.bytes("x y"), b"x%20y");
+        // An odd number of hex digits is not a byte string.
+        assert_eq!(enc.bytes("abc"), b"abc");
+        // Off by default: hex-looking text is text.
+        assert_eq!(PayloadEncoding::default().bytes("00ff41"), b"00ff41");
+        let template = Template::parse("POST / HTTP/1.1\r\nHost: h\r\n\r\nx=§v§&y=1").unwrap();
+        let raw = template.render_bytes(&[Some(&enc.bytes("00ff")[..])]);
+        assert!(raw.ends_with(&[b'x', b'=', 0x00, 0xff, b'&', b'y', b'=', b'1']));
+        assert_eq!(
+            template.render_bytes(&[None]),
+            template.render(&[None]).into_bytes()
+        );
+    }
+
     #[test]
     fn payload_encoding_follows_burps_default_set() {
         let enc = PayloadEncoding::default();
