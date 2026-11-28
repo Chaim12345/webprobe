@@ -28,29 +28,54 @@ pub(crate) fn discover(app: &mut App, ui: &mut Ui) {
     // The hero is painted, not allocated: step below it from wherever the
     // text scope ended, so the cards sit right under the banner.
     ui.add_space((hero.bottom() - hero_text.response.rect.bottom()).max(0.0) + 24.0);
+    // Each card is a control that does what it names (#272).
+    let mut picked = None;
     ui.horizontal(|ui| {
-        for (glyph, title, sub) in [
+        for (i, (glyph, title, sub)) in [
             (
                 theme::icon::BOOK_OPEN,
                 "Documentation",
-                "docs/ in the repository",
+                "Burp Suite desktop documentation (opens the browser)",
             ),
             (
                 theme::icon::KEYBOARD,
                 "Keyboard shortcuts",
-                "Help > Keyboard shortcuts",
+                "Settings > Hotkeys",
             ),
             (theme::icon::TERMINAL, "Command palette", "Ctrl+K"),
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             ui.add_space(40.0);
             ui.label(RichText::new(glyph).size(28.0).color(theme::ink_dim()));
             ui.vertical(|ui| {
-                ui.label(RichText::new(title).strong().size(13.0).color(theme::ink()));
+                if ui
+                    .link(RichText::new(title).strong().size(13.0).color(theme::ink()))
+                    .clicked()
+                {
+                    picked = Some(i);
+                }
                 ui.label(RichText::new(sub).size(12.0).color(theme::ink_faint()));
             });
             ui.add_space(60.0);
         }
     });
+    match picked {
+        Some(0) => ui.ctx().open_url(egui::OpenUrl::new_tab(
+            "https://portswigger.net/burp/documentation/desktop",
+        )),
+        Some(1) => {
+            app.settings_help = crate::ui::SettingsPane::Hotkeys;
+            app.settings_open = true;
+        }
+        Some(2) => {
+            app.palette.open = true;
+            app.palette.query.clear();
+            app.palette.sel = 0;
+        }
+        _ => {}
+    }
     // The first-run setup checklist lives here, under the learning cards
     // (Burp's Dashboard has none).
     ui.add_space(16.0);
