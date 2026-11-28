@@ -40,28 +40,9 @@ pub struct IssueDefinition {
 struct ApiTask {
     /// `running`, `succeeded` or `failed` (Burp's scan_status words).
     status: String,
-    /// shared.issues is append-only: this task's issues start here.
-    first_issue: usize,
-    /// Set when the task finishes: issues appended later are not its own.
-    end_issue: Option<usize>,
-    /// Hosts of the URLs the task was asked to scan (lowercase). The issue
-    /// list is process-wide; while the task runs, only issues on these hosts
-    /// are reported as its findings.
-    hosts: Vec<String>,
-}
-
-/// The host of a URL or of an issue's host field (scheme, port, path and
-/// userinfo removed), lowercase.
-fn host_only(s: &str) -> String {
-    let rest = s.split_once("://").map_or(s, |(_, r)| r);
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
-    let host = if let Some(v6) = host.strip_prefix('[') {
-        v6.split(']').next().unwrap_or("")
-    } else {
-        host.split(':').next().unwrap_or("")
-    };
-    host.to_ascii_lowercase()
+    /// The issues this task's scan raised, set when it finishes. While it
+    /// runs they are read from the scanner's live collection.
+    events: Option<Vec<scan::ScanIssue>>,
 }
 
 struct ApiState {
@@ -79,11 +60,7 @@ enum TaskAdmissionError {
     HistoryFull,
 }
 
-fn reserve_task(
-    state: &mut ApiState,
-    first_issue: usize,
-    hosts: Vec<String>,
-) -> Result<usize, TaskAdmissionError> {
+fn reserve_task(state: &mut ApiState) -> Result<usize, TaskAdmissionError> {
     if state.tasks.iter().any(|task| task.status == "running") {
         return Err(TaskAdmissionError::ScanAlreadyRunning);
     }
@@ -93,9 +70,7 @@ fn reserve_task(
     let id = state.tasks.len();
     state.tasks.push(ApiTask {
         status: "running".to_string(),
-        first_issue,
-        end_issue: None,
-        hosts,
+        events: None,
     });
     Ok(id)
 }
@@ -165,6 +140,15 @@ pub fn start(
             "user_options.misc.api is enabled with no keys and insecure_mode false; refusing to start without an API key"
                 .to_string(),
         );
+    }
+    // A blank key would authenticate a `//v0.1/...` path; CR/LF or a slash
+    // has no place in a path segment.
+    if api
+        .keys
+        .iter()
+        .any(|key| !crate::burp_config::valid_api_key(key))
+    {
+        return Err("REST API keys must be nonempty, printable URL path segments".into());
     }
     let address = listen_address(api)?;
     let listener = TcpListener::bind(address)
@@ -253,6 +237,9 @@ fn authorized(api: &ApiConfig, path: &str) -> Option<String> {
         return Some(path.to_string());
     }
     for key in &api.keys {
+        if !crate::burp_config::valid_api_key(key) {
+            continue;
+        }
         let with_slash = format!("/{key}/");
         if let Some(rest) = path.strip_prefix(&with_slash) {
             return Some(format!("/{rest}"));
@@ -302,14 +289,14 @@ fn start_scan(
             }),
         );
     }
-    let first_issue = shared.issues.lock().unwrap().len();
     let id = {
         let mut st = state.lock().unwrap();
-        let mut hosts: Vec<String> = urls.iter().map(|u| host_only(u)).collect();
-        hosts.sort();
-        hosts.dedup();
-        match reserve_task(&mut st, first_issue, hosts) {
-            Ok(id) => id,
+        match reserve_task(&mut st) {
+            Ok(id) => {
+                // Only one API scan runs at a time, so one collection.
+                shared.scan.begin_collect();
+                id
+            }
             Err(TaskAdmissionError::ScanAlreadyRunning) => {
                 return respond(
                     stream,
@@ -335,9 +322,9 @@ fn start_scan(
             scan::crawl_and_audit(&shared2, &urls, true);
             shared2.scan.wait_idle(None);
         }));
-        let end_issue = shared2.issues.lock().unwrap().len();
+        let events = shared2.scan.end_collect();
         let mut st = state2.lock().unwrap();
-        st.tasks[id].end_issue = Some(end_issue);
+        st.tasks[id].events = Some(events);
         st.tasks[id].status = if result.is_ok() {
             "succeeded".to_string()
         } else {
@@ -368,26 +355,21 @@ fn scan_status(
         return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
     let status = task.status.clone();
-    let first_issue = task.first_issue;
-    let end_issue = task.end_issue;
-    let hosts = task.hosts.clone();
+    // A finished task keeps its own set; the running one reads the
+    // scanner's live collection. Either way these are issues this scan
+    // raised, in order, so the index is a stable serial number.
+    let issues = task
+        .events
+        .clone()
+        .unwrap_or_else(|| shared.scan.collected());
     drop(st);
-    let events: Vec<Value> = {
-        let issues = shared.issues.lock().unwrap();
-        let end = end_issue.map_or(issues.len(), |end| end.min(issues.len()));
-        let start = first_issue.min(end);
-        issues[start..end]
-            .iter()
-            .enumerate()
-            // Issues on other hosts come from other activity (live proxy
-            // audit, manual findings) that shares the process-wide list.
-            .filter(|(_, issue)| hosts.contains(&host_only(&issue.host)))
-            // The position in the append-only list: stable across polls.
-            .map(|(i, issue)| {
-                json!({"serial_number": start + i, "type": "issue_found", "issue": issue_json(issue)})
-            })
-            .collect()
-    };
+    let events: Vec<Value> = issues
+        .iter()
+        .enumerate()
+        .map(|(i, issue)| {
+            json!({"serial_number": i, "type": "issue_found", "issue": issue_json(issue)})
+        })
+        .collect();
     respond(
         stream,
         200,
@@ -555,19 +537,19 @@ mod tests {
         assert!(acquire_client_slot(&active));
 
         let mut state = ApiState { tasks: Vec::new() };
-        assert_eq!(reserve_task(&mut state, 0, Vec::new()), Ok(0));
+        assert_eq!(reserve_task(&mut state), Ok(0));
         assert_eq!(
-            reserve_task(&mut state, 0, Vec::new()),
+            reserve_task(&mut state),
             Err(TaskAdmissionError::ScanAlreadyRunning)
         );
         state.tasks[0].status = "succeeded".to_string();
         for _ in 1..MAX_API_TASKS {
-            assert!(reserve_task(&mut state, 0, Vec::new()).is_ok());
+            assert!(reserve_task(&mut state).is_ok());
             let last = state.tasks.last_mut().unwrap();
             last.status = "succeeded".to_string();
         }
         assert_eq!(
-            reserve_task(&mut state, 0, Vec::new()),
+            reserve_task(&mut state),
             Err(TaskAdmissionError::HistoryFull)
         );
     }

@@ -212,6 +212,7 @@ impl ScanCtx {
             let config = cfg_slot.lock().unwrap();
             issues.retain(|i| config.issue_allowed(&i.name, true));
         }
+        self.shared.scan.collect(&issues);
         add_issues(&self.shared, issues);
     }
 

@@ -42,9 +42,32 @@ pub trait ProxyIo: Read + Write {
     }
 }
 
+/// The peer closed or reset the connection, seen without consuming data.
+///
+/// On Linux this asks the kernel directly (POLLRDHUP), so a FIN is seen
+/// even when unread bytes sit in front of it: a clean TLS close leaves its
+/// close_notify record unread, and a peek would report data, not EOF.
+/// Elsewhere it falls back to the peek.
+pub fn tcp_closed(s: &TcpStream) -> bool {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use rustix::event::{PollFd, PollFlags, Timespec, poll};
+        let gone = PollFlags::RDHUP | PollFlags::HUP | PollFlags::ERR;
+        let mut fds = [PollFd::new(s, PollFlags::RDHUP)];
+        let zero = Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        if poll(&mut fds, Some(&zero)).is_ok() {
+            return fds[0].revents().intersects(gone);
+        }
+    }
+    tcp_closed_by_peek(s)
+}
+
 /// EOF or a hard error on a (non-blocking) socket, seen with a peek that
 /// consumes nothing.
-pub fn tcp_closed(s: &TcpStream) -> bool {
+fn tcp_closed_by_peek(s: &TcpStream) -> bool {
     let mut b = [0u8; 1];
     match s.peek(&mut b) {
         Ok(0) => true,

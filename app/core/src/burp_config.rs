@@ -68,6 +68,16 @@ pub struct ApiConfig {
     pub keys: Vec<String>,
 }
 
+/// Keys must be a nonempty, printable single URL path segment. In particular,
+/// a blank key would authenticate a double-slash path, and CR/LF or a slash
+/// must never be interpolated into a Location response header.
+pub fn valid_api_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .bytes()
+            .all(|b| (0x21..=0x7e).contains(&b) && !matches!(b, b'/' | b'?' | b'#' | b'\\'))
+}
+
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
@@ -262,8 +272,12 @@ pub fn apply_user_options(json: &Value, api: &mut ApiConfig, notes: &mut Vec<Str
         api.keys = keys
             .iter()
             .filter_map(Value::as_str)
+            .filter(|key| valid_api_key(key))
             .map(str::to_string)
             .collect();
+        if api.keys.len() != keys.len() {
+            notes.push("invalid API keys ignored (keys must be nonempty URL path segments)".into());
+        }
     }
 }
 
@@ -412,6 +426,19 @@ mod tests {
         apply_user_options(&json, &mut api, &mut notes);
         assert_eq!(api.listen_mode, "loopback_only");
         assert_eq!(notes.len(), 2, "{notes:?}");
+    }
+
+    #[test]
+    fn import_rejects_blank_and_invalid_api_keys_without_echoing_them() {
+        let input = json!({"user_options": {"misc": {"api": {
+            "keys": ["", "   ", "has/slash", "good-key"]
+        }}}});
+        let mut api = ApiConfig::default();
+        let mut notes = Vec::new();
+        apply_user_options(&input, &mut api, &mut notes);
+        assert_eq!(api.keys, vec!["good-key"]);
+        assert!(!notes.is_empty());
+        assert!(!notes.join(" ").contains("good-key"));
     }
 
     /// API keys import and export, but are never logged: the notes carry

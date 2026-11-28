@@ -110,6 +110,16 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
             "{p} already exists: open it instead, or choose another name"
         ));
     }
+    // Claim the destination atomically before the session is replaced: if
+    // another process created it since the check, this fails and nothing has
+    // changed. Later saves replace this file, which is now ours.
+    if let Some(p) = path {
+        webprobe_core::project::save_new(
+            std::path::Path::new(p),
+            &webprobe_core::project::ProjectData::default(),
+        )
+        .map_err(|e| format!("{p} could not be created ({e})"))?;
+    }
     let target = match path {
         Some(p) => p.to_string(),
         None => std::env::temp_dir()

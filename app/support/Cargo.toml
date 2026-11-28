@@ -46,3 +46,8 @@ keccak = "0.1"
 time = "0.3"
 webpki-roots = "0.26"
 x509-parser = { version = "0.16", features = ["verify"] }
+
+# poll(2) with POLLRDHUP: the only way to see a peer's FIN behind unread
+# bytes (a TLS close_notify) without consuming them.
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix = { version = "1", features = ["event"] }
