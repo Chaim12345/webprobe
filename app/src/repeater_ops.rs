@@ -1354,6 +1354,9 @@ pub struct State {
     /// WebSockets history rows passing the filter: (history stamp, filter
     /// hash, positions). Redone only when either changes.
     pub ws_rows: (u64, u64, Vec<usize>),
+    /// WebSockets history sort (#269): (column, ascending). `None` keeps
+    /// arrival order.
+    pub ws_sort: Option<(usize, bool)>,
 }
 
 impl Default for State {
@@ -1376,6 +1379,7 @@ impl Default for State {
             ws_sel: None,
             ws_hex: false,
             ws_rows: (u64::MAX, 0, Vec::new()),
+            ws_sort: None,
         }
     }
 }
@@ -2318,6 +2322,27 @@ pub fn intercept_table(ui: &mut Ui, st: &mut State, rows: &[HeldRow], height: f3
 
 // ====================== B-09 WebSockets history ======================
 
+/// One WebSockets history cell as a sort key: numbers sort as numbers.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum WsSortKey {
+    Number(u64),
+    Text(String),
+}
+
+/// The sort key of `e` for table column `col` (#, URL, Direction, Edited,
+/// Length, Opcode, Time).
+fn ws_sort_key(e: &net::WsEntry, col: usize, edited: bool) -> WsSortKey {
+    match col {
+        0 => WsSortKey::Number(e.id),
+        1 => WsSortKey::Text(e.host.to_ascii_lowercase()),
+        2 => WsSortKey::Text(ws_direction_label(&e.direction).to_string()),
+        3 => WsSortKey::Number(u64::from(edited)),
+        4 => WsSortKey::Number(e.payload.len() as u64),
+        5 => WsSortKey::Text(e.opcode.clone()),
+        _ => WsSortKey::Number(e.ts),
+    }
+}
+
 /// Proxy > WebSockets history: filter bar, table (#, URL, Direction,
 /// Edited, Length, Opcode, Time) and the selected message below.
 pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
@@ -2418,20 +2443,36 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         st.ws_filter.hash(&mut h);
         app.bambdas.tables.websocket.filter_version().hash(&mut h);
+        st.ws_sort.hash(&mut h);
         h.finish()
     };
     let stamp = history.stamp();
     if st.ws_rows.0 != stamp || st.ws_rows.1 != filter_key {
         let f = st.ws_filter.clone();
-        st.ws_rows = (
-            stamp,
-            filter_key,
-            history.positions(|e| {
-                e.direction != "handshake"
-                    && ws_row_visible(&f, e, scope)
-                    && app.bambdas.tables.websocket.keeps(e.id)
-            }),
-        );
+        let sort = st.ws_sort;
+        // The sort key of each kept row, taken in the same pass that
+        // filters, so sorting never copies a payload.
+        let mut keys: Vec<WsSortKey> = Vec::new();
+        // Copied first: the history lock is never held with this one.
+        let edited_ids = shared.ws_edited.lock().clone();
+        let mut positions = history.positions(|e| {
+            let keep = e.direction != "handshake"
+                && ws_row_visible(&f, e, scope)
+                && app.bambdas.tables.websocket.keeps(e.id);
+            if keep && let Some((col, _)) = sort {
+                keys.push(ws_sort_key(e, col, edited_ids.contains(&e.id)));
+            }
+            keep
+        });
+        if let Some((_, ascending)) = sort {
+            let mut order: Vec<usize> = (0..positions.len()).collect();
+            order.sort_by(|a, b| keys[*a].cmp(&keys[*b]));
+            if !ascending {
+                order.reverse();
+            }
+            positions = order.into_iter().map(|i| positions[i]).collect();
+        }
+        st.ws_rows = (stamp, filter_key, positions);
     }
     let total = st.ws_rows.2.len();
     let table_h = (ui.available_height() * 0.5).max(120.0);
@@ -2453,13 +2494,40 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
     let bambda_cells = &app.bambdas.tables.websocket;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        for (h, w) in header.iter().zip(widths.iter().copied()) {
-            let (r, _) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::hover());
+        for (i, (h, w)) in header.iter().zip(widths.iter().copied()).enumerate() {
+            // The seven built-in columns sort; a Bambda column does not.
+            let sortable = i < 7;
+            let (r, head) = ui.allocate_exact_size(
+                egui::vec2(w, 22.0),
+                if sortable {
+                    egui::Sense::click()
+                } else {
+                    egui::Sense::hover()
+                },
+            );
+            if head.clicked() {
+                // Ascending, then descending, then back to arrival order.
+                st.ws_sort = match st.ws_sort {
+                    Some((col, true)) if col == i => Some((i, false)),
+                    Some((col, false)) if col == i => None,
+                    _ => Some((i, true)),
+                };
+            }
+            let arrow = match st.ws_sort {
+                Some((col, ascending)) if col == i => {
+                    if ascending {
+                        " \u{25B2}"
+                    } else {
+                        " \u{25BC}"
+                    }
+                }
+                _ => "",
+            };
             ui.painter().rect_filled(r, 0.0, theme::header_bg());
             ui.painter().text(
                 egui::pos2(r.left() + 6.0, r.center().y),
                 egui::Align2::LEFT_CENTER,
-                *h,
+                format!("{h}{arrow}"),
                 egui::FontId::proportional(12.5),
                 theme::ink(),
             );
@@ -3702,6 +3770,24 @@ mod tests {
             back.repeaters[0].response.as_deref(),
             Some("HTTP/1.1 200 OK\r\n\r\n")
         );
+    }
+
+    #[test]
+    fn ws_sort_keys_order_numbers_as_numbers_and_text_without_case() {
+        let entry = |id: u64, host: &str, len: usize| net::WsEntry {
+            id,
+            host: host.into(),
+            payload: vec![0; len].into(),
+            ts: 0,
+            direction: "client -> server".into(),
+            opcode: "text".into(),
+            socket: 0,
+        };
+        let (a, b) = (entry(9, "b.test", 100), entry(10, "A.test", 9));
+        assert!(ws_sort_key(&a, 0, false) < ws_sort_key(&b, 0, false));
+        assert!(ws_sort_key(&b, 1, false) < ws_sort_key(&a, 1, false));
+        assert!(ws_sort_key(&b, 4, false) < ws_sort_key(&a, 4, false));
+        assert!(ws_sort_key(&a, 3, false) < ws_sort_key(&a, 3, true));
     }
 
     #[test]
