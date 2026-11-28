@@ -208,7 +208,7 @@ fn replace_pair(pairs: &str, name: &str, value: &str) -> Option<String> {
 /// requires application/x-www-form-urlencoded, application/json or an
 /// application/*+json media type (parameters and case are ignored).
 /// Content-Length is corrected only when the body changes. Non-UTF-8 headers
-/// or eligible bodies are preserved, with a diagnostic on stderr.
+/// or eligible bodies are preserved, with a `macro.substitution.skipped` event.
 /// Unchanged when the request has no such parameter.
 pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     let parts = crate::util::parse_http(request);
@@ -216,7 +216,7 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     let Ok(head) = std::str::from_utf8(&request[..head_len]) else {
         // These bytes may be intentional in a security testing tool. Never
         // silently replace them with UTF-8 replacement characters.
-        eprintln!("macro substitution skipped: request headers are not UTF-8");
+        tracing::warn!(target: "webprobe", event_code = "macro.substitution.skipped", reason = "request headers are not UTF-8", "Macro parameter substitution skipped");
         return request.to_vec();
     };
     let original_body = &request[head_len..];
@@ -273,7 +273,7 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
                 body = std::borrow::Cow::Owned(replaced.into_bytes());
             }
         } else {
-            eprintln!("macro body substitution skipped: eligible request body is not UTF-8");
+            tracing::warn!(target: "webprobe", event_code = "macro.substitution.skipped", reason = "eligible request body is not UTF-8", "Macro parameter substitution skipped");
         }
     }
     let body_changed = body.as_ref() != original_body;
