@@ -26,7 +26,7 @@
     "shared_fields": 91,
     "test_ca_default_shared": 0,
     "thread_locals": 12,
-    "thread_sleeps": 29,
+    "thread_sleeps": 28,
     "thread_spawns": 16
   }
 }

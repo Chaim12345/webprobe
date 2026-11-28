@@ -484,27 +484,39 @@ fn proxy(mut args: Vec<String>) {
     let mut printer = BambdaPrint::new(bambda_filter.as_deref(), bambda_column.as_deref());
     let check = BambdaPrint::load(bambda_check_file.as_deref(), Kind::PassiveCheck);
     let mut printed = 0usize;
+    // AR-06: the engine's wake-up call ends the wait below as soon as there
+    // is something new, instead of this loop looking every 200 ms.
+    let (woken_tx, woken) = std::sync::mpsc::channel::<()>();
+    shared.set_waker(Arc::new(move || {
+        let _ = woken_tx.send(());
+    }));
     loop {
-        // Copy the new rows out first: printing to a slow pipe must not hold
-        // the history lock every proxy thread needs to record.
-        let (fresh, total) = {
-            let history = shared.history.snapshot();
-            let total = history.len();
-            (history.into_iter().skip(printed).collect::<Vec<_>>(), total)
-        };
-        printed = total;
-        for row in printer.render(&fresh) {
-            println!("{row}");
-        }
-        if let Some(check) = &check {
-            bambda_check(&shared, check, &fresh);
+        // Only when there is something new: an idle proxy no longer copies
+        // its whole history five times a second.
+        if shared.history.len() != printed {
+            // Copy the new rows out first: printing to a slow pipe must not
+            // hold the history lock every proxy thread needs to record.
+            let (fresh, total) = {
+                let history = shared.history.snapshot();
+                let total = history.len();
+                (history.into_iter().skip(printed).collect::<Vec<_>>(), total)
+            };
+            printed = total;
+            for row in printer.render(&fresh) {
+                println!("{row}");
+            }
+            if let Some(check) = &check {
+                bambda_check(&shared, check, &fresh);
+            }
         }
         let done = stdin_closed.load(Ordering::SeqCst)
             || seconds.is_some_and(|s| started.elapsed() >= Duration::from_secs(s));
         if done {
             break;
         }
-        std::thread::sleep(Duration::from_millis(200));
+        // The bound is for the end conditions, which are flags and a clock.
+        let _ = woken.recv_timeout(Duration::from_millis(200));
+        while woken.try_recv().is_ok() {}
     }
     if let Some((until, pump)) = collab_pump {
         // One last poll and match before the issues are listed and saved.
