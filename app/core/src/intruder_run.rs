@@ -1149,7 +1149,8 @@ fn execute_probe(
     let request = state
         .template
         .render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
-    let bytes = crate::util::update_content_length(request.as_bytes());
+    let bytes =
+        crate::util::update_content_length(&crate::util::restore_binary_body(request.as_bytes()));
     let t0 = Instant::now();
     let (resp, attempts) = send_with_retry(
         &state.settings.retry,

@@ -590,12 +590,12 @@ fn repeater_body() {
     assert_eq!(accepts, 1, "one origin connection");
     assert_eq!(
         body,
-        LOSSY_BODY,
-        "the converted body was sent (hex {})",
+        BODY,
+        "the captured body bytes were sent (hex {})",
         hex(&body),
     );
     assert_eq!(declared, 6, "header keeps the captured length");
-    assert_eq!(trailing, 6, "6 bytes sit past the declared length");
+    assert_eq!(trailing, 0, "nothing sits past the declared length");
     println!("CASE-COMPLETE: {REPEATER}");
 }
 
@@ -644,8 +644,8 @@ fn intruder_body() {
     println!("AR09-INTRUDER-EVIDENCE body_hex={}", hex(&body));
     assert_eq!(
         body,
-        LOSSY_BODY,
-        "the converted template body was sent (hex {})",
+        BODY,
+        "the captured template body was sent (hex {})",
         hex(&body),
     );
     assert_eq!(

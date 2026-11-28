@@ -201,6 +201,9 @@ pub(crate) fn links_in_response(e: &net::HistEntry) -> String {
 /// The request as Burp hands it to Repeater/Intruder: origin form, without
 /// the hop-by-hop Proxy-Connection header the browser sent to the proxy.
 pub(crate) fn request_for_tools(raw: &[u8]) -> String {
+    // The text below cannot carry a non-UTF-8 body; keep the bytes aside so
+    // a send can put them back (AR-09).
+    util::remember_binary_body(raw);
     let req = String::from_utf8_lossy(&util::origin_form(raw)).into_owned();
     let (head, body) = match req.find("\r\n\r\n") {
         Some(i) => (&req[..i], &req[i..]),

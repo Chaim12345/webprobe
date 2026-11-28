@@ -891,3 +891,55 @@ pub fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()
     }
     result
 }
+
+/// Bodies that are not valid UTF-8, remembered when a captured request is
+/// turned into editor text (AR-09). The tools edit text; the lossy text of
+/// such a body is not the body. A send looks its body text up here and puts
+/// the captured bytes back, so an unedited binary body reaches the wire
+/// exactly, whatever was edited in the head. An edited body no longer
+/// matches and is sent as typed.
+static BINARY_BODIES: std::sync::Mutex<std::collections::VecDeque<(String, Vec<u8>)>> =
+    std::sync::Mutex::new(std::collections::VecDeque::new());
+const BINARY_BODIES_CAP: usize = 64;
+
+fn body_start(raw: &[u8]) -> Option<usize> {
+    raw.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4)
+}
+
+/// Remember `raw`'s body when its text form would lose bytes.
+pub fn remember_binary_body(raw: &[u8]) {
+    let Some(start) = body_start(raw) else { return };
+    let body = &raw[start..];
+    if body.is_empty() || std::str::from_utf8(body).is_ok() {
+        return;
+    }
+    let text = String::from_utf8_lossy(body).into_owned();
+    let mut known = BINARY_BODIES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    known.retain(|(t, _)| *t != text);
+    if known.len() >= BINARY_BODIES_CAP {
+        known.pop_front();
+    }
+    known.push_back((text, body.to_vec()));
+}
+
+/// `request` (editor text as bytes) with a remembered binary body put back.
+pub fn restore_binary_body(request: &[u8]) -> Vec<u8> {
+    let Some(start) = body_start(request) else {
+        return request.to_vec();
+    };
+    let Ok(text) = std::str::from_utf8(&request[start..]) else {
+        return request.to_vec();
+    };
+    if !text.contains('\u{fffd}') {
+        return request.to_vec();
+    }
+    let known = BINARY_BODIES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    match known.iter().rev().find(|(t, _)| t == text) {
+        Some((_, body)) => [&request[..start], body.as_slice()].concat(),
+        None => request.to_vec(),
+    }
+}
