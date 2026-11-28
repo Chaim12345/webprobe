@@ -2988,6 +2988,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
             request: r.request.clone(),
             response: project::ProjectRepeater::encode_response(r.response.as_deref()).0,
             response_b64: project::ProjectRepeater::encode_response(r.response.as_deref()).1,
+            request_body_b64: project::ProjectRepeater::encode_request_body(&r.request),
             result_line: r.result_line.clone(),
         })
         .collect();
@@ -3311,6 +3312,10 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         *app.shared.repeaters.lock() = data
             .repeaters
             .iter()
+            .inspect(|r| {
+                // AR-09: a captured binary body is sent as captured again.
+                r.restore_request_body();
+            })
             .map(|r| net::RepTab {
                 id: app.shared.rep.new_tab_id(),
                 name: r.name.clone(),

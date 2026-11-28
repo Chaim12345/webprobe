@@ -373,9 +373,42 @@ pub struct ProjectRepeater {
     /// text view.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_b64: Option<String>,
+    /// The exact request body bytes (base64) when `request` holds only a
+    /// lossy text view of a captured binary body (AR-09). Restored on load,
+    /// so the tab still sends the captured bytes after a restart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_body_b64: Option<String>,
 }
 
 impl ProjectRepeater {
+    /// `request_body_b64` for a tab's editor text: the captured body bytes
+    /// when the text is their lossy view, else `None`.
+    pub fn encode_request_body(request: &str) -> Option<String> {
+        crate::util::binary_body_of(request.as_bytes()).map(|b| crate::util::b64_encode(&b))
+    }
+
+    /// Make a loaded tab send its captured binary body again: the saved
+    /// bytes are registered for the tab's text. Nothing happens when the
+    /// tab has none, or when the bytes no longer match the text (the file
+    /// was edited by hand).
+    pub fn restore_request_body(&self) {
+        let Some(body) = self
+            .request_body_b64
+            .as_deref()
+            .and_then(|b| crate::util::b64_decode(b).ok())
+        else {
+            return;
+        };
+        let Some(head_end) = self.request.find("\r\n\r\n") else {
+            return;
+        };
+        if String::from_utf8_lossy(&body) != self.request[head_end + 4..] {
+            return;
+        }
+        let raw = [&self.request.as_bytes()[..head_end + 4], body.as_slice()].concat();
+        crate::util::remember_binary_body(&raw);
+    }
+
     /// `response` and `response_b64` for raw response bytes.
     pub fn encode_response(bytes: Option<&[u8]>) -> (Option<String>, Option<String>) {
         match bytes.map(encode_message) {
@@ -1968,6 +2001,7 @@ mod tests {
                 response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
                 result_line: "200 OK".into(),
                 response_b64: None,
+                request_body_b64: None,
             }],
             repeater_groups: Vec::new(),
             issues: vec![ProjectIssue {
@@ -2543,6 +2577,51 @@ mod tests {
     }
 
     /// Review finding 16: a binary Repeater response survives save and load.
+    /// AR-09: a tab whose request body is binary keeps the bytes in the
+    /// project file, and a load makes the send path find them again.
+    #[test]
+    fn binary_repeater_request_body_survives_a_save_and_load() {
+        let body = [0x00, 0xff, 0xfe, 0x00, 0xc3, 0x28, 0x41, 0x52, 0x30, 0x39];
+        let head = "POST /ar09-save HTTP/1.1\r\nHost: h\r\nContent-Length: 10\r\n\r\n";
+        let raw = [head.as_bytes(), &body].concat();
+        crate::util::remember_binary_body(&raw);
+        let text = String::from_utf8_lossy(&raw).into_owned();
+        let tab = ProjectRepeater {
+            name: "1".into(),
+            host: "h".into(),
+            port: 80,
+            https: false,
+            request: text.clone(),
+            response: None,
+            result_line: String::new(),
+            response_b64: None,
+            request_body_b64: ProjectRepeater::encode_request_body(&text),
+        };
+        assert!(tab.request_body_b64.is_some());
+        let json = serde_json::to_string(&tab).unwrap();
+        // A second body with the same lossy text takes the registry slot, as
+        // a restart would have emptied it.
+        let other = [
+            head.as_bytes(),
+            &[0x00, 0xfd, 0xfc, 0x00, 0xc3, 0x28, 0x41, 0x52, 0x30, 0x39],
+        ]
+        .concat();
+        assert_eq!(String::from_utf8_lossy(&other), text);
+        crate::util::remember_binary_body(&other);
+        assert_eq!(crate::util::restore_binary_body(text.as_bytes()), other);
+        let back: ProjectRepeater = serde_json::from_str(&json).unwrap();
+        back.restore_request_body();
+        assert_eq!(crate::util::restore_binary_body(text.as_bytes()), raw);
+        // A text body stores nothing, and an older file without the field loads.
+        assert!(ProjectRepeater::encode_request_body("POST / HTTP/1.1\r\n\r\nplain").is_none());
+        let old: ProjectRepeater = serde_json::from_str(
+            r#"{"name":"1","host":"h","port":80,"request":"GET / HTTP/1.1\r\n\r\n","response":null,"result_line":""}"#,
+        )
+        .unwrap();
+        assert!(old.request_body_b64.is_none());
+        old.restore_request_body();
+    }
+
     #[test]
     fn binary_repeater_response_round_trips() {
         let bytes = vec![b'H', 0xff, 0x00, 0xfe];
@@ -2556,6 +2635,7 @@ mod tests {
             response,
             result_line: String::new(),
             response_b64,
+            request_body_b64: None,
         };
         let back: ProjectRepeater =
             serde_json::from_str(&serde_json::to_string(&tab).unwrap()).unwrap();

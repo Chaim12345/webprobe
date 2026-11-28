@@ -924,6 +924,25 @@ pub fn remember_binary_body(raw: &[u8]) {
     known.push_back((text, body.to_vec()));
 }
 
+/// The remembered bytes of `request`'s body, when its text is the lossy view
+/// of a binary body that was captured. Used to store those bytes with a
+/// saved tab, so they survive a restart.
+pub fn binary_body_of(request: &[u8]) -> Option<Vec<u8>> {
+    let start = body_start(request)?;
+    let text = std::str::from_utf8(&request[start..]).ok()?;
+    if !text.contains('\u{fffd}') {
+        return None;
+    }
+    let known = BINARY_BODIES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    known
+        .iter()
+        .rev()
+        .find(|(t, _)| t == text)
+        .map(|(_, body)| body.clone())
+}
+
 /// `request` (editor text as bytes) with a remembered binary body put back.
 pub fn restore_binary_body(request: &[u8]) -> Vec<u8> {
     let Some(start) = body_start(request) else {

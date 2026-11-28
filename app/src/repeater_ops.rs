@@ -3779,6 +3779,7 @@ mod tests {
             response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
             result_line: "Done".into(),
             response_b64: None,
+            request_body_b64: None,
         };
         let d = crate::project::ProjectData {
             repeaters: vec![
