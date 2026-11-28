@@ -47,6 +47,7 @@ not reported.
 | Cookie manipulation (DOM-based) | 00500b00 | Low | Firm | `document.cookie` setter | - |
 | HTML5 storage manipulation (DOM-based) | 00500f00 | Information | Firm | `localStorage.setItem` name and value, `sessionStorage.setItem` name and value | - |
 | Client-side JSON injection (DOM-based) | 00200370 | Low | Firm; `jQuery.parseJSON` always Tentative | `JSON.parse`, `jQuery.parseJSON` (a `JSON.parse` call nested in it adds no second finding) | - |
+| Local file path manipulation (DOM-based) | 00200350 | High | Firm | `FileSystemDirectoryEntry.getFile`, `FileSystemDirectoryEntry.getDirectory` (reached through `webkitRequestFileSystem`), `FileSystemDirectoryHandle.getFileHandle`, `FileSystemDirectoryHandle.getDirectoryHandle` | the `FileReader.read*` sinks (they take a file object, not a path); Burp reports this type from static analysis only, WebProbe observes the call at run time |
 | Client-side XPath injection (DOM-based) | 00200360 | Low | Firm; `jQuery.parseXML` always Tentative | `document.evaluate`, `jQuery.parseXML` | - |
 | Document domain manipulation (DOM-based) | 00501100 | Medium | Firm | `document.domain` setter | - |
 | HTML5 web message manipulation (DOM-based) | 00500e00 | Information | Firm | `postMessage` (the message argument) | - |

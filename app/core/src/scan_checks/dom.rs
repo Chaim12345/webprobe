@@ -71,6 +71,12 @@ pub(crate) const DOM_STORAGE_MANIPULATION_SINKS: &[&str] = &[
     "sessionStorage.setItem.value",
 ];
 pub(crate) const DOM_JSON_INJECTION_SINKS: &[&str] = &["JSON.parse", "jQuery.parseJSON"];
+pub(crate) const DOM_LOCAL_FILE_PATH_SINKS: &[&str] = &[
+    "FileSystemDirectoryEntry.getFile",
+    "FileSystemDirectoryEntry.getDirectory",
+    "FileSystemDirectoryHandle.getFileHandle",
+    "FileSystemDirectoryHandle.getDirectoryHandle",
+];
 pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] = &["document.evaluate", "jQuery.parseXML"];
 pub(crate) const DOM_DOCUMENT_DOMAIN_SINKS: &[&str] = &["document.domain"];
 pub(crate) const DOM_COOKIE_MANIPULATION_SINKS: &[&str] = &["document.cookie"];
@@ -582,6 +588,18 @@ dom_family_check!(
     "Client-side JSON injection (DOM-based), KB 00200370, Low: JSON.parse and jQuery.parseJSON, burp.Zcwh's client-side JSON injection sinks. Confidence Firm for hash-only non-jQuery sinks (burp.Zwf8.Zd); jQuery.parseJSON is always Tentative (flag 4)."
 );
 dom_family_check!(
+    DomLocalFilePath,
+    "active.dom-local-file-path",
+    "Local file path manipulation (DOM-based)",
+    "Local file path manipulation (reflected DOM-based)",
+    "Local file path manipulation (stored DOM-based)",
+    "high",
+    "Firm",
+    "DOM-based local file path manipulation",
+    DOM_LOCAL_FILE_PATH_SINKS,
+    "Local file path manipulation (DOM-based), KB 00200350, High: the path or name argument of FileSystemDirectoryEntry.getFile / getDirectory (burp.Zeys's root.getFile and root.getDirectory) and of FileSystemDirectoryHandle.getFileHandle / getDirectoryHandle. Burp reports this type from static analysis only; WebProbe observes the call at run time. The FileReader.read* sinks take a file object, not a path, and are not covered."
+);
+dom_family_check!(
     DomXpathInjection,
     "active.dom-xpath-injection",
     "Client-side XPath injection (DOM-based)",
@@ -648,6 +666,7 @@ fn dom_sink_sets_match_the_instrumentation() {
         DOM_AJAX_HEADER_SINKS,
         DOM_STORAGE_MANIPULATION_SINKS,
         DOM_JSON_INJECTION_SINKS,
+        DOM_LOCAL_FILE_PATH_SINKS,
         DOM_XPATH_INJECTION_SINKS,
         DOM_DOCUMENT_DOMAIN_SINKS,
         DOM_COOKIE_MANIPULATION_SINKS,
@@ -723,6 +742,7 @@ fn dom_family_sinks_are_wrapped() {
         ("ajax-header", DOM_AJAX_HEADER_SINKS),
         ("storage", DOM_STORAGE_MANIPULATION_SINKS),
         ("json", DOM_JSON_INJECTION_SINKS),
+        ("local-file-path", DOM_LOCAL_FILE_PATH_SINKS),
         ("xpath", DOM_XPATH_INJECTION_SINKS),
         ("document-domain", DOM_DOCUMENT_DOMAIN_SINKS),
         ("cookie", DOM_COOKIE_MANIPULATION_SINKS),
