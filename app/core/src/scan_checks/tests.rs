@@ -1572,6 +1572,49 @@ try {
     }
 }
 
+/// #242: a jQuery method attached after the library was published, and
+/// called in the same task, is still seen (no wait for the next poll).
+#[test]
+fn dom_jquery_method_attached_late_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/jqlate") {
+            r#"<html><body><script>
+var j = function () { return Object.create(j.fn); };
+j.fn = j.prototype = { attr: function (n, v) { return this; } };
+window.jQuery = j;
+// Same task: the method arrives now and is called at once.
+jQuery.fn.html = function (v) { this.v = v; return this; };
+jQuery().html(decodeURIComponent(location.hash.slice(1)));
+</script></body></html>"#
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/jqlate",
+        format!("GET /jqlate HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)"
+                && s == "high"
+                && c == "Tentative"),
+        "late jQuery.fn.html: {got:?}"
+    );
+}
+
 /// #242: markup handed to the jQuery constructor (the receiver of appendTo
 /// and friends) is a DOM XSS sink. The stand-in jQuery builds objects the
 /// way jQuery does: `new jQuery.fn.init(selector)`.
