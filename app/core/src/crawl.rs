@@ -2405,6 +2405,7 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
   wrapSetter(HTMLInputElement.prototype, "value", "input.value");
   wrapSetter(Document.prototype, "title", "document.title");
   wrapSetter(HTMLScriptElement.prototype, "text", "script.text");
+  wrapSetter(HTMLIFrameElement.prototype, "srcdoc", "iframe.srcdoc");
   wrapSetter(HTMLAnchorElement.prototype, "target", "anchor.target");
   wrapSetter(HTMLFormElement.prototype, "action", "form.action");
   wrapSetter(HTMLAnchorElement.prototype, "href", "anchor.href");
@@ -2496,7 +2497,7 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
     jqWrapStatic(jq, "parseJSON");
     jqWrapStatic(jq, "parseXML");
     if (!jq.fn) { return; }
-    ["html", "append", "prepend", "before", "after", "wrap", "replaceWith"].forEach(function (m) {
+    ["html", "append", "prepend", "before", "after", "wrap", "wrapAll", "wrapInner", "replaceWith"].forEach(function (m) {
       if (!jqWrapped(jq.fn[m])) {
         var orig = jq.fn[m];
         jq.fn[m] = jqTag(function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); });
@@ -3272,7 +3273,7 @@ mod dom_route_tests {
                     break stream;
                 }
             };
-            let body = "<html><head><link rel='icon' href='data:,'></head><script>document.write(window.name);document.body.innerHTML=document.referrer</script></html>";
+            let body = "<html><head><link rel='icon' href='data:,'></head><script>document.write(window.name);document.body.innerHTML=document.referrer;document.createElement('iframe').srcdoc=location.hash</script></html>";
             write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
             drop(stream);
             std::thread::sleep(std::time::Duration::from_millis(700));
@@ -3294,6 +3295,7 @@ mod dom_route_tests {
         for (sink, source) in [
             ("document.write", "window.name"),
             ("element.innerHTML", "document.referrer"),
+            ("iframe.srcdoc", "location.hash"),
         ] {
             assert!(
                 result
