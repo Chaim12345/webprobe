@@ -236,7 +236,9 @@ fn chunked_snapshots_do_not_discard_rows_that_only_exceed_the_combined_cap() {
     too_large.id = 999;
     too_large.request.extend(vec![0; 600_000]);
     input.push(too_large);
-    let out = p.evaluate_chunked(&input, LIMIT).unwrap();
+    let out = p
+        .evaluate_chunked(&input, LIMIT, Duration::from_secs(120))
+        .unwrap();
     assert_eq!(out.rows.len(), 2);
     assert_eq!(out.skipped_ids, vec![999]);
     assert_eq!(out.rows[0].value, Some(serde_json::json!(600_000)));
@@ -423,7 +425,9 @@ fn apply_folds_a_history_snapshot_into_one_verdict_per_row() {
 
     let script = r#"return requestResponse.request().url().contains("/private");"#;
     let program = Program::compile(&java, &api, Kind::Filter, script, LIMIT).unwrap();
-    let outcome = program.apply(Kind::Filter, &snapshot.rows, LIMIT).unwrap();
+    let outcome = program
+        .apply(&snapshot.rows, LIMIT, Duration::from_secs(120))
+        .unwrap();
 
     let verdict = |id: u64| {
         outcome
@@ -468,7 +472,9 @@ fn apply_gives_a_cell_per_row_and_an_error_cell_for_a_throwing_row() {
     let script = r#"if (requestResponse.response().statusCode() == 500) throw new RuntimeException("no server header");
         return requestResponse.response().headerValue("Server");"#;
     let program = Program::compile(&java, &api, Kind::Column, script, LIMIT).unwrap();
-    let outcome = program.apply(Kind::Column, &rows, LIMIT).unwrap();
+    let outcome = program
+        .apply(&rows, LIMIT, Duration::from_secs(120))
+        .unwrap();
     assert_eq!(outcome.cells.len(), 2);
     assert!(
         matches!(&outcome.cells[0], (21, Cell::Text(text)) if text == "fixture"),

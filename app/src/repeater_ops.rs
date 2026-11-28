@@ -2403,10 +2403,9 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
     // R-16: a Bambda filter or custom column for this table. Drawn before the
     // row cache below, so a run that finishes now is reflected in this frame.
     {
-        let bambda_stamp = webprobe_core::bambda_rows::Stamp {
-            rows: history.len(),
-            last_id: history.stamp(),
-        };
+        // The stamp the snapshot itself builds, so an unchanged table never
+        // reads as changed.
+        let bambda_stamp = webprobe_core::bambda_rows::websocket_stamp(history);
         let crate::bambda_ui::State {
             scripts, tables, ..
         } = &mut app.bambdas;
@@ -2448,6 +2447,16 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         );
     }
     let total = st.ws_rows.2.len();
+    if let Some(sel) = st.ws_sel
+        && !history.with_rows(|rows| {
+            st.ws_rows
+                .2
+                .iter()
+                .any(|&i| rows.get(i).is_some_and(|e| e.id == sel))
+        })
+    {
+        st.ws_sel = None;
+    }
     let table_h = (ui.available_height() * 0.5).max(120.0);
     let mut header = vec![
         "#",

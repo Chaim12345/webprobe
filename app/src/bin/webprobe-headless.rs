@@ -9,8 +9,12 @@
 //!         end of standard input). --bambda-filter keeps only the exchanges
 //!         a Bambda VIEW_FILTER script returns true for; --bambda-column
 //!         appends the value of a CUSTOM_COLUMN script as a last field
-//!         (R-16). A script that fails to compile or throws prints its
-//!         error to stderr and the run continues unfiltered.
+//!         (R-16). Each FILE holds the Java statements of one
+//!         `evaluate(...)` body, as the library editor shows them; it is not
+//!         the library's YAML export. A script that fails to compile or
+//!         throws prints its error to stderr and the run continues
+//!         unfiltered. A column value with a tab or a newline is escaped so
+//!         one exchange stays one tab-separated line.
 //!
 //!     webprobe-headless scan URL... [--crawl] [--speed fast|normal|thorough]
 //!                           [--report FILE.html|FILE.xml]
@@ -256,8 +260,10 @@ struct BambdaPrint {
     column: Option<(Program, String)>,
 }
 
-/// Per-batch deadline: the same bound the desktop tables use.
+/// Per-batch deadline: the same bound the desktop tables use. `BAMBDA_TOTAL`
+/// bounds every batch of one print, as it does for one table application.
 const BAMBDA_BATCH: Duration = Duration::from_secs(10);
+const BAMBDA_TOTAL: Duration = Duration::from_secs(60);
 
 fn cell_text(cell: Option<&Cell>) -> String {
     match cell {
@@ -265,6 +271,23 @@ fn cell_text(cell: Option<&Cell>) -> String {
         Some(Cell::Failed(error)) => format!("Error: {error}"),
         None => String::new(),
     }
+}
+
+/// Keep one printed row on one line with one field per column: a script can
+/// return text from a body or a header list, tabs and newlines included.
+fn one_field(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            '\n' => out.push_str("\\n"),
+            c if c.is_control() => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 impl BambdaPrint {
@@ -306,17 +329,22 @@ impl BambdaPrint {
         }
     }
 
-    /// The lines to print for these rows, in order.
+    /// The lines to print for these rows, in order. Every chunk is evaluated
+    /// first: a batch that fails must not leave one print half filtered, and a
+    /// requested column is a field on every line.
     fn render(&mut self, rows: &[net::HistEntry]) -> Vec<String> {
-        let mut out = Vec::new();
+        let mut keep: HashMap<u64, bool> = HashMap::new();
+        let mut cells: HashMap<u64, String> = HashMap::new();
+        let column_wanted = self.column.is_some();
+        let mut filter_failed = false;
+        let mut column_failed = false;
         for chunk in rows.chunks(webprobe_core::bambda::MAX_TABLE_ROWS) {
             let (exchanges, skipped) = webprobe_core::bambda_rows::history_rows(chunk);
             for id in &skipped {
                 eprintln!("bambda: exchange {id} is larger than one batch; printed unfiltered");
             }
-            let mut keep: Option<HashMap<u64, bool>> = None;
             if let Some((program, name)) = self.filter.take() {
-                match program.apply(Kind::Filter, &exchanges, BAMBDA_BATCH) {
+                match program.apply(&exchanges, BAMBDA_BATCH, BAMBDA_TOTAL) {
                     Ok(outcome) => {
                         if outcome.row_errors > 0 {
                             eprintln!(
@@ -324,62 +352,67 @@ impl BambdaPrint {
                                 outcome.row_errors
                             );
                         }
-                        keep = Some(
+                        keep.extend(
                             outcome
                                 .verdicts
                                 .iter()
-                                .map(|(id, verdict)| (*id, *verdict != Verdict::Hide))
-                                .collect(),
+                                .map(|(id, verdict)| (*id, *verdict != Verdict::Hide)),
                         );
                         self.filter = Some((program, name));
                     }
                     Err(e) => {
-                        eprintln!("bambda filter {name} failed: {e}; printing unfiltered")
+                        eprintln!("bambda filter {name} failed: {e}; printing unfiltered");
+                        filter_failed = true;
+                        self.filter = None;
                     }
                 }
             }
-            let mut cells: Option<HashMap<u64, String>> = None;
             if let Some((program, name)) = self.column.take() {
-                match program.apply(Kind::Column, &exchanges, BAMBDA_BATCH) {
+                match program.apply(&exchanges, BAMBDA_BATCH, BAMBDA_TOTAL) {
                     Ok(outcome) => {
                         if outcome.row_errors > 0 {
                             eprintln!("bambda column {name}: {} row error(s)", outcome.row_errors);
                         }
-                        cells = Some(
+                        cells.extend(
                             outcome
                                 .cells
                                 .iter()
-                                .map(|(id, cell)| (*id, cell_text(Some(cell))))
-                                .collect(),
+                                .map(|(id, cell)| (*id, cell_text(Some(cell)))),
                         );
                         self.column = Some((program, name));
                     }
                     Err(e) => {
-                        eprintln!("bambda column {name} failed: {e}; no column from here")
+                        eprintln!("bambda column {name} failed: {e}; no column from here");
+                        column_failed = true;
+                        self.column = None;
                     }
                 }
             }
-            for entry in chunk {
-                if keep
-                    .as_ref()
-                    .is_some_and(|keep| keep.get(&entry.id) == Some(&false))
-                {
-                    continue;
-                }
-                let mut line = format!(
-                    "{}\t{}\t{}\t{}\t{}",
-                    entry.id,
-                    entry.method,
-                    net::history_host(entry),
-                    entry.path,
-                    entry.status
-                );
-                if let Some(cells) = &cells {
-                    line.push('\t');
-                    line.push_str(cells.get(&entry.id).map_or("", String::as_str));
-                }
-                out.push(line);
+        }
+        if filter_failed || column_failed {
+            // A run is all or nothing: no line filtered by one batch and not
+            // the next, no column on some lines and not others.
+            keep.clear();
+            cells.clear();
+        }
+        let mut out = Vec::with_capacity(rows.len());
+        for entry in rows {
+            if keep.get(&entry.id) == Some(&false) {
+                continue;
             }
+            let mut line = format!(
+                "{}\t{}\t{}\t{}\t{}",
+                entry.id,
+                entry.method,
+                net::history_host(entry),
+                entry.path,
+                entry.status
+            );
+            if column_wanted {
+                line.push('\t');
+                line.push_str(&one_field(cells.get(&entry.id).map_or("", String::as_str)));
+            }
+            out.push(line);
         }
         out
     }
@@ -624,6 +657,16 @@ mod tests {
             req_raw: webprobe_core::body::Body::from(&b"GET / HTTP/1.1\r\n\r\n"[..]),
             ..net::HistEntry::default()
         }
+    }
+
+    /// A script can return text that would break the tab-separated record.
+    #[test]
+    fn a_column_value_cannot_add_fields_or_lines() {
+        assert_eq!(one_field("a\tb"), "a\\tb");
+        assert_eq!(one_field("a\r\nb"), "a\\r\\nb");
+        assert_eq!(one_field("back\\slash"), "back\\\\slash");
+        assert_eq!(one_field("bell\u{7}x"), "bell x");
+        assert_eq!(one_field("plain"), "plain");
     }
 
     /// R-16: the two Bambda flags are consumed like every other option, and a

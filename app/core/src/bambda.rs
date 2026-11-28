@@ -310,28 +310,37 @@ impl Program {
 
     /// Compile and run one table snapshot, interpreting the results by kind.
     /// Any failed batch fails the whole application: a table never shows a
-    /// half-evaluated filter.
+    /// half-evaluated filter. `batch` bounds each JVM batch and `total` the
+    /// whole application, so a script that is slow on every row cannot hold a
+    /// worker for minutes.
     pub fn apply(
         &self,
-        kind: Kind,
         rows: &[Exchange],
-        deadline: Duration,
+        batch: Duration,
+        total: Duration,
     ) -> Result<Outcome, Error> {
-        let results = self.evaluate_chunked(rows, deadline)?;
-        Ok(Outcome::interpret(kind, results.rows, results.skipped_ids))
+        let results = self.evaluate_chunked(rows, batch, total)?;
+        Ok(Outcome::interpret(
+            self.kind,
+            results.rows,
+            results.skipped_ids,
+        ))
     }
 
-    /// Evaluate at most five rows / 1 MiB per JVM batch. The deadline is per
-    /// batch; any failed batch returns an error, never a partial success.
-    /// Individually oversized rows are reported explicitly in skipped_ids.
+    /// Evaluate at most five rows / 1 MiB per JVM batch. `deadline` is per
+    /// batch and `total` covers every batch; any failed batch returns an
+    /// error, never a partial success. Individually oversized rows are
+    /// reported explicitly in skipped_ids.
     pub fn evaluate_chunked(
         &self,
         rows: &[Exchange],
         deadline: Duration,
+        total: Duration,
     ) -> Result<ChunkedResults, Error> {
         if rows.len() > 10_000 {
             return Err(Error::Limit("more than 10000 rows"));
         }
+        let started = std::time::Instant::now();
         let mut result = ChunkedResults {
             rows: Vec::new(),
             skipped_ids: Vec::new(),
@@ -349,6 +358,9 @@ impl Program {
                 continue;
             }
             if !batch.is_empty() && (batch.len() == 5 || raw_bytes + size > MAX_RAW_BATCH_BYTES) {
+                if started.elapsed() > total {
+                    return Err(Error::Limit("the total time for one table application"));
+                }
                 result.rows.extend(self.evaluate(&batch, deadline)?);
                 batch.clear();
                 raw_bytes = 0;

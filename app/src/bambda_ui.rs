@@ -161,7 +161,7 @@ impl State {
                         });
                     }
                     let results = program
-                        .evaluate_chunked(&rows, Duration::from_secs(10))
+                        .evaluate_chunked(&rows, Duration::from_secs(10), Duration::from_secs(60))
                         .map_err(|e| e.to_string())?;
                     Ok((results.rows, skipped + results.skipped_ids.len()))
                 })();

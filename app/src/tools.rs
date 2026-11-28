@@ -3262,6 +3262,9 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         net::intercept_release_all(&app.shared, false);
     }
     if content {
+        // R-16: runs are keyed by row id, so another project's verdicts and
+        // column values must not carry over to this project's rows.
+        app.bambdas.tables.reset_all();
         app.shared
             .history
             .replace_all(data.history.iter().map(|h| h.to_entry()));

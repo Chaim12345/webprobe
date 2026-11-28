@@ -48,17 +48,24 @@ fn fits(size: usize) -> bool {
 }
 
 /// One history entry as a Bambda row, or `None` when it does not fit a batch.
+/// The size is measured on the recorded body handles, so a row that cannot be
+/// evaluated is never copied first.
 pub fn history_row(entry: &HistEntry) -> Option<Exchange> {
-    let request = entry.req_raw.to_vec();
-    let response = entry.resp_raw.as_ref().map(|b| b.to_vec());
-    let size = request.len() + response.as_ref().map_or(0, Vec::len) + entry.host.len();
-    fits(size).then(|| Exchange {
+    let size = entry
+        .req_raw
+        .len()
+        .saturating_add(entry.resp_raw.as_ref().map_or(0, |b| b.len()))
+        .saturating_add(entry.host.len());
+    if !fits(size) {
+        return None;
+    }
+    Some(Exchange {
         id: entry.id,
         host: entry.host.clone(),
         port: entry.port,
         secure: entry.https,
-        request,
-        response,
+        request: entry.req_raw.to_vec(),
+        response: entry.resp_raw.as_ref().map(|b| b.to_vec()),
     })
 }
 
@@ -75,50 +82,67 @@ pub fn history_rows(entries: &[HistEntry]) -> (Vec<Exchange>, Vec<u64>) {
     (rows, skipped)
 }
 
-/// Newest `cap` proxy-history rows.
+/// Newest `cap` proxy-history rows. The entries are copied as handles under
+/// the history lock; the byte copies that make them Bambda rows happen after
+/// it is released, so a snapshot never stalls a proxy thread recording traffic.
 pub fn history_snapshot(history: &ProxyHistory, cap: usize) -> Snapshot {
-    history.with_rows(|rows| {
-        let mut snap = Snapshot {
-            stamp: Stamp {
+    let (picked, stamp) = history.with_rows(|rows| {
+        (
+            rows.iter().rev().take(cap).cloned().collect::<Vec<_>>(),
+            Stamp {
                 rows: rows.len(),
                 last_id: rows.last().map(|e| e.id).unwrap_or(0),
             },
-            ..Snapshot::default()
-        };
-        for entry in rows.iter().rev().take(cap) {
-            match history_row(entry) {
-                Some(row) => snap.rows.push(row),
-                None => snap.skipped.push(entry.id),
-            }
+        )
+    });
+    snapshot_of(picked, stamp)
+}
+
+fn snapshot_of(entries: Vec<HistEntry>, stamp: Stamp) -> Snapshot {
+    let mut snap = Snapshot {
+        stamp,
+        ..Snapshot::default()
+    };
+    for entry in &entries {
+        match history_row(entry) {
+            Some(row) => snap.rows.push(row),
+            None => snap.skipped.push(entry.id),
         }
-        snap
-    })
+    }
+    snap
 }
 
 fn log_row(entry: &LogEntry, history: &ProxyHistory) -> Option<Exchange> {
     // Proxy rows keep their messages in the history; tool rows carry their own.
     let mirrored = entry.hist_id.and_then(|id| history.get(id));
-    let request = match (&entry.request, mirrored.as_ref().map(|h| &h.req_raw)) {
-        (Some(bytes), _) => bytes.to_vec(),
-        (None, Some(bytes)) => bytes.to_vec(),
+    let request: &[u8] = match (&entry.request, mirrored.as_ref().map(|h| &h.req_raw)) {
+        (Some(bytes), _) => bytes,
+        (None, Some(bytes)) => bytes,
         (None, None) => return None,
     };
-    let response = match (
+    let response: Option<&[u8]> = match (
         &entry.response,
         mirrored.as_ref().and_then(|h| h.resp_raw.as_ref()),
     ) {
-        (Some(bytes), _) => Some(bytes.to_vec()),
-        (None, Some(bytes)) => Some(bytes.to_vec()),
+        (Some(bytes), _) => Some(bytes),
+        (None, Some(bytes)) => Some(bytes),
         (None, None) => None,
     };
-    let size = request.len() + response.as_ref().map_or(0, Vec::len) + entry.host.len();
-    fits(size).then(|| Exchange {
+    let size = request
+        .len()
+        .saturating_add(response.map_or(0, |b| b.len()))
+        .saturating_add(entry.host.len());
+    if !fits(size) {
+        return None;
+    }
+    Some(Exchange {
         id: entry.id,
         host: entry.host.clone(),
         port: entry.port,
-        secure: entry.https,
-        request,
-        response,
+        // A mirrored proxy row knows its scheme; a Logger row does not.
+        secure: mirrored.as_ref().map_or(entry.https, |h| h.https),
+        request: request.to_vec(),
+        response: response.map(|b| b.to_vec()),
     })
 }
 
@@ -149,26 +173,38 @@ fn header_safe(text: &str) -> String {
     text.replace(['\r', '\n'], " ")
 }
 
-/// The synthetic request a WebSocket message is shown to a script as.
-pub fn websocket_request(entry: &WsEntry) -> Vec<u8> {
-    let payload = entry.payload.as_ref();
-    let head = format!(
+fn websocket_head(entry: &WsEntry) -> String {
+    format!(
         "POST /websocket HTTP/1.1\r\nHost: {}\r\nX-Webprobe-Direction: {}\r\nX-Webprobe-Opcode: {}\r\nContent-Length: {}\r\n\r\n",
         header_safe(&entry.host),
         header_safe(&entry.direction),
         header_safe(&entry.opcode),
-        payload.len()
-    );
-    let mut out = Vec::with_capacity(head.len() + payload.len());
+        entry.payload.len()
+    )
+}
+
+/// The synthetic request a WebSocket message is shown to a script as.
+pub fn websocket_request(entry: &WsEntry) -> Vec<u8> {
+    let head = websocket_head(entry);
+    let mut out = Vec::with_capacity(head.len() + entry.payload.len());
     out.extend_from_slice(head.as_bytes());
-    out.extend_from_slice(payload);
+    out.extend_from_slice(&entry.payload);
     out
 }
 
 fn websocket_row(entry: &WsEntry) -> Option<Exchange> {
-    let request = websocket_request(entry);
-    let size = request.len() + entry.host.len();
-    fits(size).then(|| Exchange {
+    let head = websocket_head(entry);
+    let size = head
+        .len()
+        .saturating_add(entry.payload.len())
+        .saturating_add(entry.host.len());
+    if !fits(size) {
+        return None;
+    }
+    let mut request = Vec::with_capacity(head.len() + entry.payload.len());
+    request.extend_from_slice(head.as_bytes());
+    request.extend_from_slice(&entry.payload);
+    Some(Exchange {
         id: entry.id,
         host: entry.host.clone(),
         // A message has no origin of its own; the connection upgrade did.
@@ -179,24 +215,43 @@ fn websocket_row(entry: &WsEntry) -> Option<Exchange> {
     })
 }
 
-/// Newest `cap` WebSocket messages.
+/// What the WebSockets table compares a run against. Both the view and the
+/// snapshot use this, so a run does not report a change that is not one.
+pub fn websocket_stamp(history: &WsHistory) -> Stamp {
+    history.with_rows(|rows| Stamp {
+        rows: rows.len(),
+        last_id: rows.last().map(|e| e.id).unwrap_or(0),
+    })
+}
+
+/// Newest `cap` WebSocket messages. Handshake rows are left out before the cap,
+/// as the table leaves them out: a filter covers the messages on screen.
 pub fn websocket_snapshot(history: &WsHistory, cap: usize) -> Snapshot {
-    history.with_rows(|rows| {
-        let mut snap = Snapshot {
-            stamp: Stamp {
+    let (picked, stamp) = history.with_rows(|rows| {
+        (
+            rows.iter()
+                .rev()
+                .filter(|e| e.direction != "handshake")
+                .take(cap)
+                .cloned()
+                .collect::<Vec<_>>(),
+            Stamp {
                 rows: rows.len(),
                 last_id: rows.last().map(|e| e.id).unwrap_or(0),
             },
-            ..Snapshot::default()
-        };
-        for entry in rows.iter().rev().take(cap) {
-            match websocket_row(entry) {
-                Some(row) => snap.rows.push(row),
-                None => snap.skipped.push(entry.id),
-            }
+        )
+    });
+    let mut snap = Snapshot {
+        stamp,
+        ..Snapshot::default()
+    };
+    for entry in &picked {
+        match websocket_row(entry) {
+            Some(row) => snap.rows.push(row),
+            None => snap.skipped.push(entry.id),
         }
-        snap
-    })
+    }
+    snap
 }
 
 #[cfg(test)]
@@ -341,6 +396,69 @@ mod tests {
             &snap.rows[1].request[binary.head_len..],
             &[0xff, 0x00, b'x']
         );
+    }
+
+    #[test]
+    fn handshakes_do_not_take_a_websocket_filter_slot() {
+        let ws = WsHistory::new();
+        for id in 1..=3 {
+            ws.push(ws_entry(id, "handshake", "text", b""));
+        }
+        ws.push(ws_entry(4, "client -> server", "text", b"one"));
+        ws.push(ws_entry(5, "server -> client", "text", b"two"));
+        // Room for two candidates: without skipping handshakes first, the two
+        // messages on screen would not be the two rows evaluated.
+        let snap = websocket_snapshot(&ws, 2);
+        let ids: Vec<u64> = snap.rows.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![5, 4]);
+    }
+
+    #[test]
+    fn the_websocket_stamp_is_the_one_the_snapshot_reports() {
+        let ws = WsHistory::new();
+        ws.push(ws_entry(7, "client -> server", "text", b"x"));
+        assert_eq!(websocket_stamp(&ws), websocket_snapshot(&ws, 10).stamp);
+    }
+
+    #[test]
+    fn a_mirrored_logger_row_keeps_the_recorded_scheme() {
+        let history = ProxyHistory::default();
+        history.push(history_entry(3, b"GET / HTTP/1.1\r\n\r\n", None));
+        let mut log = Logger::new(10);
+        log.push(LogEntry {
+            hist_id: Some(3),
+            host: "example.test".into(),
+            ..LogEntry::default()
+        });
+        let snap = log_snapshot(&log, &history, 10);
+        assert!(snap.rows[0].secure, "the proxy row was recorded over TLS");
+    }
+
+    #[test]
+    fn an_oversized_logger_or_websocket_row_is_skipped_not_failed() {
+        let history = ProxyHistory::default();
+        let mut log = Logger::new(10);
+        let big: std::sync::Arc<[u8]> = std::sync::Arc::from(vec![b'a'; MAX_RAW_BATCH_BYTES + 1]);
+        log.push(LogEntry {
+            tool: "Repeater".into(),
+            host: "tool.test".into(),
+            request: Some(big),
+            ..LogEntry::default()
+        });
+        let snap = log_snapshot(&log, &history, 10);
+        assert!(snap.rows.is_empty());
+        assert_eq!(snap.skipped.len(), 1);
+
+        let ws = WsHistory::new();
+        ws.push(ws_entry(
+            1,
+            "client -> server",
+            "binary",
+            &vec![0u8; MAX_RAW_BATCH_BYTES + 1],
+        ));
+        let snap = websocket_snapshot(&ws, 10);
+        assert!(snap.rows.is_empty());
+        assert_eq!(snap.skipped, vec![1]);
     }
 
     #[test]

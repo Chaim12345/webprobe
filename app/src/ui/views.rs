@@ -511,6 +511,9 @@ pub(crate) const LOGGER_MENU: &[(&str, &str)] = &[
 pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
     // Burp's Logger (live 52685): a capture-filter bar with the "Logging on"
     // switch, then the log table and the message panes.
+    // R-16: publish a finished Bambda run before anything reads its verdicts,
+    // so the export below cannot use the run before this one.
+    app.bambdas.tables.logger.poll();
     ui.horizontal(|ui| {
         let w = (ui.available_width() - 395.0).max(200.0);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::hover());
@@ -596,6 +599,13 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         .filter(|e| app.bambdas.tables.logger.keeps(e.id))
         .cloned()
         .collect();
+    // A row the run hides must not stay selected: the panes below it would
+    // keep showing a row the table no longer lists.
+    if let Some(sel) = app.log_sel
+        && !rows.iter().any(|r| r.id == sel)
+    {
+        app.log_sel = None;
+    }
     if rows.is_empty() {
         if !app.logger.is_empty() {
             // Filtered out, not empty: the log still holds rows.

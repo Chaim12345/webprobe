@@ -20,6 +20,10 @@ use webprobe_core::bambda_rows::{Snapshot, Stamp};
 
 const COMPILE_DEADLINE: Duration = Duration::from_secs(15);
 const BATCH_DEADLINE: Duration = Duration::from_secs(10);
+/// One application covers at most `MAX_TABLE_ROWS` rows, five per batch, so a
+/// per-batch deadline alone would let a uniformly slow script hold the worker
+/// for minutes. The whole run gets this instead.
+const TOTAL_DEADLINE: Duration = Duration::from_secs(60);
 
 /// A run publishes a distinct version, so a view can key its row cache on it.
 static NEXT_VERSION: AtomicU64 = AtomicU64::new(1);
@@ -116,6 +120,10 @@ impl Applied {
 /// last diagnostic, and the run in flight.
 pub struct Slot {
     pub choice: Option<Choice>,
+    /// The user acknowledged that this script runs with their files and
+    /// network, as the library requires before a preview. Cleared whenever the
+    /// picture of what will run changes.
+    pub trusted: bool,
     applied: Option<Arc<Applied>>,
     /// Last failure. A later success clears it; the previous run stays applied.
     pub error: Option<String>,
@@ -129,6 +137,7 @@ impl Default for Slot {
     fn default() -> Self {
         Self {
             choice: None,
+            trusted: false,
             applied: None,
             error: None,
             busy: false,
@@ -153,6 +162,42 @@ impl Slot {
         self.cancel();
         self.applied = None;
         self.error = None;
+        self.trusted = false;
+    }
+
+    /// The user picked another script: what Apply would run changed, so the
+    /// acknowledgement and the last diagnostic no longer apply. The run on
+    /// screen stays until a replacement succeeds.
+    fn repicked(&mut self) {
+        self.trusted = false;
+        self.error = None;
+    }
+
+    /// Re-read the chosen script from the library as it is now. A script saved
+    /// again after it was picked must run its current source, and one deleted
+    /// or turned into the other function must not run at all.
+    fn refresh(&mut self, scripts: &[Script]) -> bool {
+        let Some(choice) = self.choice.as_ref() else {
+            return true;
+        };
+        let Some(script) = scripts.iter().find(|s| s.id == choice.id) else {
+            self.error = Some(format!(
+                "\"{}\": that script is no longer in the Bambda library. Pick it again or pick another.",
+                choice.name
+            ));
+            return false;
+        };
+        if script.function != choice.function {
+            self.error = Some(format!(
+                "\"{}\" is now a {}; this picker runs a {}. Pick another script.",
+                choice.name,
+                script.function.label(),
+                choice.function.label()
+            ));
+            return false;
+        }
+        self.choice = Some(Choice::of(script));
+        true
     }
 
     /// Stop the run in flight and wait for its worker. Cancellation is checked
@@ -251,7 +296,7 @@ fn run(
     }
     let program = compile(choice, cancelled)?;
     let mut outcome = program
-        .apply(kind, &snapshot.rows, BATCH_DEADLINE)
+        .apply(&snapshot.rows, BATCH_DEADLINE, TOTAL_DEADLINE)
         .map_err(|e| e.to_string())?;
     outcome.skipped.extend(snapshot.skipped.iter().copied());
     Ok(outcome)
@@ -323,6 +368,18 @@ pub struct Tables {
     pub websocket: TableApply,
 }
 
+impl Tables {
+    /// Forget every run. Results are keyed by row id, and a project's rows are
+    /// not another project's rows: a loaded project must never inherit a
+    /// verdict or a column value for a row that happens to carry the same id.
+    pub fn reset_all(&mut self) {
+        for table in [&mut self.history, &mut self.logger, &mut self.websocket] {
+            table.filter.reset();
+            table.column.reset();
+        }
+    }
+}
+
 /// The one-line Bambda control under a table's own filter bar. `snapshot` is
 /// called only when the user presses Apply.
 pub fn bar(
@@ -336,14 +393,14 @@ pub fn bar(
     apply.poll();
     let mut snapshot = Some(snapshot);
     let mut run = false;
-    let mut reset = [false; 2];
+    let mut picked = [Pick::Unchanged; 2];
     ui.horizontal_wrapped(|ui| {
         ui.label(
             RichText::new(format!("Bambda ({}):", table.label()))
                 .size(12.0)
                 .color(crate::theme::ink_dim()),
         );
-        reset[0] = picker(
+        picked[0] = picker(
             ui,
             ("bambda_filter_pick", table),
             &mut apply.filter.choice,
@@ -351,7 +408,7 @@ pub fn bar(
             Function::ViewFilter,
             "Filter: none",
         );
-        reset[1] = picker(
+        picked[1] = picker(
             ui,
             ("bambda_column_pick", table),
             &mut apply.column.choice,
@@ -359,11 +416,26 @@ pub fn bar(
             Function::CustomColumn,
             "Column: none",
         );
-        let chosen = apply.filter.choice.is_some() || apply.column.choice.is_some();
+        // The library asks for this before it compiles a preview; a table run
+        // executes the same code, so it asks once per selected script.
+        for slot in [&mut apply.filter, &mut apply.column] {
+            if slot.choice.is_some() {
+                ui.checkbox(&mut slot.trusted, "trusted")
+                    .on_hover_text(
+                        "Bambda code runs with your files and network. Tick to allow this script to run.",
+                    );
+            }
+        }
+        let wanted = [&apply.filter, &apply.column]
+            .into_iter()
+            .filter(|slot| slot.choice.is_some())
+            .collect::<Vec<_>>();
+        let chosen = !wanted.is_empty();
+        let trusted = wanted.iter().all(|slot| slot.trusted);
         let busy = apply.filter.busy() || apply.column.busy();
         if ui
             .add_enabled(
-                chosen && !busy,
+                chosen && trusted && !busy,
                 egui::Button::new(if busy { "Applying\u{2026}" } else { "Apply" }),
             )
             .on_hover_text(
@@ -394,29 +466,47 @@ pub fn bar(
             );
         }
     });
-    if reset[0] {
-        apply.filter.reset();
-    }
-    if reset[1] {
-        apply.column.reset();
+    for (pick, slot) in picked
+        .into_iter()
+        .zip([&mut apply.filter, &mut apply.column])
+    {
+        match pick {
+            // An explicit "none" is the way to take a run off a table.
+            Pick::None => slot.reset(),
+            Pick::Script => slot.repicked(),
+            Pick::Unchanged => {}
+        }
     }
     // Only a bar the user pressed Apply in produces a snapshot: a table that
     // merely displays a run never pays for one.
     if run && let Some(make_snapshot) = snapshot.take() {
+        // Resolve the picked scripts against the library as it is now, so a
+        // script saved again runs its new source and a deleted one is reported.
+        let filter_ready = apply.filter.refresh(scripts);
+        let column_ready = apply.column.refresh(scripts);
         let snapshot = make_snapshot();
         let ctx = ui.ctx().clone();
-        if apply.filter.choice.is_some() {
+        if filter_ready && apply.filter.choice.is_some() {
             apply.filter.start(table, snapshot.clone(), ctx.clone());
         }
-        if apply.column.choice.is_some() {
+        if column_ready && apply.column.choice.is_some() {
             apply.column.start(table, snapshot, ctx);
         }
     }
     summary(ui, apply, current);
 }
 
-/// A "none / saved scripts of this function" picker. Returns true when the
-/// choice changed.
+/// What the user did with a picker.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Pick {
+    Unchanged,
+    /// "none" was chosen: the table goes back to unfiltered.
+    None,
+    /// Another script was chosen: the run on screen stays until Apply.
+    Script,
+}
+
+/// A "none / saved scripts of this function" picker.
 fn picker(
     ui: &mut Ui,
     id: (&'static str, Table),
@@ -424,8 +514,8 @@ fn picker(
     scripts: &[Script],
     function: Function,
     none_text: &str,
-) -> bool {
-    let mut changed = false;
+) -> Pick {
+    let mut pick = Pick::Unchanged;
     let selected = choice
         .as_ref()
         .map_or_else(|| none_text.to_string(), |c| c.name.clone());
@@ -435,17 +525,17 @@ fn picker(
         .show_ui(ui, |ui| {
             if ui.selectable_label(choice.is_none(), none_text).clicked() {
                 *choice = None;
-                changed = true;
+                pick = Pick::None;
             }
             for script in scripts.iter().filter(|s| s.function == function) {
-                let picked = choice.as_ref().is_some_and(|c| c.id == script.id);
-                if ui.selectable_label(picked, &script.name).clicked() {
+                let selected = choice.as_ref().is_some_and(|c| c.id == script.id);
+                if ui.selectable_label(selected, &script.name).clicked() {
                     *choice = Some(Choice::of(script));
-                    changed = true;
+                    pick = Pick::Script;
                 }
             }
         });
-    changed
+    pick
 }
 
 fn summary(ui: &mut Ui, apply: &TableApply, current: Stamp) {
@@ -484,13 +574,18 @@ fn summary(ui: &mut Ui, apply: &TableApply, current: Stamp) {
             continue;
         };
         if applied.stamp != current {
+            // A table at its retention cap replaces rows without growing, so
+            // the difference can be zero while rows were replaced.
             let newer = current.rows.saturating_sub(applied.stamp.rows);
+            let text = if newer > 0 {
+                format!("{newer} row(s) changed since this run; Apply again to include them")
+            } else {
+                "The table changed since this run; Apply again to include it".to_string()
+            };
             ui.label(
-                RichText::new(format!(
-                    "{newer} row(s) changed since this run; Apply again to include them",
-                ))
-                .size(12.0)
-                .color(crate::theme::ink_hint()),
+                RichText::new(text)
+                    .size(12.0)
+                    .color(crate::theme::ink_hint()),
             );
             break;
         }
@@ -599,6 +694,93 @@ mod tests {
         slot.publish(Ok(filter_run(&[1], &[], 4)));
         assert!(slot.error.is_none());
         assert!(!slot.applied().unwrap().keeps(1));
+    }
+
+    fn script(id: &str, function: Function, source: &str) -> Script {
+        Script {
+            id: id.into(),
+            name: format!("script {id}"),
+            function,
+            location: webprobe_core::bambda_library::Location::ProxyHttpHistory,
+            source: source.into(),
+        }
+    }
+
+    #[test]
+    fn applying_runs_the_library_text_not_the_text_that_was_picked() {
+        let mut slot = Slot::default();
+        slot.choice = Some(Choice::of(&script(
+            "a",
+            Function::ViewFilter,
+            "return true;",
+        )));
+        // Saved again with a fix after it was picked.
+        let saved = [script("a", Function::ViewFilter, "return false;")];
+        assert!(slot.refresh(&saved));
+        assert_eq!(slot.choice.as_ref().unwrap().source, "return false;");
+        assert!(slot.error.is_none());
+    }
+
+    #[test]
+    fn a_deleted_or_retyped_script_is_reported_instead_of_run() {
+        let mut slot = Slot::default();
+        slot.choice = Some(Choice::of(&script(
+            "a",
+            Function::ViewFilter,
+            "return true;",
+        )));
+        assert!(!slot.refresh(&[]), "a deleted script must not run");
+        assert!(
+            slot.error
+                .as_deref()
+                .unwrap()
+                .contains("no longer in the Bambda"),
+            "{:?}",
+            slot.error
+        );
+        assert!(slot.applied().is_none(), "nothing ran");
+
+        slot.error = None;
+        let saved = [script("a", Function::CustomColumn, "return \"x\";")];
+        assert!(
+            !slot.refresh(&saved),
+            "the other function must not run here"
+        );
+        assert!(slot.error.as_deref().unwrap().contains("is now a Custom"));
+    }
+
+    #[test]
+    fn picking_another_script_keeps_the_run_but_asks_for_trust_again() {
+        let mut slot = Slot::default();
+        slot.applied = Some(Arc::new(filter_run(&[2], &[], 4)));
+        slot.trusted = true;
+        slot.error = Some("old diagnostic".into());
+        slot.repicked();
+        assert!(!slot.trusted, "another script is not the one trusted");
+        assert!(slot.error.is_none());
+        assert!(!slot.applied().unwrap().keeps(2), "the run stays on screen");
+    }
+
+    #[test]
+    fn resetting_every_table_forgets_all_six_runs() {
+        let mut tables = Tables::default();
+        for apply in [
+            &mut tables.history,
+            &mut tables.logger,
+            &mut tables.websocket,
+        ] {
+            apply.filter.applied = Some(Arc::new(filter_run(&[1], &[], 2)));
+            apply.column.applied = Some(Arc::new(applied(
+                Kind::Column,
+                Stamp::default(),
+                Outcome::default(),
+            )));
+        }
+        tables.reset_all();
+        for apply in [&tables.history, &tables.logger, &tables.websocket] {
+            assert!(apply.filter.applied().is_none());
+            assert!(apply.column.applied().is_none());
+        }
     }
 
     #[test]
