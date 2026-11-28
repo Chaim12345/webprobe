@@ -707,7 +707,37 @@ final class Engine {
          .on("registerScanCheck", a -> reg(LEGACY, (ScanCheck) a[0]))
          .on("registerInsertionPointProvider", a -> reg(POINT_PROVIDERS, (AuditInsertionPointProvider) a[0]))
          .on("registerAuditIssueHandler", a -> issueHandler((burp.api.montoya.scanner.audit.AuditIssueHandler) a[0]))
+         .on("startCrawl", a -> startCrawl((burp.api.montoya.scanner.CrawlConfiguration) a[0]))
          .on("generateReport", a -> { report((List<AuditIssue>) a[0], String.valueOf(a[1]), (java.nio.file.Path) a[2]); return null; });
+    }
+
+    /** Scanner.startCrawl: WebProbe crawls the seed URLs in the background
+     *  (crawl only, no audit) and adds what it finds to the site map.
+     *  requestCount is the number of items found so far; errorCount is
+     *  always 0 (the crawler does not report failed requests); delete
+     *  forgets the task, it does not stop a crawl that is running. */
+    @SuppressWarnings("unchecked")
+    static Object startCrawl(burp.api.montoya.scanner.CrawlConfiguration cfg) {
+        StringBuilder urls = new StringBuilder("{\"urls\":[");
+        List<String> seeds = cfg.seedUrls();
+        for (int i = 0; i < seeds.size(); i++) urls.append(i > 0 ? "," : "").append(Wire.Json.esc(seeds.get(i)));
+        long id = (long) Wire.num(Wire.call("scanner.start-crawl", urls.append("]}").toString()));
+        String key = "{\"id\":" + id + "}";
+        java.util.function.Supplier<Map<String, Object>> status = () -> {
+            Object r = Wire.call("scanner.crawl-status", key);
+            return r instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+        };
+        return Api.obj()
+                .on("requestCount", a -> (int) Wire.num(status.get().get("items")))
+                .on("errorCount", a -> 0)
+                .on("statusMessage", a -> {
+                    Map<String, Object> s = status.get();
+                    if (Boolean.TRUE.equals(s.get("deleted"))) return "Deleted";
+                    return Boolean.TRUE.equals(s.get("done")) ? "Crawl finished" : "Crawling";
+                })
+                .on("delete", a -> Wire.call("scanner.crawl-delete", key))
+                .text("Crawl " + id)
+                .as(burp.api.montoya.scanner.Crawl.class);
     }
 
     private static String xmlText(String s) {
