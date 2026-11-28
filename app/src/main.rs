@@ -1211,12 +1211,10 @@ fn main() {
         }
     }
 
-    // The scanner registers its hooks so net's live crawl / passive audit
-    // work without net naming scan (issue #38).
-    webprobe_core::scan::register_scan_hooks();
-    webprobe_core::scan::register_task_ops();
-    webprobe_core::scan::register_type_checks();
-    webprobe_core::headless::register_browser_crawl();
+    // One registration call for every seam between the engine and this
+    // front end (AR-10): scanner hooks, task operations, check catalogue and
+    // the browser crawl driver.
+    webprobe_core::register_runtime();
     let shared = net::Shared::new();
     if let Some(p) = std::env::var("WEBPROBE_PORT")
         .ok()

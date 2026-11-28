@@ -170,26 +170,22 @@ pub fn check_catalogue() -> Vec<(&'static str, &'static str, &'static str)> {
         checks::STORED_INPUT_ISSUE,
         SCOPE_POINT,
     )];
-    v.extend(
-        checks::POINT_CHECKS
-            .iter()
-            .map(|c| (c.id(), c.issue(), SCOPE_POINT)),
-    );
-    v.extend(
-        checks::STORED_CHECKS
-            .iter()
-            .map(|c| (c.id(), c.issue(), SCOPE_POINT)),
-    );
-    v.extend(
-        checks::REQUEST_CHECKS
-            .iter()
-            .map(|c| (c.id(), c.issue(), SCOPE_REQUEST)),
-    );
-    v.extend(
-        passive_checks::PASSIVE_CHECKS
-            .iter()
-            .map(|c| (c.id, c.issue, SCOPE_PASSIVE)),
-    );
+    v.extend(checks::POINT_CHECKS.iter().map(|c| {
+        let m = c.meta();
+        (m.id, m.issue, SCOPE_POINT)
+    }));
+    v.extend(checks::STORED_CHECKS.iter().map(|c| {
+        let m = c.meta();
+        (m.id, m.issue, SCOPE_POINT)
+    }));
+    v.extend(checks::REQUEST_CHECKS.iter().map(|c| {
+        let m = c.meta();
+        (m.id, m.issue, SCOPE_REQUEST)
+    }));
+    v.extend(passive_checks::PASSIVE_CHECKS.iter().map(|c| {
+        let m = c.meta();
+        (m.id, m.issue, SCOPE_PASSIVE)
+    }));
     v
 }
 

@@ -481,9 +481,10 @@ pub(crate) fn scan_config_editor(
             .color(theme::ink()),
     );
     ui.horizontal_wrapped(|ui| {
-        for (key, label) in crate::scan_config::INSERTION_TYPES {
+        for t in &crate::scan_config::INSERTION_TYPES {
+            let key = t.key;
             let mut on = config.insertion_enabled(key);
-            if ui.checkbox(&mut on, label).changed() {
+            if ui.checkbox(&mut on, t.label).changed() {
                 if on {
                     config.disabled_insertion.remove(key);
                 } else {

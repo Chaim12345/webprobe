@@ -697,7 +697,10 @@ fn passive_checks_are_registered_and_switchable() {
         "passive.jwt-weak-hmac-secret",
         "passive.jwt-private-key-disclosed",
     ] {
-        assert!(PASSIVE_CHECKS.iter().any(|c| c.id == id), "{id} registered");
+        assert!(
+            PASSIVE_CHECKS.iter().any(|c| c.id() == id),
+            "{id} registered"
+        );
         assert!(
             crate::scan::check_catalogue().iter().any(|c| c.0 == id),
             "{id} in the scan configuration catalogue"

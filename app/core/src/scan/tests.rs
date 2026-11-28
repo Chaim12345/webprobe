@@ -1727,9 +1727,15 @@ fn has(v: &[ScanIssue], c: CheckDef) -> bool {
 }
 
 #[test]
-fn check_library_has_unique_stable_ids() {
+fn check_library_is_derived_from_the_registry() {
     let lib = check_library();
-    assert_eq!(lib.len(), 35);
+    // AR-10: the catalogue is the registry, not a second hand-kept list.
+    assert_eq!(
+        lib.len(),
+        passive_checks::PASSIVE_CHECKS.len(),
+        "one catalogue entry per registered unit"
+    );
+
     let mut ids = std::collections::BTreeSet::new();
     for c in lib {
         assert!(c.id.starts_with("passive."), "{}", c.id);
@@ -1745,7 +1751,14 @@ fn check_library_has_unique_stable_ids() {
             "{}",
             c.confidence
         );
+        let meta = c.meta();
+        assert_eq!((meta.id, meta.issue), (c.id, c.name));
+        assert_eq!(meta.severity.map(Severity::as_str), Some(c.sev));
+        assert_eq!(meta.confidence.map(Confidence::as_str), Some(c.confidence));
     }
+    assert!(ids.contains("passive.hsts-missing"));
+    assert!(ids.contains("passive.csp-not-enforced"));
+    assert!(ids.contains("passive.vulnerable-js-dependency"));
 }
 
 #[test]

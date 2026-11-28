@@ -458,6 +458,40 @@ fn registry_order_is_pinned() {
     );
 }
 
+/// AR-10 / F14: every check kind exposes the same metadata record, and a
+/// check id is unique across all four registries (the scan configuration
+/// switches and exports key on it).
+#[test]
+fn every_check_kind_exposes_one_meta_record() {
+    fn record(ids: &mut std::collections::BTreeSet<&'static str>, m: CheckMeta) {
+        assert!(!m.id.is_empty());
+        assert!(!m.issue.is_empty());
+        assert!(
+            ids.insert(m.id),
+            "duplicate check id {} across registries",
+            m.id
+        );
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    for c in POINT_CHECKS {
+        record(&mut ids, c.meta());
+    }
+    for c in REQUEST_CHECKS {
+        record(&mut ids, c.meta());
+    }
+    for c in STORED_CHECKS {
+        record(&mut ids, c.meta());
+    }
+    for c in crate::scan::passive_checks::PASSIVE_CHECKS {
+        let m = c.meta();
+        assert!(m.severity.is_some(), "{} needs a severity", m.id);
+        assert!(m.confidence.is_some(), "{} needs a confidence", m.id);
+        record(&mut ids, m);
+    }
+    assert!(ids.contains("active.xss-reflected"));
+    assert!(ids.contains("passive.hsts-missing"));
+}
+
 /// A check that ports a Burp check names Burp's issue, so its issues
 /// get Burp's type id; WebProbe's own probes name theirs and get 0.
 #[test]

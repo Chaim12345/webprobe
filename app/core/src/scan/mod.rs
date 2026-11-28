@@ -26,14 +26,20 @@ pub(crate) mod insertion;
 /// Content security policy issues (burp.Zxr9 / Zupz / Zifp).
 #[path = "../passive_pack.rs"]
 pub(crate) mod pack;
-/// Passive checks, one registered unit each (R-04).
+/// Passive checks, one registered unit each (R-04), and the metadata
+/// catalogue derived from that registry.
 #[path = "../passive_checks.rs"]
 pub(crate) mod passive_checks;
+pub use passive_checks::check_library;
 #[path = "../retirejs.rs"]
 pub(crate) mod retirejs;
 
 mod passive_library;
 pub use passive_library::*;
+
+/// The one metadata record every check registry exposes (AR-10 / F14).
+mod registry;
+pub use registry::*;
 
 mod issue_types;
 pub(crate) use issue_types::mk_point;
