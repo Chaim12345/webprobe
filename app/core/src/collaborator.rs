@@ -537,7 +537,9 @@ pub struct CollaboratorState {
     /// enabled. Payloads then resolve on the internet like Burp's.
     remote: Option<RemoteCollaborator>,
     /// A registration running in the background (`start_remote_in_background`).
-    registering: Option<std::sync::mpsc::Receiver<Result<RegisteredSession, String>>>,
+    registering: Option<
+        std::sync::mpsc::Receiver<Result<RegisteredSession, crate::interactsh::RegisterError>>,
+    >,
     /// Server chosen in the UI for the next `start_remote`: a public
     /// default or a private `host[:port]`.
     pub remote_choice: String,
@@ -741,12 +743,16 @@ impl CollaboratorState {
 
     /// The outcome of a background registration once it is known: the
     /// payload domain, or the error. Cheap to call every frame.
-    pub fn finish_registration(&mut self) -> Option<Result<String, String>> {
+    pub fn finish_registration(
+        &mut self,
+    ) -> Option<Result<String, crate::interactsh::RegisterError>> {
         let outcome = match self.registering.as_ref()?.try_recv() {
             Ok(r) => r,
             Err(std::sync::mpsc::TryRecvError::Empty) => return None,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                Err("registration thread ended without a result".into())
+                Err(crate::interactsh::RegisterError::Transport(
+                    "registration thread ended without a result".into(),
+                ))
             }
         };
         self.registering = None;
@@ -1696,7 +1702,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         };
         assert!(
-            outcome.unwrap_err().contains("connect"),
+            outcome.unwrap_err().to_string().contains("connect"),
             "a refused port is reported"
         );
         assert!(!st.is_registering() && st.remote_server().is_none());
