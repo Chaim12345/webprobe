@@ -197,6 +197,12 @@ final class Ui {
                 .on("createHttpRequestEditor", a -> TextEditor.create(burp.api.montoya.ui.editor.HttpRequestEditor.class, a))
                 .on("createHttpResponseEditor", a -> TextEditor.create(burp.api.montoya.ui.editor.HttpResponseEditor.class, a))
                 .on("createWebSocketMessageEditor", a -> TextEditor.create(burp.api.montoya.ui.editor.WebSocketMessageEditor.class, a))
+                // Accepted so the extension loads, but never fired: WebProbe
+                // does not bind extension hotkeys. Said once per extension.
+                .on("registerHotKeyHandler", a -> {
+                    if (Api.REPORTED.add("hotkeys are not bound")) Logs.output("This extension registered a hotkey. WebProbe accepts the registration but does not bind extension hotkeys, so it will not fire.");
+                    return Api.registration(() -> { });
+                })
                 .on("applyThemeToComponent", a -> null)
                 .on("currentTheme", a -> Theme.LIGHT)
                 .on("currentEditorFont", a -> new Font(Font.MONOSPACED, Font.PLAIN, 13))
