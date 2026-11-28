@@ -647,7 +647,7 @@ fn install_attack(app: &mut App, state: Arc<RunState>) {
     // dragged widths, hidden columns and the sort when it changes shape.
     let columns = |r: &RunState| run::result_columns(r.sets, &r.settings);
     if app.intr_x.run.as_deref().map(columns) != Some(columns(&state)) {
-        app.intr_table = crate::table::TableState::new();
+        app.intr_table = crate::table::TableState::sorted();
     }
     app.intr_x.run = Some(state);
     app.intr_x.order_key = (usize::MAX, usize::MAX, false);
