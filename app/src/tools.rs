@@ -434,9 +434,14 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     crate::table::Column::new("Host", 150.0),
                     crate::table::Column::new("Request", 260.0),
                 ];
-                let rows: Vec<(usize, net::HistEntry)> =
+                let mut rows: Vec<(usize, net::HistEntry)> =
                     app.sequencer.requests.iter().cloned().enumerate().collect();
                 let mut st = app.sequencer.table.clone();
+                crate::table::sort_rows(&mut rows, &st, |(i, e), col| match col {
+                    0 => format!("{i:020}"),
+                    1 => e.host.clone(),
+                    _ => format!("{} {}", e.method, e.path),
+                });
                 let mut pick = None;
                 let sel = app.sequencer.req_sel;
                 ui.allocate_ui(egui::vec2(500.0, 150.0), |ui| {

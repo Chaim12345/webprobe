@@ -171,12 +171,21 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui, shared: &webprobe_
     // egui's memory, not in the Collaborator engine.
     let tbl_id = egui::Id::unique("collaborator-interactions-table");
     let mut tbl: crate::table::TableState = ui.data_mut(|d| d.get_temp(tbl_id)).unwrap_or_default();
+    tbl.sortable = true;
     egui_extras::StripBuilder::new(ui)
         .size(egui_extras::Size::relative(0.45))
         .size(egui_extras::Size::remainder())
         .vertical(|mut col| {
             col.cell(|ui| {
-                let rows: Vec<Interaction> = interactions.iter().rev().cloned().collect();
+                let mut rows: Vec<Interaction> = interactions.iter().rev().cloned().collect();
+                crate::table::sort_rows(&mut rows, &tbl, |i, col| match col {
+                    0 => format!("{:020}", i.id),
+                    1 => format!("{:020}", i.at),
+                    2 => i.kind().label().to_string(),
+                    3 => i.token.clone().unwrap_or_default(),
+                    4 => i.source.clone(),
+                    _ => i.headline(),
+                });
                 let h = ui.available_height();
                 crate::table::table_body(ui, "collab_rows", &cols, &rows, &mut tbl, 19.0, h, &mut |i, ui| {
                     let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));

@@ -637,6 +637,15 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                             table::Column::new("Audited", 80.0),
                         ];
                         let mut st = app.dash_items_table.clone();
+                        let mut rows = rows;
+                        table::sort_rows(&mut rows, &st, |e, col| match col {
+                            0 => format!("{:020}", e.id),
+                            1 => history_host(e),
+                            2 => e.method.clone(),
+                            3 => e.path.clone(),
+                            4 => e.status.clone(),
+                            _ => e.audited.to_string(),
+                        });
                         let h = ui.available_height();
                         table::table_body(
                             ui,

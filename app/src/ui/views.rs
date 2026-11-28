@@ -54,7 +54,13 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         app.comparer.sel2
                     };
                     let mut pick = None;
-                    let rows: Vec<(usize, String)> = items.iter().cloned().enumerate().collect();
+                    let mut rows: Vec<(usize, String)> =
+                        items.iter().cloned().enumerate().collect();
+                    table::sort_rows(&mut rows, &st, |r, col| match col {
+                        0 => format!("{:020}", r.0),
+                        1 => format!("{:020}", r.1.len()),
+                        _ => r.1.clone(),
+                    });
                     let h = (full_h / 2.0 - 70.0).max(100.0);
                     ui.allocate_ui(egui::vec2(ui.available_width(), h + 28.0), |ui| {
                         table::table_body(
@@ -552,13 +558,24 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         });
     });
     ui.add_space(6.0);
-    let rows: Vec<crate::logger::LogEntry> = app
+    let mut rows: Vec<crate::logger::LogEntry> = app
         .logger
         .filter(&app.log_filter)
         .into_iter()
         .rev()
         .cloned()
         .collect();
+    table::sort_rows(&mut rows, &app.log_table, |e, col| match col {
+        0 => format!("{:020}", e.id),
+        1 => format!("{:020}", e.ts),
+        2 => e.tool.clone(),
+        3 => e.method.clone(),
+        4 => e.host.clone(),
+        5 => e.path.clone(),
+        6 => e.status.clone(),
+        7 => format!("{:020}", e.resp_len),
+        _ => e.mime.clone(),
+    });
     if rows.is_empty() {
         ui.add_space(ui.available_height() * 0.25);
         ui.vertical_centered(|ui| {
