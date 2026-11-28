@@ -1516,6 +1516,55 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
     );
 }
 
+/// #242: markup handed to the jQuery constructor (the receiver of appendTo
+/// and friends) is a DOM XSS sink. The stand-in jQuery builds objects the
+/// way jQuery does: `new jQuery.fn.init(selector)`.
+#[test]
+fn dom_jquery_constructor_markup_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/jqinit") {
+            r#"<html><body><script>
+window.jQuery = window.$ = function (sel) { return new jQuery.fn.init(sel); };
+jQuery.fn = jQuery.prototype = {
+  init: function (sel) { this.sel = sel; return this; },
+  appendTo: function (t) { return this; }
+};
+jQuery.fn.init.prototype = jQuery.fn;
+setTimeout(function () {
+  var made = jQuery(decodeURIComponent(location.hash.slice(1)));
+  if (typeof made.appendTo !== "function") { document.title = "broken"; }
+  made.appendTo("body");
+}, 50);
+</script></body></html>"#
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/jqinit",
+        format!("GET /jqinit HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)"
+                && s == "high"
+                && c == "Tentative"),
+        "jQuery constructor sink: {got:?}"
+    );
+}
+
 /// R-13 web-message family: a page passing location.hash into
 /// window.postMessage is HTML5 web message manipulation (DOM-based).
 /// Skipped when no Chromium is available.

@@ -2497,6 +2497,20 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
     jqWrapStatic(jq, "parseJSON");
     jqWrapStatic(jq, "parseXML");
     if (!jq.fn) { return; }
+    // jQuery(markup): the constructor builds DOM from a string, so markup
+    // that is the receiver of appendTo / prependTo / insertBefore /
+    // insertAfter / replaceAll is seen here (burp.Zcwh lists jQuery.init).
+    // jQuery calls `new jQuery.fn.init(...)` and reads the property at call
+    // time, so replacing it is enough; the prototype is kept.
+    if (typeof jq.fn.init === "function" && !jqWrapped(jq.fn.init)) {
+      var origInit = jq.fn.init;
+      var init = jqTag(function (sel) {
+        if (typeof sel === "string") { record("jQuery.init", sel); }
+        return origInit.apply(this, arguments);
+      });
+      init.prototype = origInit.prototype;
+      jq.fn.init = init;
+    }
     ["html", "append", "prepend", "before", "after", "wrap", "wrapAll", "wrapInner", "replaceWith"].forEach(function (m) {
       if (!jqWrapped(jq.fn[m])) {
         var orig = jq.fn[m];
