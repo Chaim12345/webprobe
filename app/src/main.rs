@@ -1172,12 +1172,16 @@ fn main() {
             std::process::exit(1);
         })
     };
+    // Whether a --config-file named http.http2.enable_http2: only then does
+    // it override the value a restored project saved.
+    let mut http_explicit = false;
     for f in &config_files {
         let text = read_config(f);
         let json: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|e| {
             eprintln!("{f}: not a JSON object: {e}");
             std::process::exit(1);
         });
+        http_explicit |= json.pointer("/http/http2/enable_http2").is_some();
         let mut notes = Vec::new();
         burp_config::apply_project_options(&json, &mut listener, &mut http, &mut notes);
         for n in notes {
@@ -1445,6 +1449,15 @@ fn main() {
     // J-02: an unclean previous exit asks first (recovery::startup).
     if autosave_enabled() && recovery::startup(&mut app) {
         tools::restore_project(&mut app, true);
+        // The command line is the later, explicit source: it wins over the
+        // setting the project was saved with.
+        if http_explicit {
+            webprobe_core::scan_config::shared_config(&app.shared)
+                .lock()
+                .unwrap()
+                .http
+                .http2_enabled = http.http2_enabled;
+        }
         app.autosave_sig = autosave_signature(&app);
     }
     // Burp opens on its project chooser. Not when a recovery prompt is

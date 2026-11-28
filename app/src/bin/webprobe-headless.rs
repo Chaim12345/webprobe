@@ -367,7 +367,7 @@ fn proxy(mut args: Vec<String>) {
 
 fn scan_urls(mut args: Vec<String>) {
     let flags = take_burp_flags(&mut args);
-    let (_listener, _http, _api, scan_configs) = load_burp_configs(&flags);
+    let (_listener, http, _api, scan_configs) = load_burp_configs(&flags);
     let crawl = take_flag(&mut args, "--crawl");
     let report_file = take_opt(&mut args, "--report");
     let speed = match take_opt(&mut args, "--speed").as_deref() {
@@ -381,6 +381,13 @@ fn scan_urls(mut args: Vec<String>) {
     }
     let shared = net::Shared::new();
     shared.scan_speed.store(speed, Ordering::SeqCst);
+    // A --config-file's http.http2.enable_http2 gates Hidden HTTP/2 here
+    // too, not only in proxy mode.
+    webprobe_core::scan_config::shared_config(&shared)
+        .lock()
+        .unwrap()
+        .http
+        .http2_enabled = http.http2_enabled;
     apply_scan_configs(&shared, &scan_configs);
     let started = Instant::now();
     scan::crawl_and_audit(&shared, &args, !crawl);
