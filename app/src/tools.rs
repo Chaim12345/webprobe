@@ -3128,6 +3128,8 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 response: Some(o.response.clone()),
                 comment: o.note.clone(),
                 collection: o.collection,
+                status: o.status.name().into(),
+                highlight: o.highlight,
             })
             .collect(),
         organizer_collections: org
@@ -3636,6 +3638,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             response: o.response.clone().unwrap_or_default(),
             created: o.timestamp,
             collection: o.collection,
+            status: crate::organizer::Status::from_name(&o.status),
+            highlight: o.highlight,
         })
         .collect();
     org.collections = data

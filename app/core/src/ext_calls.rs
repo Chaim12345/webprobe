@@ -307,7 +307,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
                     Some((h, p)) if p.parse::<u16>().is_ok() => (h.to_string(), p.parse::<u16>().unwrap_or(80)),
                     _ => (host.clone(), 80),
                 };
-                let mut v = json!({"id": i.id, "request": util::b64_encode(i.request.as_bytes()), "host": h, "port": port, "secure": port == 443, "notes": i.note});
+                let mut v = json!({"id": i.id, "request": util::b64_encode(i.request.as_bytes()), "host": h, "port": port, "secure": port == 443, "notes": i.note, "status": i.status.name()});
                 if !i.response.is_empty() {
                     v["response"] = util::b64_encode(i.response.as_bytes()).into();
                 }
