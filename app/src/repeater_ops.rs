@@ -1357,6 +1357,8 @@ pub struct State {
     /// WebSockets history sort (#269): (column, ascending). `None` keeps
     /// arrival order.
     pub ws_sort: Option<(usize, bool)>,
+    /// Show the selected message's upgrade request and response (#269).
+    pub ws_handshake: bool,
 }
 
 impl Default for State {
@@ -1380,6 +1382,7 @@ impl Default for State {
             ws_hex: false,
             ws_rows: (u64::MAX, 0, Vec::new()),
             ws_sort: None,
+            ws_handshake: false,
         }
     }
 }
@@ -2322,6 +2325,26 @@ pub fn intercept_table(ui: &mut Ui, st: &mut State, rows: &[HeldRow], height: f3
 
 // ====================== B-09 WebSockets history ======================
 
+/// The upgrade exchange of one connection as text: the request head, then
+/// the response head. `parts` are (kind, text) with kind "request" or
+/// "response", as the proxy records them.
+fn ws_handshake_text(parts: &[(String, String)]) -> String {
+    let part = |kind: &str| {
+        parts
+            .iter()
+            .find(|(k, _)| k == kind)
+            .map(|(_, text)| text.trim_end().to_string())
+    };
+    match (part("request"), part("response")) {
+        (None, None) => "The handshake of this connection is no longer in the history.".into(),
+        (request, response) => format!(
+            "{}\n\n{}",
+            request.unwrap_or_else(|| "(no upgrade request recorded)".into()),
+            response.unwrap_or_else(|| "(no upgrade response recorded)".into())
+        ),
+    }
+}
+
 /// One WebSockets history cell as a sort key: numbers sort as numbers.
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum WsSortKey {
@@ -2634,13 +2657,24 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
                 ui.toggle_value(&mut st.ws_hex, "Hex");
+                ui.toggle_value(&mut st.ws_handshake, "Handshake")
+                    .on_hover_text(
+                        "Show the upgrade request and response of this message's connection",
+                    );
                 if ui.button("Send to Repeater").clicked() {
                     send_ws_to_repeater(&shared, &e);
                 }
             });
         });
         // Binary messages show as hex unless asked otherwise; never lossy-edited.
-        let text = if st.ws_hex || (e.is_binary() && std::str::from_utf8(&e.payload).is_err()) {
+        let text = if st.ws_handshake {
+            ws_handshake_text(&history.with_rows(|rows| {
+                rows.iter()
+                    .filter(|r| r.socket == e.socket && r.direction == "handshake")
+                    .map(|r| (r.opcode.clone(), r.text().into_owned()))
+                    .collect::<Vec<_>>()
+            }))
+        } else if st.ws_hex || (e.is_binary() && std::str::from_utf8(&e.payload).is_err()) {
             util::hex_view(&e.payload, 65536)
         } else {
             e.text().into_owned()
@@ -3770,6 +3804,26 @@ mod tests {
             back.repeaters[0].response.as_deref(),
             Some("HTTP/1.1 200 OK\r\n\r\n")
         );
+    }
+
+    #[test]
+    fn ws_handshake_text_shows_request_then_response_and_says_when_missing() {
+        let both = vec![
+            (
+                "response".to_string(),
+                "HTTP/1.1 101 Switching Protocols\r\n\r\n".to_string(),
+            ),
+            (
+                "request".to_string(),
+                "GET /chat HTTP/1.1\r\nHost: h\r\n\r\n".to_string(),
+            ),
+        ];
+        assert_eq!(
+            ws_handshake_text(&both),
+            "GET /chat HTTP/1.1\r\nHost: h\n\nHTTP/1.1 101 Switching Protocols"
+        );
+        assert!(ws_handshake_text(&both[..1]).starts_with("(no upgrade request recorded)"));
+        assert!(ws_handshake_text(&[]).contains("no longer in the history"));
     }
 
     #[test]
