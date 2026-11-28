@@ -232,7 +232,7 @@ impl Shared {
             crate::tls::MitmAuthority::in_memory().expect("failed to initialize in-memory test CA");
         #[cfg(not(test))]
         let mitm = crate::tls::MitmAuthority::new().expect("failed to initialize local HTTPS CA");
-        Self::with_authority(mitm)
+        Self::with_authority(mitm).expect("failed to configure upstream TLS")
     }
 
     /// Build a `Shared` on an explicitly chosen CA: `Some(dir)` loads or
@@ -240,15 +240,44 @@ impl Shared {
     /// inject a private directory here rather than mutating the process
     /// environment, which every other test thread shares.
     pub fn with_ca_dir(dir: Option<std::path::PathBuf>) -> Result<Arc<Self>, String> {
-        Ok(Self::with_authority(
-            crate::tls::MitmAuthority::load_or_create(dir)?,
-        ))
+        Self::with_authority(crate::tls::MitmAuthority::load_or_create(dir)?)
     }
 
-    fn with_authority(mitm: crate::tls::MitmAuthority) -> Arc<Self> {
-        Arc::new(Self {
+    fn with_authority(mitm: crate::tls::MitmAuthority) -> Result<Arc<Self>, String> {
+        let verify = match std::env::var("WEBPROBE_VERIFY_UPSTREAM_TLS").as_deref() {
+            Ok("1") => true,
+            Ok("0") | Err(std::env::VarError::NotPresent) => false,
+            _ => return Err("WEBPROBE_VERIFY_UPSTREAM_TLS must be 0 or 1".into()),
+        };
+        let ca_file = std::env::var_os("WEBPROBE_UPSTREAM_CA_FILE");
+        if ca_file.is_some() && !verify {
+            return Err("WEBPROBE_UPSTREAM_CA_FILE requires WEBPROBE_VERIFY_UPSTREAM_TLS=1".into());
+        }
+        let extra = ca_file
+            .map(|path| {
+                crate::util::read_text_file_capped(
+                    std::path::Path::new(&path),
+                    crate::util::MAX_TEXT_FILE_BYTES,
+                )
+                .map_err(|e| format!("cannot read upstream CA file: {e}"))
+            })
+            .transpose()?;
+        let roots = crate::tls::upstream_roots(extra.as_deref())?;
+        let tls_upstream = if verify {
+            crate::tls::verified_client_config_with_roots(roots.clone())
+        } else {
+            if !cfg!(test) {
+                static WARNED: std::sync::Once = std::sync::Once::new();
+                WARNED.call_once(|| {
+                    tracing::warn!(target: "webprobe", event_code = "tls.upstream.unverified", "Upstream TLS certificates are not verified; set WEBPROBE_VERIFY_UPSTREAM_TLS=1 to enable verification");
+                    crate::notice::toast(crate::notice::Level::Warn, "Upstream TLS certificates are not verified. Set WEBPROBE_VERIFY_UPSTREAM_TLS=1 to enable verification.");
+                });
+            }
+            crate::tls::upstream_config()
+        };
+        Ok(Arc::new(Self {
             mitm,
-            tls_upstream: crate::tls::upstream_config(),
+            tls_upstream,
             intercept_on: AtomicBool::new(false), // Burp default: never intercept at startup
             response_rules: Mutex::new(ResponseInterceptRules::default()),
             queue: Mutex::new(Vec::new()),
@@ -366,9 +395,7 @@ impl Shared {
             keep_alive: AtomicBool::new(false),
             tls_bypass: Mutex::new(Vec::new()),
             client_certs: Mutex::new(Vec::new()),
-            tls_roots: Mutex::new(rustls::RootCertStore::from_iter(
-                webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
-            )),
+            tls_roots: Mutex::new(roots),
             pool: Mutex::new(std::collections::HashMap::new()),
             tls_pool: Mutex::new(std::collections::HashMap::new()),
             h2_pool: Mutex::new(std::collections::HashMap::new()),
@@ -376,7 +403,7 @@ impl Shared {
             listener_generation: AtomicU64::new(0),
             conns_opened: AtomicUsize::new(0),
             pool_hits: AtomicUsize::new(0),
-        })
+        }))
     }
 
     /// Structured, traffic-free operational event, also shown in the UI.

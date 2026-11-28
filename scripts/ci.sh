@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ci.sh — the project's CI gate, run locally (the tree has no hosted CI).
+# ci.sh — run the project gates locally with plain Cargo by default.
 #
-# Steps, each through wp-queue so it never fights other builds on this box:
+# Steps (set WP_QUEUE to opt in to a local build queue):
 #   1. engine and desktop test suites (parsers: chunked, gzip/brotli, keep-alive,
 #      HTTP/2, TLS MITM, proxy; fuzz_tests' 3000 seeded malformed inputs)
 #   2. headless binary builds without GUI libraries (layering test guards it)
@@ -15,7 +15,6 @@ set -uo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 APP="$ROOT/app"
-Q=${WP_QUEUE:-wp-queue}
 status=0
 step() {
     local name=$1; shift
@@ -30,13 +29,22 @@ step() {
     fi
 }
 
+cargo_in() {
+    local dir=$1; shift
+    if [ -n "${WP_QUEUE:-}" ]; then
+        env WP_APP_DIR="$dir" "$WP_QUEUE" run -- cargo "$@"
+    else
+        (cd "$dir" && cargo "$@")
+    fi
+}
+
 step "architecture ratchet self-test" python3 "$ROOT/scripts/test-arch-gate.py"
 step "architecture ratchet (ADR 0002)" python3 "$ROOT/scripts/arch-gate.py"
 step "issue-type coverage (F-08)" python3 "$ROOT/scripts/issue-coverage.py"
-step "test suites (core + desktop)" env WP_APP_DIR="$APP" "$Q" test
-step "headless engine binary" env WP_APP_DIR="$APP" "$Q" run -- cargo build --bin webprobe-headless
+step "test suites (core + desktop)" cargo_in "$APP" test --workspace --locked
+step "headless engine binary" cargo_in "$APP" build --locked --bin webprobe-headless
 if [ -z "${CI_SKIP_MCP:-}" ]; then
-    step "desktop with egui MCP" env WP_APP_DIR="$APP" "$Q" run -- cargo build --features mcp
-    step "vendored egui-mcp-server tests" env WP_APP_DIR="$ROOT/vendor/egui-mcp-server" "$Q" test
+    step "desktop with egui MCP" cargo_in "$APP" build --locked --features mcp
+    step "vendored egui-mcp-server tests" cargo_in "$ROOT/vendor/egui-mcp-server" test
 fi
 exit $status

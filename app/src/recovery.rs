@@ -108,20 +108,87 @@ pub fn decide(
 }
 
 /// Read the old marker, decide, then write ours (unless another instance
-/// owns it).
-pub fn begin(project: &Path, own_pid: u32, now: u64, alive: impl Fn(u32) -> bool) -> Startup {
+/// owns it). Marker errors must not silently disable crash recovery.
+pub fn begin(
+    project: &Path,
+    own_pid: u32,
+    now: u64,
+    alive: impl Fn(u32) -> bool,
+) -> std::io::Result<Startup> {
     let marker = marker_path(project);
     let d = decide(read_marker(&marker), project.is_file(), own_pid, alive);
     if !matches!(d, Startup::OtherInstance(_)) {
-        let _ = write_marker(
+        write_marker(
             &marker,
             Marker {
                 pid: own_pid,
                 started: now,
             },
-        );
+        )?;
     }
-    d
+    Ok(d)
+}
+
+/// Acquire a different project's writer lock without dropping the current
+/// one. Call `activate_lock` only after all fallible switch preparation.
+pub fn prepare_lock(
+    app: &crate::App,
+    project: &Path,
+) -> Result<Option<webprobe_core::project_lock::ProjectLock>, String> {
+    if app
+        .eng
+        .project_lock
+        .as_ref()
+        .is_some_and(|lock| lock.matches(project))
+    {
+        Ok(None)
+    } else {
+        webprobe_core::project_lock::ProjectLock::acquire(project)
+            .map(Some)
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// Install a prepared lock and marker, then release the old project. A
+/// marker failure or a live legacy owner leaves the current project intact.
+pub fn activate_lock(
+    app: &mut crate::App,
+    project: &Path,
+    lock: Option<webprobe_core::project_lock::ProjectLock>,
+) -> Result<(), String> {
+    let Some(lock) = lock else {
+        return Ok(());
+    };
+    let marker = if std::env::var_os("WEBPROBE_NO_AUTOSAVE").is_none() {
+        match begin(
+            project,
+            std::process::id(),
+            crate::util::now_secs(),
+            pid_alive,
+        )
+        .map_err(|e| format!("cannot create project recovery marker: {e}"))?
+        {
+            Startup::OtherInstance(_) => return Err("project is open in another instance".into()),
+            _ => Some(marker_path(project)),
+        }
+    } else {
+        None
+    };
+    // A previously queued snapshot must finish while the old writer lock is
+    // still held; otherwise it could land after another instance opens it.
+    webprobe_core::project::wait_for_saves();
+    if let Some(old) = app.eng.marker.take() {
+        remove_marker(&old, std::process::id());
+    }
+    app.eng.marker = marker;
+    app.eng.project_lock = Some(lock);
+    Ok(())
+}
+
+/// Ensure a save cannot bypass locking, including the project path editor.
+pub fn ensure_lock(app: &mut crate::App, project: &Path) -> Result<(), String> {
+    let lock = prepare_lock(app, project)?;
+    activate_lock(app, project, lock)
 }
 
 /// `webprobe-project.json` -> `webprobe-project.crashed-<now>.json`.
@@ -163,14 +230,34 @@ pub fn startup(app: &mut crate::App) -> bool {
         return false;
     }
     let project = PathBuf::from(&app.project_path);
-    match begin(&project, pid, now, pid_alive) {
-        Startup::Normal => {
-            app.eng.marker = Some(marker_path(&project));
-            project.is_file()
+    let start = (|| -> Result<(webprobe_core::project_lock::ProjectLock, Startup), String> {
+        let lock = webprobe_core::project_lock::ProjectLock::acquire(&project)
+            .map_err(|e| e.to_string())?;
+        let decision = begin(&project, pid, now, pid_alive)
+            .map_err(|e| format!("cannot create project recovery marker: {e}"))?;
+        if matches!(decision, Startup::OtherInstance(_)) {
+            return Err("project is open in another instance".into());
         }
-        Startup::OtherInstance(_) => project.is_file(),
+        Ok((lock, decision))
+    })();
+    let (lock, decision) = match start {
+        Ok(start) => start,
+        Err(e) => {
+            // Never autosave over a project whose lock or recovery marker we
+            // could not acquire. The second instance gets its own session.
+            app.project_path = temporary_project_path(&std::env::temp_dir(), pid, now)
+                .display()
+                .to_string();
+            app.project_status = format!("{e}; using a temporary project");
+            crate::feedback::toast(crate::feedback::Level::Error, app.project_status.clone());
+            return false;
+        }
+    };
+    app.eng.project_lock = Some(lock);
+    app.eng.marker = Some(marker_path(&project));
+    match decision {
+        Startup::Normal => project.is_file(),
         Startup::Recover(m) => {
-            app.eng.marker = Some(marker_path(&project));
             app.eng.recovery = Some(Prompt {
                 previous: m,
                 project: app.project_path.clone(),
@@ -178,6 +265,7 @@ pub fn startup(app: &mut crate::App) -> bool {
             app.eng.suppress_autosave = true;
             false
         }
+        Startup::OtherInstance(_) => unreachable!("refused above"),
     }
 }
 
@@ -294,7 +382,7 @@ mod tests {
     fn clean_start_writes_marker_and_clean_exit_removes_it() {
         let d = tmp("clean");
         let proj = d.join("webprobe-project.json");
-        assert_eq!(begin(&proj, 100, 5, |_| false), Startup::Normal);
+        assert_eq!(begin(&proj, 100, 5, |_| false).unwrap(), Startup::Normal);
         assert_eq!(
             read_marker(&marker_path(&proj)),
             Some(Marker {
@@ -306,7 +394,7 @@ mod tests {
         assert!(!marker_path(&proj).exists());
         // Next start after a clean exit is normal again.
         std::fs::write(&proj, "{}").unwrap();
-        assert_eq!(begin(&proj, 101, 6, |_| false), Startup::Normal);
+        assert_eq!(begin(&proj, 101, 6, |_| false).unwrap(), Startup::Normal);
         std::fs::remove_dir_all(&d).ok();
     }
 
@@ -324,7 +412,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            begin(&proj, 100, 10, |_| false),
+            begin(&proj, 100, 10, |_| false).unwrap(),
             Startup::Recover(Marker {
                 pid: 42,
                 started: 9
@@ -349,7 +437,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            begin(&proj, 100, 10, |p| p == 42),
+            begin(&proj, 100, 10, |p| p == 42).unwrap(),
             Startup::OtherInstance(42)
         );
         assert_eq!(read_marker(&marker_path(&proj)).unwrap().pid, 42);
@@ -374,6 +462,15 @@ mod tests {
             Startup::Recover(Marker { pid: 0, started: 0 })
         );
         std::fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn marker_creation_failure_is_reported() {
+        let d = tmp("bad-marker");
+        let blocker = d.join("not-a-directory");
+        std::fs::write(&blocker, "x").unwrap();
+        assert!(begin(&blocker.join("project.json"), 100, 10, |_| false).is_err());
+        let _ = std::fs::remove_dir_all(d);
     }
 
     #[test]

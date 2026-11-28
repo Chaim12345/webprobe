@@ -19,7 +19,7 @@
   ],
   "metrics": {
     "allow_attributes": 0,
-    "app_fields": 168,
+    "app_fields": 167,
     "console_prints_core": 2,
     "path_mounts_core": 8,
     "result_string_core": 90,

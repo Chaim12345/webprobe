@@ -37,7 +37,8 @@ pub mod strict_request;
 // Re-exported so `webprobe_core::<module>` paths are unchanged.
 pub use webprobe_support::{
     analysis, body, compare, decoder_ops, diagnostics, hash_list, intercept_rules, jwt, logger,
-    mime, notice, organizer, paths, rules, seq_bits, streaming, sync, tls, util, variations, xss,
+    mime, notice, organizer, paths, rules, scan_report, seq_bits, streaming, sync, tls, util,
+    variations, xss,
 };
 
 pub(crate) mod h2_group;
@@ -49,6 +50,7 @@ pub mod oob;
 pub mod passive_state;
 pub mod project;
 pub mod project_files;
+pub mod project_lock;
 pub mod repeater_run;
 #[cfg(test)]
 mod request_reader_tests;

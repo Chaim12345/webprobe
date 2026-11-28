@@ -34,6 +34,8 @@ pub struct State {
     pub suppress_autosave: bool,
     /// Session-marker file written at startup and removed on clean exit.
     pub marker: Option<std::path::PathBuf>,
+    /// OS-backed writer lock retained for the current project session.
+    pub project_lock: Option<webprobe_core::project_lock::ProjectLock>,
     /// Logger "Export as CSV" target path.
     pub log_export_path: String,
     /// "Create an issue" / "Add to an issue" (Record an issue submenu).

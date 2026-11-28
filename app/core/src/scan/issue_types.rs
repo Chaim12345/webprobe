@@ -116,6 +116,7 @@ pub fn add_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         if issue.type_id == 0 {
             issue.type_id = issue_type_id(&issue.name);
         }
+        crate::scan_report::record(issue);
         iss.push(issue.clone());
     }
     shared.event(

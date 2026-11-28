@@ -38,6 +38,11 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     if issues.is_empty() {
         return;
     }
+    // Capture the task's own findings before the mutable global view merges
+    // or discards duplicates from other tasks or live proxy activity.
+    for issue in &issues {
+        crate::scan_report::record(issue);
+    }
     let mut iss = shared.issues.lock().unwrap();
     let key = passive_merge_key;
     let before = issues.len();

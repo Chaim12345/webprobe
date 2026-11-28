@@ -77,6 +77,7 @@ pub fn import_ca(dir: &std::path::Path, cert: &[u8], key: &[u8]) -> Result<Strin
     check_ca_pair(&cert_der, &key_der)?;
     let enc = |b: &[u8]| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b);
     let saved = serde_json::json!({ "imported": true, "cert_der": enc(&cert_der), "key_pkcs8": enc(&key_der) });
+    let _lock = lock_ca(dir).map_err(|e| format!("cannot lock CA directory: {e}"))?;
     let file = dir.join("ca.json");
     write_private(dir, &file, saved.to_string().as_bytes())
         .map_err(|e| format!("{}: {e}", file.display()))?;
@@ -165,6 +166,7 @@ pub fn default_ca_dir() -> Option<std::path::PathBuf> {
 /// deleted) so the next start creates a new one. Like Burp, the running
 /// session keeps the old CA until restart. Returns the backup path.
 pub fn retire_ca(dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let _lock = lock_ca(dir).map_err(|e| format!("cannot lock CA directory: {e}"))?;
     let file = dir.join("ca.json");
     if !file.exists() {
         return Err(format!("No stored CA at {}", file.display()));
@@ -178,27 +180,54 @@ pub fn retire_ca(dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
     Ok(backup)
 }
 
-/// Write a file only its owner can read (the CA private key is inside).
+/// Serialize CA creation/import/retirement across processes. Keep the lock
+/// file in place; removing it could give waiters different inodes to lock.
+fn lock_ca(dir: &std::path::Path) -> std::io::Result<std::fs::File> {
+    std::fs::create_dir_all(dir)?;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options.open(dir.join(".ca.lock"))?;
+    file.lock()?;
+    Ok(file)
+}
+
+/// Write a private key via a fresh, exclusive, owner-only temporary file.
+/// A stale `ca.tmp`, including a symlink, is never opened or truncated.
 fn write_private(
     dir: &std::path::Path,
     file: &std::path::Path,
     bytes: &[u8],
 ) -> std::io::Result<()> {
+    use std::io::Write;
     std::fs::create_dir_all(dir)?;
-    let tmp = file.with_extension("tmp");
+    let mut random = [0u8; 16];
+    rand::rngs::OsRng.fill_bytes(&mut random);
+    let suffix: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let tmp = dir.join(format!(".ca-{}-{suffix}.tmp", std::process::id()));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
     {
-        use std::io::Write;
-        let mut o = std::fs::OpenOptions::new();
-        o.write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            o.mode(0o600);
-        }
-        let mut f = o.open(&tmp)?;
-        f.write_all(bytes)?;
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
     }
-    std::fs::rename(tmp, file)
+    let mut f = options.open(&tmp)?;
+    let result = f.write_all(bytes).and_then(|()| f.sync_all());
+    drop(f);
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    if let Err(e) = std::fs::rename(&tmp, file) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// Per-host TLS configurations kept in memory at most.
@@ -235,6 +264,14 @@ impl MitmAuthority {
 
     /// Load the CA saved in `dir`, or create one and save it there.
     pub fn load_or_create(dir: Option<std::path::PathBuf>) -> Result<Self, String> {
+        // Lock before checking for the file and retain the lock until the
+        // newly generated authority is installed. Concurrent first launches
+        // therefore load the same CA rather than replacing each other's key.
+        let _lock = dir
+            .as_ref()
+            .map(|d| lock_ca(d))
+            .transpose()
+            .map_err(|e| format!("cannot lock CA directory: {e}"))?;
         let file = dir.as_ref().map(|d| d.join("ca.json"));
         if let Some(f) = &file
             && let Ok(text) =
@@ -265,9 +302,8 @@ impl MitmAuthority {
                 "not_after": seed.not_after,
                 "key_pkcs8": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, ca_key.serialize_der()),
             });
-            if let Err(_e) = write_private(d, f, saved.to_string().as_bytes()) {
-                tracing::error!(target: "webprobe", event_code = "tls.ca.save_failed", "Could not persist CA; it will change on next start");
-            }
+            write_private(d, f, saved.to_string().as_bytes())
+                .map_err(|e| format!("cannot persist CA {}: {e}", f.display()))?;
         }
         Self::from_seed(&seed, ca_key)
     }
@@ -544,15 +580,48 @@ pub fn upstream_config() -> Arc<ClientConfig> {
     Arc::new(config)
 }
 
-/// TLS to WebProbe's own external services (the public OAST server), which
-/// must be the real thing: verified against the WebPKI roots.
-pub fn verified_client_config() -> Arc<ClientConfig> {
-    let roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+/// WebPKI roots, optionally extended with one or more PEM-encoded roots.
+/// A malformed or empty configured file is an error, never a reason to fall
+/// back to accepting unverified target certificates.
+pub fn upstream_roots(extra_pem: Option<&str>) -> Result<RootCertStore, String> {
+    let mut roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    if let Some(mut rest) = extra_pem {
+        let mut count = 0;
+        const BEGIN: &str = "-----BEGIN CERTIFICATE-----";
+        const END: &str = "-----END CERTIFICATE-----";
+        while let Some(start) = rest.find(BEGIN) {
+            rest = &rest[start + BEGIN.len()..];
+            let end = rest.find(END).ok_or("incomplete upstream CA PEM")?;
+            let encoded: String = rest[..end].chars().filter(|c| !c.is_whitespace()).collect();
+            let der = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded)
+                .map_err(|e| format!("invalid upstream CA PEM: {e}"))?;
+            roots
+                .add(CertificateDer::from(der))
+                .map_err(|e| format!("invalid upstream CA certificate: {e}"))?;
+            count += 1;
+            rest = &rest[end + END.len()..];
+        }
+        if count == 0 {
+            return Err("upstream CA file contains no certificates".into());
+        }
+    }
+    Ok(roots)
+}
+
+/// A verified client for targets or external services, with caller-supplied
+/// roots. Certificate chain, hostname and validity are all checked.
+pub fn verified_client_config_with_roots(roots: RootCertStore) -> Arc<ClientConfig> {
     let mut config = ClientConfig::builder()
         .with_root_certificates(roots)
         .with_no_client_auth();
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Arc::new(config)
+}
+
+/// TLS to WebProbe's own external services (the public OAST server), which
+/// must be the real thing: verified against the WebPKI roots.
+pub fn verified_client_config() -> Arc<ClientConfig> {
+    verified_client_config_with_roots(upstream_roots(None).expect("built-in roots"))
 }
 
 #[derive(Debug)]
@@ -689,6 +758,48 @@ pub fn client_auth_config(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn verified_upstream_rejects_untrusted_and_wrong_hostname() {
+        let ca = super::MitmAuthority::in_memory().unwrap();
+        let server = ca.server_config("service.test").unwrap();
+        let custom = super::upstream_roots(Some(ca.ca_pem())).unwrap();
+        assert!(super::upstream_roots(Some("not a certificate")).is_err());
+        assert!(super::upstream_roots(Some("-----BEGIN CERTIFICATE-----bad")).is_err());
+        let handshake = |config: std::sync::Arc<rustls::ClientConfig>, name: &'static str| {
+            let mut client =
+                rustls::ClientConnection::new(config, name.try_into().unwrap()).unwrap();
+            let mut server = rustls::ServerConnection::new(server.clone()).unwrap();
+            for _ in 0..10 {
+                let mut out = Vec::new();
+                client.write_tls(&mut out).unwrap();
+                server.read_tls(&mut out.as_slice()).unwrap();
+                if server.process_new_packets().is_err() {
+                    return false;
+                }
+                let mut back = Vec::new();
+                server.write_tls(&mut back).unwrap();
+                client.read_tls(&mut back.as_slice()).unwrap();
+                if client.process_new_packets().is_err() {
+                    return false;
+                }
+                if !client.is_handshaking() && !server.is_handshaking() {
+                    return true;
+                }
+            }
+            false
+        };
+        assert!(handshake(
+            super::verified_client_config_with_roots(custom.clone()),
+            "service.test"
+        ));
+        assert!(!handshake(
+            super::verified_client_config_with_roots(custom),
+            "wrong.test"
+        ));
+        assert!(!handshake(super::verified_client_config(), "service.test"));
+        assert!(handshake(super::upstream_config(), "wrong.test"));
+    }
+
     /// An imported CA (certificate + PKCS#8 key, PEM) is used after the next
     /// load: the trusted certificate is the original one, and host
     /// certificates it issues validate against it in a real TLS handshake.
@@ -794,6 +905,65 @@ mod tests {
             .to_string();
         assert_ne!(first, fresh, "a new CA after retiring the old one");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_first_launches_reuse_one_authority() {
+        let dir = std::env::temp_dir().join(format!(
+            "wp-ca-concurrent-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let threads: Vec<_> = (0..4)
+            .map(|_| {
+                let dir = dir.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    super::MitmAuthority::load_or_create(Some(dir))
+                        .unwrap()
+                        .ca_pem()
+                        .to_string()
+                })
+            })
+            .collect();
+        let authorities: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+        assert!(authorities.iter().all(|pem| pem == &authorities[0]));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_temporary_symlink_is_never_followed_and_new_key_is_private() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+        let dir = std::env::temp_dir().join(format!(
+            "wp-ca-symlink-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let victim = dir.join("victim");
+        std::fs::write(&victim, b"unchanged").unwrap();
+        symlink(&victim, dir.join("ca.tmp")).unwrap();
+        let file = dir.join("ca.json");
+        std::fs::write(&file, b"old").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+        super::write_private(&dir, &file, b"new private material").unwrap();
+        assert_eq!(std::fs::read(&victim).unwrap(), b"unchanged");
+        assert_eq!(
+            std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert!(
+            std::fs::symlink_metadata(dir.join("ca.tmp"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

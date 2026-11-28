@@ -108,6 +108,9 @@ impl ScanCtx {
         // its response is searched for stored input like every other one
         // (burp.Zuvm.Zq: the item's base request re-fetched).
         let resp = cx.send(cx.req.clone().as_bytes());
+        if resp.is_none() {
+            crate::scan_report::fail("active scan baseline request failed");
+        }
         let raw = resp.clone().unwrap_or_default();
         let body = resp
             .as_ref()

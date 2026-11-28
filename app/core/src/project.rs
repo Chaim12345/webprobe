@@ -1426,6 +1426,17 @@ pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) ->
 /// and then renamed into place, so a failed write leaves the previous project
 /// intact.
 pub fn save(path: &Path, data: &ProjectData) -> Result<(), ProjectError> {
+    save_impl(path, data, false)
+}
+
+/// Atomically install a new project without replacing an existing path. This
+/// is suitable for headless output, which does not restore the other project
+/// sections. Even a file created after an initial existence check is safe.
+pub fn save_new(path: &Path, data: &ProjectData) -> Result<(), ProjectError> {
+    save_impl(path, data, true)
+}
+
+fn save_impl(path: &Path, data: &ProjectData, new_only: bool) -> Result<(), ProjectError> {
     let temporary = temporary_path(path)?;
     // First run: the default project lives in the per-user data directory,
     // which does not exist yet. Create it so autosave works instead of
@@ -1500,12 +1511,23 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), ProjectError> {
         });
     }
 
-    if let Err(source) = std::fs::rename(&temporary, path) {
+    // A hard link atomically creates the destination only if it does not
+    // exist, including a dangling symlink. The temporary file is on the same
+    // filesystem as the destination. Ordinary saves still replace by rename.
+    let installed = if new_only {
+        std::fs::hard_link(&temporary, path)
+    } else {
+        std::fs::rename(&temporary, path)
+    };
+    if let Err(source) = installed {
         let _ = std::fs::remove_file(&temporary);
         return Err(ProjectError::Replace {
             path: path.to_path_buf(),
             source,
         });
+    }
+    if new_only {
+        let _ = std::fs::remove_file(&temporary);
     }
 
     // Persist the directory entry too; best effort, the file data is already
@@ -2226,6 +2248,38 @@ mod tests {
             back.editors.comparer_items,
             vec!["a".to_string(), "b".to_string()]
         );
+    }
+
+    #[test]
+    fn save_new_never_replaces_an_existing_project() {
+        let path = temporary_project("exclusive");
+        let _ = std::fs::remove_file(&path);
+        let original = sample();
+        save_new(&path, &original).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(save_new(&path, &ProjectData::default()).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let restored = load(&path).unwrap();
+        assert_eq!(restored.repeaters.len(), original.repeaters.len());
+        assert_eq!(restored.scope.len(), original.scope.len());
+        assert_eq!(restored.layout.tab, original.layout.tab);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_new_refuses_a_dangling_symlink() {
+        let path = temporary_project("exclusive-link");
+        let _ = std::fs::remove_file(&path);
+        std::os::unix::fs::symlink(path.with_extension("absent"), &path).unwrap();
+        assert!(save_new(&path, &ProjectData::default()).is_err());
+        assert!(
+            std::fs::symlink_metadata(&path)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

@@ -34,6 +34,7 @@ pub fn start_active_scan(
     smtp: &[SmtpOob],
 ) {
     if shared.scan.is_busy() {
+        crate::scan_report::fail("scanner was already busy");
         shared.event(
             Level::Warn,
             "scan.busy",
@@ -46,6 +47,7 @@ pub fn start_active_scan(
     let parts = util::parse_http(&entry.req_raw);
     let host_header = util::get_header(&parts.headers, "Host").unwrap_or_default();
     if host_header.is_empty() {
+        crate::scan_report::fail("scan request has no Host header");
         shared.event(
             Level::Warn,
             "scan.missing_host",
@@ -73,6 +75,7 @@ pub fn start_active_scan(
     // Claim the scanner before touching its progress: a refused second
     // scan must not reset the running one's counters.
     let Some((guard, host_scope)) = crate::host_probe_state::admit(&shared) else {
+        crate::scan_report::fail("scanner admission was refused");
         shared.event(
             Level::Warn,
             "scan.busy",
@@ -122,10 +125,12 @@ pub fn start_active_scan(
     // `spawn_blocking`. Abort cannot interrupt a started blocking body;
     // its cooperative stop checks end it after in-flight calls return.
     let flag = shared.clone();
+    let report = crate::scan_report::current();
     crate::rt::engine().spawn_engine(
         "scan",
         move || flag.scan.stop.load(Ordering::SeqCst),
         move || {
+            let _report = crate::scan_report::install(report);
             let _tool = crate::net::tool_scope("Scanner");
             // The guard releases the scanner however this thread ends: a
             // panicking check used to leave it claimed, so every later scan was
@@ -157,6 +162,7 @@ pub fn start_active_scan(
                 }
             }));
             if run.is_err() {
+                crate::scan_report::fail("active scan stopped on an internal error");
                 shared.event(
                     Level::Error,
                     "scan.failed",
@@ -1006,6 +1012,16 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
         } else {
             crate::crawl::crawl(shared, url)
         };
+        if items.is_empty() {
+            crate::scan_report::fail("no crawl request was completed");
+            continue;
+        }
+        if items.iter().any(|item| item.resp_raw.is_none()) {
+            crate::scan_report::fail("a crawl request failed or was incomplete");
+        }
+        if items.iter().all(|item| item.resp_raw.is_none()) {
+            continue;
+        }
         // Browser-driven crawl (Burp's crawler drives Chromium): picks up
         // client-side routes and the API calls pages make; each observed
         // same-origin request is re-issued as a crawl item.
@@ -1117,6 +1133,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
             crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)
         }) {
             if shared.scan.stop.load(Ordering::SeqCst) {
+                crate::scan_report::fail("scan was cancelled");
                 return;
             }
             add_passive_issues(shared, passive_check_for(shared, &e));

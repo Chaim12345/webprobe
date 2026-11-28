@@ -1,16 +1,3 @@
-# rustc 1.100 (egui 0.37 needs >= 1.95). The rustup proxy on this box was
-# once broken, so the compiler is pinned to its real path.
-#
-# sccache caches compiled dependencies across target directories and
-# `cargo clean`: a from-scratch build fell from 474 s to 124 s once the cache
-# was warm (measured 2026-11-17). It used to be switched off here because its
-# version probe went through the broken proxy; with the pinned rustc it works.
-[build]
-rustc = "/usr/local/bin/rustc"
-rustc-wrapper = "/usr/local/bin/sccache"
-
-# lld-22 links the egui/rustls dependency stack several times faster than the
-# default system BFD linker (test binaries link ~30 rlibs each).
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/ld.lld-22"]
+# Portable defaults: use the Rust compiler and linker on PATH.
+# Developers may opt in to sccache or a faster linker in their own
+# $CARGO_HOME/config.toml; this checkout must not require local machine paths.

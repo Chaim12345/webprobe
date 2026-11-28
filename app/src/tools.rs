@@ -2793,8 +2793,8 @@ fn tab_of(name: &str) -> Option<crate::ui::Tab> {
 
 /// Burp Pro keeps its project on disk as you work, so reopening it brings
 /// back the history. WebProbe does the same with its project file: it is
-/// restored at startup when present (main.rs) and saved every minute while
-/// something changed, and on exit (App::on_exit).
+/// restored at startup when present (main.rs), saved every minute, and on
+/// exit (App::on_exit).
 /// Save the project and wait until it is on disk. The returned result
 /// belongs to this call: it is this save's own write outcome, never
 /// inferred from the shared results queue.
@@ -3213,13 +3213,23 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) -> Result<(),
     // J-02: while the crash-recovery prompt is open, autosave (and the save
     // on exit) must not overwrite the project the user may want back; the
     // new session goes to a per-process temporary file instead.
-    let target = if quiet && app.eng.suppress_autosave {
+    if app.eng.suppress_autosave && !quiet {
+        return Err("choose a recovery option before saving over the project".into());
+    }
+    let target = if app.eng.suppress_autosave {
         crate::recovery::temporary_project_path(&std::env::temp_dir(), std::process::id(), 0)
             .display()
             .to_string()
     } else {
         app.project_path.clone()
     };
+    if !app.eng.suppress_autosave
+        && let Err(error) = crate::recovery::ensure_lock(app, std::path::Path::new(&target))
+    {
+        app.project_status = format!("save failed: {error}");
+        crate::feedback::toast(crate::feedback::Level::Error, app.project_status.clone());
+        return Err(error);
+    }
     let data = project_snapshot(app);
     if background {
         let reported = target.clone();
@@ -3444,7 +3454,14 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
 }
 
 pub fn restore_project(app: &mut App, quiet: bool) {
-    match project::load(std::path::Path::new(&app.project_path)) {
+    let path = std::path::PathBuf::from(&app.project_path);
+    let result = (|| -> Result<_, String> {
+        let lock = crate::recovery::prepare_lock(app, &path)?;
+        let data = project::load(&path).map_err(String::from)?;
+        crate::recovery::activate_lock(app, &path, lock)?;
+        Ok(data)
+    })();
+    match result {
         Ok(data) => {
             apply_project(app, &data, true);
             app.project_status = format!("restored {}", app.project_path);

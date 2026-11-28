@@ -130,10 +130,8 @@ pub struct App {
     pub target_hosts: Vec<String>,
     pub target_items: Vec<(String, String, String, u64)>, // host, method, path, hist id
     pub map_cache_len: usize,
-    /// Project autosave: when it last ran and the (history, issues,
-    /// repeaters) counts it saw, so it only writes after a change.
+    /// Time of the last periodic project snapshot attempt.
     pub autosave_at: std::time::Instant,
-    pub autosave_sig: (usize, usize, usize),
     /// Shared table state for proxy history (sort, filter, columns).
     pub hist_table: table::TableState,
     /// Proxy HTTP history filter bar (B-01).
@@ -506,20 +504,6 @@ fn autosave_enabled() -> bool {
     std::env::var_os("WEBPROBE_NO_AUTOSAVE").is_none()
 }
 
-fn autosave_signature(app: &App) -> (usize, usize, usize) {
-    (
-        app.shared.history.len(),
-        app.shared.issues.lock().unwrap().len(),
-        app.shared
-            .repeaters
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|r| r.history.len() + r.request.len())
-            .sum(),
-    )
-}
-
 impl eframe::App for App {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         self.mcp.inject(ctx, raw_input);
@@ -530,10 +514,12 @@ impl eframe::App for App {
         // thread stays blocked waiting for a verdict.
         webprobe_core::net::intercept_release_all(&self.shared, false);
         tools::close_launched_browsers(&self.shared);
-        if autosave_enabled() && autosave_signature(self) != (0, 0, 0) {
-            let _ = tools::save_project(self, true);
+        // Even an apparently empty session can contain unsaved settings,
+        // notes or edits. Never mark a failed final save as a clean exit.
+        let clean = !autosave_enabled() || tools::save_project(self, true).is_ok();
+        if clean && !self.eng.suppress_autosave {
+            recovery::shutdown(self);
         }
-        recovery::shutdown(self);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -545,14 +531,12 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
         theme::apply_current(ctx);
-        // Autosave once a minute when the project changed.
+        // Snapshot all project sections periodically. Count/length signatures
+        // miss same-length edits and entire settings sections; attempting each
+        // interval also retries failures rather than acknowledging them early.
         if autosave_enabled() && self.autosave_at.elapsed() >= std::time::Duration::from_secs(60) {
             self.autosave_at = std::time::Instant::now();
-            let sig = autosave_signature(self);
-            if sig != self.autosave_sig {
-                self.autosave_sig = sig;
-                tools::autosave_project(self);
-            }
+            tools::autosave_project(self);
         }
         tools::drain_save_results(self);
         tools::drain_tool_sends(self);
@@ -947,7 +931,6 @@ impl App {
             project_status: String::new(),
             chooser: project_start::Chooser::default(),
             autosave_at: std::time::Instant::now(),
-            autosave_sig: (0, 0, 0),
             collab_state: collaborator::CollaboratorState::new(),
             macro_name: "Macro 1".to_string(),
             // Empty: a prefilled example host would get real traffic from Test macro.
@@ -1439,7 +1422,6 @@ fn main() {
     // J-02: an unclean previous exit asks first (recovery::startup).
     if autosave_enabled() && recovery::startup(&mut app) {
         tools::restore_project(&mut app, true);
-        app.autosave_sig = autosave_signature(&app);
     }
     // Burp opens on its project chooser. Not when a recovery prompt is
     // already up, nor in scripted runs (no autosave, a fixed tab, or

@@ -38,18 +38,21 @@ pub fn copy_path(project_path: &str) -> String {
 /// Project > Save copy: write the current state next to the project file
 /// without changing which file the project is saved to.
 pub fn save_project_copy(app: &mut App) {
-    let original = app.project_path.clone();
-    app.project_path = copy_path(&original);
-    let target = app.project_path.clone();
-    let _ = crate::tools::save_project(app, true);
-    app.project_path = original;
-    if std::path::Path::new(&target).exists() {
-        feedback::toast(Level::Success, format!("Project copy saved to {target}"));
-    } else {
-        feedback::toast(
+    let target = copy_path(&app.project_path);
+    let result = (|| -> Result<(), String> {
+        let path = std::path::Path::new(&target);
+        let _lock =
+            webprobe_core::project_lock::ProjectLock::acquire(path).map_err(|e| e.to_string())?;
+        let snapshot = crate::tools::project_snapshot(app);
+        webprobe_core::project::wait_for_saves();
+        webprobe_core::project::save_new(path, &snapshot).map_err(String::from)
+    })();
+    match result {
+        Ok(()) => feedback::toast(Level::Success, format!("Project copy saved to {target}")),
+        Err(e) => feedback::toast(
             Level::Error,
-            format!("Could not save a project copy to {target}"),
-        );
+            format!("Could not save a project copy to {target}: {e}"),
+        ),
     }
 }
 

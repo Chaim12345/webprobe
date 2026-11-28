@@ -8,7 +8,9 @@
 //! `burp_config::ApiConfig`): Burp's defaults are loopback only
 //! (127.0.0.1), port 1337, and an API key required. Unless
 //! `insecure_mode` is set the base path carries the key, like Burp:
-//! `/{key}/v0.1/scan`. The key is never written to any log or response.
+//! `/{key}/v0.1/scan`. Scan Location headers retain that path prefix, so
+//! clients can follow them; protect access logs and use TLS termination for
+//! any remote access, because this listener itself serves plain HTTP.
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
@@ -36,36 +38,18 @@ pub struct IssueDefinition {
     pub vulnerability_classifications: Option<String>,
 }
 
-/// One scan task started over the API.
+/// One scan task started over the API. Events belong to this task rather
+/// than indices into the mutable, process-wide issue table.
 struct ApiTask {
-    /// `running`, `succeeded` or `failed` (Burp's scan_status words).
+    id: u64,
     status: String,
-    /// shared.issues is append-only: this task's issues start here.
-    first_issue: usize,
-    /// Set when the task finishes: issues appended later are not its own.
-    end_issue: Option<usize>,
-    /// Hosts of the URLs the task was asked to scan (lowercase). The issue
-    /// list is process-wide; while the task runs, only issues on these hosts
-    /// are reported as its findings.
-    hosts: Vec<String>,
+    report: Arc<crate::scan_report::ScanReport>,
 }
 
-/// The host of a URL or of an issue's host field (scheme, port, path and
-/// userinfo removed), lowercase.
-fn host_only(s: &str) -> String {
-    let rest = s.split_once("://").map_or(s, |(_, r)| r);
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
-    let host = if let Some(v6) = host.strip_prefix('[') {
-        v6.split(']').next().unwrap_or("")
-    } else {
-        host.split(':').next().unwrap_or("")
-    };
-    host.to_ascii_lowercase()
-}
-
+#[derive(Default)]
 struct ApiState {
     tasks: Vec<ApiTask>,
+    next_id: u64,
 }
 
 const MAX_API_CLIENTS: usize = 32;
@@ -81,21 +65,28 @@ enum TaskAdmissionError {
 
 fn reserve_task(
     state: &mut ApiState,
-    first_issue: usize,
-    hosts: Vec<String>,
-) -> Result<usize, TaskAdmissionError> {
+    report: Arc<crate::scan_report::ScanReport>,
+) -> Result<u64, TaskAdmissionError> {
     if state.tasks.iter().any(|task| task.status == "running") {
         return Err(TaskAdmissionError::ScanAlreadyRunning);
     }
+    // Keep a bounded recent history, evicting only a terminal task. IDs are
+    // monotonically increasing and are never recycled after eviction.
     if state.tasks.len() >= MAX_API_TASKS {
-        return Err(TaskAdmissionError::HistoryFull);
+        let Some(oldest) = state.tasks.iter().position(|task| task.status != "running") else {
+            return Err(TaskAdmissionError::HistoryFull);
+        };
+        state.tasks.remove(oldest);
     }
-    let id = state.tasks.len();
+    let id = state.next_id;
+    state.next_id = state
+        .next_id
+        .checked_add(1)
+        .ok_or(TaskAdmissionError::HistoryFull)?;
     state.tasks.push(ApiTask {
+        id,
         status: "running".to_string(),
-        first_issue,
-        end_issue: None,
-        hosts,
+        report,
     });
     Ok(id)
 }
@@ -160,6 +151,13 @@ pub fn start(
     api: &ApiConfig,
     issue_definitions: Vec<IssueDefinition>,
 ) -> Result<SocketAddr, String> {
+    if api
+        .keys
+        .iter()
+        .any(|key| !crate::burp_config::valid_api_key(key))
+    {
+        return Err("REST API keys must be nonempty, printable URL path segments".into());
+    }
     if !api.insecure_mode && api.keys.is_empty() {
         return Err(
             "user_options.misc.api is enabled with no keys and insecure_mode false; refusing to start without an API key"
@@ -180,7 +178,7 @@ pub fn start(
             "REST API refused: {bound} is not a loopback address and requests would not be authenticated (insecure_mode is on or no API key is configured); turn insecure_mode off and add a key, or listen on loopback"
         ));
     }
-    let state = Arc::new(Mutex::new(ApiState { tasks: Vec::new() }));
+    let state = Arc::new(Mutex::new(ApiState::default()));
     let shared = shared.clone();
     let api = api.clone();
     let defs = Arc::new(issue_definitions);
@@ -230,9 +228,12 @@ fn handle(
             json!({"error": "a valid API key is required"}),
         );
     };
+    // `rest` is a suffix of the authenticated path. Keeping the exact prefix
+    // makes the returned Location usable for both keyed and insecure clients.
+    let prefix = path.strip_suffix(&rest).unwrap_or("");
     let segments: Vec<&str> = rest.split('/').filter(|s| !s.is_empty()).collect();
     match (method.as_str(), segments.as_slice()) {
-        ("POST", ["v0.1", "scan"]) => start_scan(&mut stream, shared, state, &body),
+        ("POST", ["v0.1", "scan"]) => start_scan(&mut stream, shared, state, &body, prefix),
         ("GET", ["v0.1", "scan", id]) => scan_status(&mut stream, shared, state, id),
         ("GET", ["v0.1", "knowledge_base", "issue_definitions"]) => {
             respond(&mut stream, 200, "OK", issue_definitions(defs))
@@ -253,6 +254,9 @@ fn authorized(api: &ApiConfig, path: &str) -> Option<String> {
         return Some(path.to_string());
     }
     for key in &api.keys {
+        if !crate::burp_config::valid_api_key(key) {
+            continue;
+        }
         let with_slash = format!("/{key}/");
         if let Some(rest) = path.strip_prefix(&with_slash) {
             return Some(format!("/{rest}"));
@@ -269,6 +273,7 @@ fn start_scan(
     shared: &Arc<net::Shared>,
     state: &Arc<Mutex<ApiState>>,
     body: &[u8],
+    prefix: &str,
 ) {
     let parsed: Result<Value, _> = serde_json::from_slice(body);
     let urls: Vec<String> = parsed
@@ -302,13 +307,10 @@ fn start_scan(
             }),
         );
     }
-    let first_issue = shared.issues.lock().unwrap().len();
+    let report = Arc::new(crate::scan_report::ScanReport::default());
     let id = {
         let mut st = state.lock().unwrap();
-        let mut hosts: Vec<String> = urls.iter().map(|u| host_only(u)).collect();
-        hosts.sort();
-        hosts.dedup();
-        match reserve_task(&mut st, first_issue, hosts) {
+        match reserve_task(&mut st, report.clone()) {
             Ok(id) => id,
             Err(TaskAdmissionError::ScanAlreadyRunning) => {
                 return respond(
@@ -323,7 +325,7 @@ fn start_scan(
                     stream,
                     429,
                     "Too Many Requests",
-                    json!({"error": "scan task history is full; restart webprobe to clear it"}),
+                    json!({"error": "scan task history is full"}),
                 );
             }
         }
@@ -331,23 +333,23 @@ fn start_scan(
     let shared2 = shared.clone();
     let state2 = state.clone();
     std::thread::spawn(move || {
+        let _report = crate::scan_report::install(Some(report.clone()));
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            scan::crawl_and_audit(&shared2, &urls, true);
+            scan::crawl_and_audit(&shared2, &urls, false);
             shared2.scan.wait_idle(None);
         }));
-        let end_issue = shared2.issues.lock().unwrap().len();
+        let failed = result.is_err()
+            || report.failure().is_some()
+            || shared2.scan.stop.load(Ordering::SeqCst);
         let mut st = state2.lock().unwrap();
-        st.tasks[id].end_issue = Some(end_issue);
-        st.tasks[id].status = if result.is_ok() {
-            "succeeded".to_string()
-        } else {
-            "failed".to_string()
-        };
+        if let Some(task) = st.tasks.iter_mut().find(|task| task.id == id) {
+            task.status = if failed { "failed" } else { "succeeded" }.to_string();
+        }
     });
     // Burp answers 201 with the task id in the Location header.
     let body = json!({"task_id": id.to_string()}).to_string();
     let head = format!(
-        "HTTP/1.1 201 Created\r\ncontent-type: application/json\r\nlocation: /v0.1/scan/{id}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        "HTTP/1.1 201 Created\r\ncontent-type: application/json\r\nlocation: {prefix}/v0.1/scan/{id}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
         body.len()
     );
     let _ = stream.write_all(head.as_bytes());
@@ -356,38 +358,23 @@ fn start_scan(
 
 fn scan_status(
     stream: &mut std::net::TcpStream,
-    shared: &Arc<net::Shared>,
+    _shared: &Arc<net::Shared>,
     state: &Arc<Mutex<ApiState>>,
     id: &str,
 ) {
-    let Ok(n) = id.parse::<usize>() else {
+    let Ok(n) = id.parse::<u64>() else {
         return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
     let st = state.lock().unwrap();
-    let Some(task) = st.tasks.get(n) else {
+    let Some(task) = st.tasks.iter().find(|task| task.id == n) else {
         return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
     let status = task.status.clone();
-    let first_issue = task.first_issue;
-    let end_issue = task.end_issue;
-    let hosts = task.hosts.clone();
+    let report = task.report.clone();
     drop(st);
-    let events: Vec<Value> = {
-        let issues = shared.issues.lock().unwrap();
-        let end = end_issue.map_or(issues.len(), |end| end.min(issues.len()));
-        let start = first_issue.min(end);
-        issues[start..end]
-            .iter()
-            .enumerate()
-            // Issues on other hosts come from other activity (live proxy
-            // audit, manual findings) that shares the process-wide list.
-            .filter(|(_, issue)| hosts.contains(&host_only(&issue.host)))
-            // The position in the append-only list: stable across polls.
-            .map(|(i, issue)| {
-                json!({"serial_number": start + i, "type": "issue_found", "issue": issue_json(issue)})
-            })
-            .collect()
-    };
+    let events: Vec<Value> = report.events().iter().enumerate().map(|(i, issue)| {
+        json!({"serial_number": i, "type": "issue_found", "issue": issue_json(issue)})
+    }).collect();
     respond(
         stream,
         200,
@@ -554,22 +541,22 @@ mod tests {
         active.fetch_sub(1, Ordering::AcqRel);
         assert!(acquire_client_slot(&active));
 
-        let mut state = ApiState { tasks: Vec::new() };
-        assert_eq!(reserve_task(&mut state, 0, Vec::new()), Ok(0));
+        let mut state = ApiState::default();
+        let report = || Arc::new(crate::scan_report::ScanReport::default());
+        assert_eq!(reserve_task(&mut state, report()), Ok(0));
         assert_eq!(
-            reserve_task(&mut state, 0, Vec::new()),
+            reserve_task(&mut state, report()),
             Err(TaskAdmissionError::ScanAlreadyRunning)
         );
         state.tasks[0].status = "succeeded".to_string();
         for _ in 1..MAX_API_TASKS {
-            assert!(reserve_task(&mut state, 0, Vec::new()).is_ok());
-            let last = state.tasks.last_mut().unwrap();
-            last.status = "succeeded".to_string();
+            assert!(reserve_task(&mut state, report()).is_ok());
+            state.tasks.last_mut().unwrap().status = "succeeded".to_string();
         }
-        assert_eq!(
-            reserve_task(&mut state, 0, Vec::new()),
-            Err(TaskAdmissionError::HistoryFull)
-        );
+        assert_eq!(reserve_task(&mut state, report()), Ok(MAX_API_TASKS as u64));
+        assert_eq!(state.tasks.len(), MAX_API_TASKS);
+        assert!(!state.tasks.iter().any(|task| task.id == 0));
+        assert_eq!(state.tasks.last().unwrap().id, MAX_API_TASKS as u64);
     }
 
     #[test]
@@ -647,6 +634,25 @@ mod tests {
             None,
         );
         assert_eq!(code, 200);
+    }
+
+    #[test]
+    fn blank_keys_cannot_authenticate_double_slash_paths() {
+        let mut api = keyed_api();
+        api.keys.push(String::new());
+        let shared = net::Shared::new();
+        assert!(start(&shared, &api, test_defs()).is_err());
+        assert!(authorized(&api, "//v0.1/knowledge_base/issue_definitions").is_none());
+        api.keys = vec![" ".into()];
+        assert!(start(&shared, &api, test_defs()).is_err());
+        api.keys = vec!["bad\r\nheader".into()];
+        assert!(start(&shared, &api, test_defs()).is_err());
+
+        // Exercise the HTTP parser and authorization with a valid key and
+        // a deliberately doubled slash, not just the helper above.
+        let (_shared, port) = start_test_server(&keyed_api());
+        let (code, _) = request(port, "GET", "//v0.1/knowledge_base/issue_definitions", None);
+        assert_eq!(code, 403);
     }
 
     /// The API refuses to start when a key is required but none is

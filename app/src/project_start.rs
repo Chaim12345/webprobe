@@ -49,7 +49,9 @@ pub fn open(app: &mut App, path: &str) -> Result<(), String> {
     let p = std::path::Path::new(path);
     project_files::check(p)?;
     save_current(app)?;
+    let lock = crate::recovery::prepare_lock(app, p)?;
     let data = webprobe_core::project::load(p).map_err(|e| format!("{path}: {e}"))?;
+    crate::recovery::activate_lock(app, p, lock)?;
     app.project_path = path.to_string();
     crate::tools::apply_project(app, &data, true);
     after_switch(app, path, "Opened project");
@@ -83,6 +85,18 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
             .display()
             .to_string(),
     };
+    let target_path = std::path::Path::new(&target);
+    let lock = crate::recovery::prepare_lock(app, target_path)?;
+    // Create the destination before discarding the current session. The
+    // exclusive install also catches another creator racing the check above.
+    if path.is_some() {
+        webprobe_core::project::save_new(
+            target_path,
+            &webprobe_core::project::ProjectData::default(),
+        )
+        .map_err(|e| format!("new project could not be created: {e}"))?;
+    }
+    crate::recovery::activate_lock(app, target_path, lock)?;
     // A new project replaces the session, unlike settings import/defaults,
     // which deliberately keep traffic and tool contents.
     crate::tools::apply_project(app, &webprobe_core::project::ProjectData::default(), true);
@@ -90,9 +104,7 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
     app.shared.passive.clear();
     app.project_path = target.clone();
     if path.is_some() {
-        // The switch has happened, so a failed first save can only be
-        // reported, not aborted.
-        let _ = crate::tools::save_project(app, true);
+        crate::tools::save_project(app, true)?;
         after_switch(app, &target, "New project");
     } else {
         app.hist_cache_key.clear();

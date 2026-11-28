@@ -236,7 +236,17 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
             .collect(),
         ..Default::default()
     };
-    project::save(std::path::Path::new(path), &data).map_err(String::from)
+    project::save_new(std::path::Path::new(path), &data).map_err(String::from)
+}
+
+/// Headless proxy output is a new project, not a lossy replacement of an
+/// existing desktop project. The final save also uses atomic no-replace.
+fn check_new_project(path: &str) -> Result<(), String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Err(format!("{path} already exists; choose a new project path")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("cannot inspect project path {path}: {e}")),
+    }
 }
 
 fn proxy(mut args: Vec<String>) {
@@ -258,6 +268,20 @@ fn proxy(mut args: Vec<String>) {
     }
     // --project-file is Burp's name for --project.
     let project_file = take_project_file(&mut args);
+    let _project_lock = project_file.as_deref().map(|path| {
+        let prepare = || -> Result<_, String> {
+            check_new_project(path)?;
+            let lock =
+                webprobe_core::project_lock::ProjectLock::acquire(std::path::Path::new(path))
+                    .map_err(|e| e.to_string())?;
+            check_new_project(path)?;
+            Ok(lock)
+        };
+        prepare().unwrap_or_else(|e| {
+            eprintln!("{e}");
+            std::process::exit(1);
+        })
+    });
     let seconds: Option<u64> =
         take_opt(&mut args, "--seconds").map(|s| s.parse().unwrap_or_else(|_| usage()));
     if !args.is_empty() {
@@ -376,6 +400,8 @@ fn scan_urls(mut args: Vec<String>) {
     shared.scan_speed.store(speed, Ordering::SeqCst);
     apply_scan_configs(&shared, &scan_configs);
     let started = Instant::now();
+    let scan_report = Arc::new(webprobe_core::scan_report::ScanReport::default());
+    let _report_scope = webprobe_core::scan_report::install(Some(scan_report.clone()));
     scan::crawl_and_audit(&shared, &args, !crawl);
     // crawl_and_audit returns once the last item's audit has finished.
     shared.scan.wait_idle(None);
@@ -414,6 +440,14 @@ fn scan_urls(mut args: Vec<String>) {
                 std::process::exit(1);
             }
         }
+    }
+    if let Some(reason) = scan_report.failure() {
+        eprintln!("scan incomplete: {reason}");
+        std::process::exit(1);
+    }
+    if shared.scan.stop.load(Ordering::SeqCst) {
+        eprintln!("scan cancelled");
+        std::process::exit(1);
     }
 }
 
@@ -537,6 +571,29 @@ mod tests {
         let mut args = strings(&["scan", "http://x/"]);
         burp_command_first(&mut args);
         assert_eq!(args[0], "scan");
+    }
+
+    #[test]
+    fn headless_output_refuses_to_replace_a_full_project() {
+        let dir = std::env::temp_dir().join(format!(
+            "webprobe-headless-existing-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("project.json");
+        let original = project::ProjectData {
+            listener_port: 1234,
+            ..Default::default()
+        };
+        project::save(&path, &original).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let name = path.to_str().unwrap();
+        assert!(check_new_project(name).is_err());
+        assert!(save_project(&net::Shared::new(), name).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(project::load(&path).unwrap().listener_port, 1234);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// --project-file is an alias of --project; the last one given wins.

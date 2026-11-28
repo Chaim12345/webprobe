@@ -35,3 +35,6 @@ pub mod tls;
 pub mod util;
 pub mod variations;
 pub mod xss;
+
+/// Run-owned scanner events and completion state.
+pub mod scan_report;

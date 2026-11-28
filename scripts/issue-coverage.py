@@ -5,8 +5,8 @@ Burp's KnowledgeBase has one issue type per name in
 app/core/src/kb_issue_names.txt. A type counts as *named by a check* when
 its exact name is a string literal in non-test engine code outside the
 registries (the name table and the scan-configuration library). That is an
-upper bound on "reported": it proves a check can raise the type, not that a
-lab run did.
+upper bound on implementation references, not proof that a check can raise
+the type. It does not establish reachability or behavioural coverage.
 
 The names that are not covered are listed, each with a status, in
 scripts/issue-coverage-baseline.json. The check fails when
@@ -111,8 +111,9 @@ def main(argv):
         print("issue-coverage: FAILED. Coverage improved; run `python3 scripts/issue-coverage.py --update` and commit the baseline.")
         return 1
     by = {s: sum(1 for v in old.values() if v.get("status") == s) for s in STATUSES}
-    print(f"issue-coverage: ok, {covered} of {len(names)} Burp issue types named by a check; "
-          f"not covered: {by['todo']} todo, {by['decision']} awaiting a decision, {by['excluded']} excluded")
+    print(f"issue-coverage: ok, {covered} of {len(names)} Burp issue names referenced; "
+          f"not named: {by['todo']} todo, {by['decision']} awaiting a decision, {by['excluded']} excluded")
+    print("issue-coverage: name coverage is not behavioural coverage; stored DOM submission is disabled")
     return 0
 
 
