@@ -141,10 +141,7 @@ pub(crate) fn reflected_xss_severity(kind: &IpKind) -> &'static str {
 /// Zsrh with Ze_f / Zbiw) on the points that check applies to. The UI mints
 /// one Collaborator payload per slot and passes them back as `oob`.
 pub fn oob_slots(shared: &Shared, req_raw: &[u8]) -> Vec<String> {
-    let config = crate::scan_config::shared_config(shared)
-        .lock()
-        .unwrap()
-        .clone();
+    let config = crate::scan_config::shared_config(shared).lock().clone();
     slots_for(
         req_raw,
         ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)),

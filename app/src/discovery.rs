@@ -388,7 +388,7 @@ impl Run {
         if n >= self.cfg.max_requests {
             self.prog.sent.fetch_sub(1, Ordering::SeqCst);
             self.prog.stop.store(true, Ordering::SeqCst);
-            *self.prog.error.lock().unwrap() =
+            *self.prog.error.lock() =
                 Some(format!("Request cap of {} reached", self.cfg.max_requests));
             return None;
         }
@@ -427,18 +427,18 @@ impl Run {
                         let Some((sig, req, resp)) = self.probe(p) else {
                             break;
                         };
-                        out.lock().unwrap().push((p.clone(), *d, sig, req, resp));
+                        out.lock().push((p.clone(), *d, sig, req, resp));
                     }
                 });
             }
         });
-        let mut v = out.into_inner().unwrap();
+        let mut v = out.into_inner();
         v.sort_by(|a, b| a.0.cmp(&b.0));
         v
     }
 
     fn record(&self, path: &str, is_dir: bool, sig: Sig, req: Vec<u8>, resp: Vec<u8>) -> bool {
-        let mut f = self.prog.found.lock().unwrap();
+        let mut f = self.prog.found.lock();
         if f.iter().any(|x| x.path == path) {
             return false;
         }
@@ -472,7 +472,7 @@ impl Run {
             if !visited.insert(dir.clone()) || self.prog.stop.load(Ordering::SeqCst) {
                 continue;
             }
-            *self.prog.current.lock().unwrap() = dir.clone();
+            *self.prog.current.lock() = dir.clone();
             let rnd = random_name();
             let Some((file_base, _, _)) = self.probe(&format!("{dir}{rnd}.html")) else {
                 break;
@@ -751,7 +751,7 @@ fn add_new_to_site_map(app: &mut crate::App) {
     let Some((https, host, port, _)) = parse_origin(&app.eng.discovery.origin) else {
         return;
     };
-    let found = run.found.lock().unwrap().clone();
+    let found = run.found.lock().clone();
     if found.len() <= app.eng.discovery.added {
         return;
     }
@@ -884,16 +884,16 @@ pub fn discovery_window(app: &mut crate::App, ctx: &egui::Context) {
                     start_now = true;
                 }
                 if let Some(r) = &d.run {
-                    let cur = r.current.lock().unwrap().clone();
+                    let cur = r.current.lock().clone();
                     ui.label(format!(
                         "{} | Requests made: {} | Tasks queued: {} | Found: {}{}",
                         if running { "Running" } else { "Finished" },
                         r.sent.load(Ordering::SeqCst),
                         r.queued_dirs.load(Ordering::SeqCst),
-                        r.found.lock().unwrap().len(),
+                        r.found.lock().len(),
                         if running { format!(" | {cur}") } else { String::new() }
                     ));
-                    if let Some(e) = r.error.lock().unwrap().clone() {
+                    if let Some(e) = r.error.lock().clone() {
                         ui.label(egui::RichText::new(e).color(crate::theme::ink_faint()));
                     }
                 }
@@ -902,7 +902,7 @@ pub fn discovery_window(app: &mut crate::App, ctx: &egui::Context) {
                 ui.label(egui::RichText::new(&d.status).size(11.5).color(crate::theme::ink_dim()));
             }
             ui.separator();
-            let found = d.run.as_ref().map(|r| r.found.lock().unwrap().clone()).unwrap_or_default();
+            let found = d.run.as_ref().map(|r| r.found.lock().clone()).unwrap_or_default();
             egui::ScrollArea::vertical().id_salt("discover_rows").max_height(200.0).show(ui, |ui| {
                 egui::Grid::new("discover_grid").striped(true).num_columns(4).show(ui, |ui| {
                     for h in ["URL", "Type", "Status", "Length"] {
@@ -1104,7 +1104,6 @@ mod tests {
         let found: Vec<(String, bool)> = p
             .found
             .lock()
-            .unwrap()
             .iter()
             .map(|f| (f.path.clone(), f.is_dir))
             .collect();
@@ -1117,7 +1116,7 @@ mod tests {
                 ("/admin/config.php.bak".to_string(), false),
             ]
         );
-        let f = &p.found.lock().unwrap()[0];
+        let f = &p.found.lock()[0];
         assert!(String::from_utf8_lossy(&f.request).starts_with(&format!(
             "GET /admin/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
         )));
@@ -1134,7 +1133,7 @@ mod tests {
             tcp_sender(port),
         );
         wait(&p);
-        assert!(p.found.lock().unwrap().is_empty());
+        assert!(p.found.lock().is_empty());
     }
 
     #[test]
@@ -1150,27 +1149,14 @@ mod tests {
         c.max_depth = 3;
         let p = start(c.clone(), format!("127.0.0.1:{port}"), tcp_sender(port));
         wait(&p);
-        let paths: Vec<String> = p
-            .found
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|f| f.path.clone())
-            .collect();
+        let paths: Vec<String> = p.found.lock().iter().map(|f| f.path.clone()).collect();
         assert_eq!(paths, vec!["/a/", "/a/a/", "/a/a/a/"]);
         c.max_depth = 16;
         c.max_requests = 7;
         let p = start(c, format!("127.0.0.1:{port}"), tcp_sender(port));
         wait(&p);
         assert_eq!(p.sent.load(Ordering::SeqCst), 7);
-        assert!(
-            p.error
-                .lock()
-                .unwrap()
-                .as_deref()
-                .unwrap_or("")
-                .contains("cap")
-        );
+        assert!(p.error.lock().as_deref().unwrap_or("").contains("cap"));
     }
 
     #[test]

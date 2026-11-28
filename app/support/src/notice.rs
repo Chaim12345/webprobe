@@ -4,7 +4,7 @@
 // process-wide queue; the UI (feedback.rs) drains it once per frame and shows
 // the entries as toasts.
 
-use std::sync::Mutex;
+use crate::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Level {
@@ -25,18 +25,18 @@ static WAKER: Mutex<Option<Waker>> = Mutex::new(None);
 
 /// Install the front end's wake-up call: notices are then shown at once.
 pub fn set_waker(f: Waker) {
-    *WAKER.lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+    *WAKER.lock() = Some(f);
 }
 
 /// Raise a notice from anywhere (network threads included).
 pub fn toast(level: Level, text: impl Into<String>) {
-    let mut q = QUEUE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut q = QUEUE.lock();
     q.push((level, text.into()));
     if q.len() > QUEUE_MAX {
         q.remove(0);
     }
     drop(q);
-    let waker = WAKER.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let waker = WAKER.lock().clone();
     if let Some(f) = waker {
         f();
     }
@@ -44,5 +44,5 @@ pub fn toast(level: Level, text: impl Into<String>) {
 
 /// Take everything queued so far, oldest first.
 pub fn take_queued() -> Vec<(Level, String)> {
-    std::mem::take(&mut *QUEUE.lock().unwrap_or_else(|e| e.into_inner()))
+    std::mem::take(&mut *QUEUE.lock())
 }

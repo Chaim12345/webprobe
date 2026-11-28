@@ -71,7 +71,7 @@ impl PollTask {
                 }
                 let (poll, gate, stop) = (poll.clone(), gate2.clone(), stop2.clone());
                 let mut request = tokio::task::spawn_blocking(move || {
-                    let _guard = gate.lock().unwrap();
+                    let _guard = gate.lock();
                     if stop.load(Ordering::SeqCst) {
                         return None;
                     }
@@ -130,7 +130,7 @@ impl Drop for PollTask {
         if let Some(cleanup) = self.cleanup.take() {
             crate::rt::engine().spawn(async move {
                 let _ = tokio::task::spawn_blocking(move || {
-                    let _guard = gate.lock().unwrap();
+                    let _guard = gate.lock();
                     cleanup();
                 })
                 .await;
@@ -181,7 +181,6 @@ mod tests {
                 started_tx.send(()).unwrap();
                 release_rx
                     .lock()
-                    .unwrap()
                     .recv_timeout(Duration::from_secs(5))
                     .unwrap();
                 Ok(())
@@ -247,7 +246,6 @@ mod tests {
                 started_tx.send(()).unwrap();
                 release_rx
                     .lock()
-                    .unwrap()
                     .recv_timeout(Duration::from_secs(5))
                     .unwrap();
                 Ok(())
@@ -345,7 +343,6 @@ mod tests {
                 if n == 0 {
                     release_rx
                         .lock()
-                        .unwrap()
                         .recv_timeout(Duration::from_secs(5))
                         .unwrap();
                 }

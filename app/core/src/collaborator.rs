@@ -52,7 +52,7 @@ const HTTP_OK_BODY: &str = "Local Collaborator capture: the request was recorded
      This listener is loopback-only; no public callback service is involved.\n";
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap()
+    m.lock()
 }
 
 fn unix_secs() -> u64 {

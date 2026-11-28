@@ -193,6 +193,100 @@ pub fn should_intercept(rules: &[InterceptRule], facts: &Facts) -> bool {
     result.unwrap_or(true)
 }
 
+/// The interception rules with each condition regex compiled once, when the
+/// table is edited. Requests never compile a pattern.
+#[derive(Clone, Default)]
+pub struct CompiledInterceptRules {
+    rules: Vec<InterceptRule>,
+    regexes: Vec<Option<regex::Regex>>,
+}
+
+impl CompiledInterceptRules {
+    pub fn new(rules: Vec<InterceptRule>) -> Self {
+        let regexes = rules
+            .iter()
+            .map(|r| {
+                (r.enabled && r.kind.takes_condition())
+                    .then(|| {
+                        regex::RegexBuilder::new(&r.condition)
+                            .case_insensitive(true)
+                            .build()
+                            .ok()
+                    })
+                    .flatten()
+            })
+            .collect();
+        Self { rules, regexes }
+    }
+
+    pub fn rules(&self) -> &[InterceptRule] {
+        &self.rules
+    }
+
+    pub fn into_rules(self) -> Vec<InterceptRule> {
+        self.rules
+    }
+
+    pub fn push(&mut self, rule: InterceptRule) {
+        self.rules.push(rule);
+        *self = Self::new(std::mem::take(&mut self.rules));
+    }
+
+    pub fn clear(&mut self) {
+        self.rules.clear();
+        self.regexes.clear();
+    }
+
+    fn holds_with(&self, index: usize, f: &Facts) -> bool {
+        let rule = &self.rules[index];
+        let positive = match rule.kind {
+            Kind::HasParameters => f.has_parameters,
+            Kind::InScope => f.in_scope,
+            Kind::DomainName => regex_hit_compiled(&self.regexes[index], &f.domain),
+            Kind::Url => regex_hit_compiled(&self.regexes[index], &f.url),
+            Kind::FileExtension => regex_hit_compiled(&self.regexes[index], &f.extension),
+            Kind::HttpMethod => regex_hit_compiled(&self.regexes[index], &f.method),
+            Kind::AnyHeader => regex_hit_compiled(&self.regexes[index], &f.headers),
+            Kind::Body => regex_hit_compiled(&self.regexes[index], &f.body),
+        };
+        positive != rule.negate
+    }
+
+    pub fn should_intercept(&self, facts: &Facts) -> bool {
+        let mut result: Option<bool> = None;
+        for (i, rule) in self.rules.iter().enumerate() {
+            if !rule.enabled {
+                continue;
+            }
+            let v = self.holds_with(i, facts);
+            result = Some(match (result, rule.operator) {
+                (None, _) => v,
+                (Some(acc), Operator::And) => acc && v,
+                (Some(acc), Operator::Or) => acc || v,
+            });
+        }
+        result.unwrap_or(true)
+    }
+}
+
+impl std::ops::Deref for CompiledInterceptRules {
+    type Target = [InterceptRule];
+
+    fn deref(&self) -> &Self::Target {
+        &self.rules
+    }
+}
+
+fn regex_hit_compiled(re: &Option<regex::Regex>, text: &str) -> bool {
+    re.as_ref().is_some_and(|re| re.is_match(text))
+}
+
+impl From<Vec<InterceptRule>> for CompiledInterceptRules {
+    fn from(rules: Vec<InterceptRule>) -> Self {
+        Self::new(rules)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,5 +399,43 @@ mod tests {
             ("File extension", "Does not match")
         );
         assert!(!Kind::HasParameters.takes_condition() && Kind::Body.takes_condition());
+    }
+
+    #[test]
+    fn compiled_rules_match_the_free_check_and_follow_edits() {
+        let rules = defaults();
+        let http = facts("GET", "/app/page");
+        let image = facts("GET", "/img/logo.png?x=1");
+        let compiled = CompiledInterceptRules::new(rules.clone());
+        assert_eq!(
+            compiled.should_intercept(&http),
+            should_intercept(&rules, &http)
+        );
+        assert_eq!(
+            compiled.should_intercept(&image),
+            should_intercept(&rules, &image)
+        );
+        assert!(compiled.should_intercept(&http), "default holds a page");
+        assert!(!compiled.should_intercept(&image), "default skips images");
+
+        let mut edited = rules.clone();
+        edited[0].enabled = false;
+        edited[1].enabled = true;
+        let recompiled = CompiledInterceptRules::new(edited.clone());
+        assert_eq!(
+            recompiled.should_intercept(&http),
+            should_intercept(&edited, &http)
+        );
+        // push/clear recompile in place.
+        let mut live = CompiledInterceptRules::new(rules);
+        live.clear();
+        live.push(InterceptRule {
+            enabled: true,
+            operator: Operator::And,
+            kind: Kind::Url,
+            negate: true,
+            condition: "^https://".into(),
+        });
+        assert!(live.should_intercept(&http), "only https is held");
     }
 }

@@ -243,7 +243,7 @@ fn connect_passthrough_gets_the_coalesced_tunnel_bytes_after_the_200() {
         s.write_all(b"pong").unwrap();
     });
     let shared = Shared::new();
-    shared.tls_bypass.lock().unwrap().push("127.0.0.1".into());
+    shared.tls_bypass.lock().push("127.0.0.1".into());
     let (port, pt) = spawn_proxy(shared);
     let mut c = client(port);
     let mut wire =
@@ -278,7 +278,7 @@ fn connect_that_fails_to_connect_does_not_forward_the_leftovers() {
     let dead_port = dead.local_addr().unwrap().port();
     drop(dead);
     let shared = Shared::new();
-    shared.tls_bypass.lock().unwrap().push("127.0.0.1".into());
+    shared.tls_bypass.lock().push("127.0.0.1".into());
     let (port, pt) = spawn_proxy(shared);
     let mut c = client(port);
     let mut wire =

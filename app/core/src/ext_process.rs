@@ -69,7 +69,7 @@ pub struct ProcessExtension {
 }
 
 fn push_error(errors: &Mutex<VecDeque<String>>, line: String) {
-    let mut e = errors.lock().unwrap();
+    let mut e = errors.lock();
     if e.len() >= MAX_ERRORS {
         e.pop_front();
     }
@@ -277,19 +277,19 @@ impl ProcessExtension {
         id: Option<u64>,
         timeout: Duration,
     ) -> Result<serde_json::Value, String> {
-        let _io = self.io.lock().unwrap();
+        let _io = self.io.lock();
         if self.dead.load(Ordering::SeqCst) {
             return Err("extension stopped".into());
         }
         let result = (|| {
             {
-                let stdin = self.stdin.lock().unwrap();
+                let stdin = self.stdin.lock();
                 let w = stdin.as_ref().ok_or("stdin closed")?;
                 w.send(msg.to_string())
                     .map_err(|_| "write failed: extension input closed".to_string())?;
             }
             let deadline = std::time::Instant::now() + timeout;
-            let rx = self.lines.lock().unwrap();
+            let rx = self.lines.lock();
             loop {
                 let left = deadline.saturating_duration_since(std::time::Instant::now());
                 let line = match rx.recv_timeout(left) {
@@ -327,7 +327,6 @@ impl ProcessExtension {
                     || self
                         .child
                         .lock()
-                        .unwrap()
                         .as_mut()
                         .is_some_and(|c| matches!(c.try_wait(), Ok(Some(_))));
                 if exited || self.failures.fetch_add(1, Ordering::SeqCst) + 1 >= MAX_FAILURES {
@@ -355,7 +354,6 @@ impl ProcessExtension {
         if let Some(found) = reply.get("issues").and_then(|i| i.as_array()) {
             self.issues
                 .lock()
-                .unwrap()
                 .entry(std::thread::current().id())
                 .or_default()
                 .extend(found.iter().filter_map(parse_issue));
@@ -379,7 +377,7 @@ impl ProcessExtension {
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         if let Ok(reply) = self.call(serde_json::json!({ "type": "tab", "id": id }), Some(id)) {
-            *self.tab_text.lock().unwrap() = reply
+            *self.tab_text.lock() = reply
                 .get("text")
                 .and_then(|t| t.as_str())
                 .unwrap_or_default()
@@ -388,8 +386,8 @@ impl ProcessExtension {
     }
 
     fn kill(&self) {
-        self.stdin.lock().unwrap().take();
-        if let Some(mut c) = self.child.lock().unwrap().take() {
+        self.stdin.lock().take();
+        if let Some(mut c) = self.child.lock().take() {
             let _ = c.kill();
             let _ = c.wait();
         }
@@ -433,7 +431,6 @@ impl ProxyHooks for ProcessExtension {
     fn take_issues(&self) -> Vec<ExtIssue> {
         self.issues
             .lock()
-            .unwrap()
             .remove(&std::thread::current().id())
             .unwrap_or_default()
     }
@@ -441,13 +438,13 @@ impl ProxyHooks for ProcessExtension {
         self.tab.clone()
     }
     fn tab_content(&self) -> String {
-        self.tab_text.lock().unwrap().clone()
+        self.tab_text.lock().clone()
     }
     fn refresh_tab(&self) {
         self.fetch_tab();
     }
     fn errors(&self) -> Vec<String> {
-        self.errors.lock().unwrap().iter().cloned().collect()
+        self.errors.lock().iter().cloned().collect()
     }
     fn healthy(&self) -> bool {
         !self.dead.load(Ordering::SeqCst)

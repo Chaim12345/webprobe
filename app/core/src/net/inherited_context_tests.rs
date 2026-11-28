@@ -78,7 +78,7 @@ fn inherited_net_old_cancel_new_owner_reset_blocks_plain_tls_helpers_and_macro()
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
         if proxy {
-            *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+            *shared.upstream.lock() = crate::upstream::UpstreamConfig {
                 kind: crate::upstream::UpstreamKind::Http,
                 host: "127.0.0.1".into(),
                 port: port.to_string(),

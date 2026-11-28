@@ -133,7 +133,6 @@ fn oob_interactions_raise_issues_without_the_ui() {
     let names: Vec<String> = shared
         .issues
         .lock()
-        .unwrap()
         .iter()
         .map(|i| i.name.clone())
         .collect();
@@ -228,14 +227,14 @@ fn live_lab_scan() {
         while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(300) {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        for i in shared.issues.lock().unwrap().iter() {
+        for i in shared.issues.lock().iter() {
             out.push_str(&format!(
                 "{path}\t{}\t{}\t{}\n",
                 i.sev, i.confidence, i.name
             ));
         }
         if std::env::var("WB_DEBUG").is_ok() {
-            for ev in shared.events.lock().unwrap().iter() {
+            for ev in shared.events.lock().iter() {
                 eprintln!("EVENT {path}: {ev}");
             }
         }
@@ -280,7 +279,7 @@ fn live_juice_crawl_scan() {
     let dir = std::env::var("WB_OUT").unwrap_or_else(|_| "/tmp/parity-juice".into());
     crawl_and_audit(&shared, &[format!("http://{target}/")], false);
     let mut out = String::new();
-    for i in shared.issues.lock().unwrap().iter() {
+    for i in shared.issues.lock().iter() {
         out.push_str(&format!(
             "{}\t{}\t{}\t{}\n",
             i.path, i.sev, i.confidence, i.name
@@ -304,7 +303,6 @@ fn live_juice_crawl_scan() {
     for ev in shared
         .events
         .lock()
-        .unwrap()
         .iter()
         .filter(|e| e.contains("crawl") || e.contains("Crawl"))
     {
@@ -369,14 +367,14 @@ fn live_juice_scan() {
         while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(300) {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        for i in shared.issues.lock().unwrap().iter() {
+        for i in shared.issues.lock().iter() {
             out.push_str(&format!(
                 "{}\t{}\t{}\t{}\n",
                 i.path, i.sev, i.confidence, i.name
             ));
         }
         if std::env::var("WB_DEBUG").is_ok() {
-            for ev in shared.events.lock().unwrap().iter() {
+            for ev in shared.events.lock().iter() {
                 eprintln!("EVENT {path}: {ev}");
             }
         }
@@ -549,7 +547,7 @@ fn active_scan_reports_traversal_against_a_vulnerable_server() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert!(!shared.scan.is_busy(), "scan did not finish");
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     let trav: Vec<_> = issues
         .iter()
         .filter(|i| i.name == "File path traversal")
@@ -2265,11 +2263,11 @@ fn passive_issues_are_deduplicated_per_host_and_path() {
     assert_eq!(first.len(), 1, "only the X-Powered-By issue");
     add_passive_issues(&shared, passive_check(&e));
     add_passive_issues(&shared, passive_check(&e));
-    assert_eq!(shared.issues.lock().unwrap().len(), 1);
+    assert_eq!(shared.issues.lock().len(), 1);
     // a different path is a different issue
     let other = entry("/other", true, &resp("200 OK", &h, "<html></html>"));
     add_passive_issues(&shared, passive_check(&other));
-    assert_eq!(shared.issues.lock().unwrap().len(), 2);
+    assert_eq!(shared.issues.lock().len(), 2);
 }
 
 #[test]
@@ -2360,7 +2358,7 @@ fn active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server() {
     use std::io::{Read, Write};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
-    let stored = std::sync::Arc::new(std::sync::Mutex::new(String::from("first!")));
+    let stored = std::sync::Arc::new(crate::sync::Mutex::new(String::from("first!")));
     let store = stored.clone();
     std::thread::spawn(move || {
         for stream in listener.incoming() {
@@ -2409,7 +2407,7 @@ fn active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server() {
                     // A guestbook: comments accumulate (replaying the
                     // POST, as Burp's retrieval does, keeps earlier ones).
                     let c = String::from_utf8_lossy(&pct_decode(&v.replace('+', " "))).to_string();
-                    let mut g = store.lock().unwrap();
+                    let mut g = store.lock();
                     g.push_str("<br>");
                     g.push_str(&c);
                 }
@@ -2419,7 +2417,7 @@ fn active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server() {
                     b.len()
                 )
             } else if target == "/comments" {
-                let b = format!("<html><body><p>{}</p></body></html>", store.lock().unwrap());
+                let b = format!("<html><body><p>{}</p></body></html>", store.lock());
                 format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
                     b.len()
@@ -2446,7 +2444,7 @@ fn active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert!(!shared.scan.is_busy(), "scan did not finish");
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     let names: Vec<_> = issues
         .iter()
         .map(|i| {
@@ -2496,7 +2494,7 @@ fn characterisation_server() -> u16 {
     use std::io::{Read, Write};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
-    let board = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let board = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut s) = stream else { continue };
@@ -2627,7 +2625,7 @@ fn characterisation_server() -> u16 {
                     ok("text/html", "", b)
                 } else if path == "/board" {
                     // Every msg is kept and shown on every later /board page.
-                    let mut log = board.lock().unwrap();
+                    let mut log = board.lock();
                     if let Some(m) = param("msg") {
                         log.push(m.replace('<', "&lt;"));
                     }
@@ -2687,7 +2685,7 @@ fn scan_configuration_switches_checks_and_insertion_types_off() {
     let host = format!("127.0.0.1:{port}");
     let scan = |config: crate::scan_config::ScanConfig| -> Vec<String> {
         let shared = net::Shared::new();
-        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+        *crate::scan_config::shared_config(&shared).lock() = config;
         let mut e = entry("/item?id=5", false, "");
         e.host = "127.0.0.1".into();
         e.port = port;
@@ -2707,7 +2705,6 @@ fn scan_configuration_switches_checks_and_insertion_types_off() {
         let mut names: Vec<String> = shared
             .issues
             .lock()
-            .unwrap()
             .iter()
             .map(|i| i.name.clone())
             .collect();
@@ -2832,7 +2829,6 @@ fn characterisation_active_scan_issue_list() {
     let mut got: Vec<(String, String, String, String)> = shared
         .issues
         .lock()
-        .unwrap()
         .iter()
         .map(|i| {
             (
@@ -2860,7 +2856,7 @@ fn characterisation_active_scan_issue_list() {
 
     // Evidence: every issue carries the exchange(s) that confirmed it,
     // and for an injection that is the probe, not the base request.
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     for i in issues.iter() {
         assert!(
             !i.evidence.is_empty(),
@@ -2925,7 +2921,6 @@ fn characterisation_active_scan_issue_list() {
     let names: Vec<String> = default
         .issues
         .lock()
-        .unwrap()
         .iter()
         .map(|i| i.name.clone())
         .collect();
@@ -3877,7 +3872,7 @@ fn non_burp_passive_issues_are_off_by_default() {
     let e = entry("/app", true, &resp("200 OK", &h, "<html></html>"));
     add_passive_issues(&shared, passive_check(&e));
     assert!(
-        shared.issues.lock().unwrap().is_empty(),
+        shared.issues.lock().is_empty(),
         "X-Powered-By is not a Burp issue"
     );
     assert!(is_burp_issue("Unencrypted communications"));
@@ -3895,7 +3890,7 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
     let port = listener.local_addr().unwrap().port();
     let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let h = hits.clone();
-    let comments = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let comments = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut s) = stream else { continue };
@@ -3933,20 +3928,19 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                 |c: &Vec<String>| c.iter().map(|x| format!("<p>{x}</p>")).collect::<String>();
             let page = if head.starts_with("POST /comment") {
                 if let Some(c) = field("c=") {
-                    comments.lock().unwrap().push(c);
+                    comments.lock().push(c);
                 }
                 Some("<html><body>thanks</body></html>".to_string())
             } else if head.starts_with("GET /list") && !post_only {
                 Some(format!(
                     "<html><body>{}</body></html>",
-                    list(&comments.lock().unwrap())
+                    list(&comments.lock())
                 ))
             } else if head.starts_with("GET /embed") {
                 // Every stored comment in CSS, attribute, form-target and
                 // link-target positions (the G.11 stored lab).
                 let shown = comments
                     .lock()
-                    .unwrap()
                     .iter()
                     .map(|x| format!("<style>{x}</style><div data-x=\"{x}\"></div><form action=\"{x}\"></form><a href=\"{x}\">l</a>"))
                     .collect::<String>();
@@ -3956,7 +3950,6 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                 // number of quotes breaks it (the second-order SQL lab).
                 let broken = comments
                     .lock()
-                    .unwrap()
                     .last()
                     .is_some_and(|c| c.matches('\'').count() % 2 == 1);
                 Some(if broken {
@@ -3969,7 +3962,6 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                 // suspicious input transformation lab).
                 let shown = comments
                     .lock()
-                    .unwrap()
                     .last()
                     .map(|c| String::from_utf8_lossy(&pct_decode(c)).into_owned())
                     .unwrap_or_default();
@@ -3977,7 +3969,7 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
             } else if head.starts_with("POST /search") {
                 let q = field("q=").unwrap_or_default();
                 let shown = if post_only {
-                    list(&comments.lock().unwrap())
+                    list(&comments.lock())
                 } else {
                     String::new()
                 };
@@ -3991,7 +3983,7 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
             // open-redirection lab).
             let go = head
                 .starts_with("GET /go")
-                .then(|| comments.lock().unwrap().last().cloned().unwrap_or_default());
+                .then(|| comments.lock().last().cloned().unwrap_or_default());
             let resp = match page {
                 Some(b) => format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
@@ -4041,7 +4033,6 @@ fn run_task(shared: &std::sync::Arc<Shared>, entries: Vec<HistEntry>) {
         let open = shared
             .tasks
             .lock()
-            .unwrap()
             .iter()
             .find(|t| t.id == id)
             .is_some_and(|t| t.state.is_open());
@@ -4057,7 +4048,6 @@ fn issues_named(shared: &Shared, name: &str) -> Vec<ScanIssue> {
     shared
         .issues
         .lock()
-        .unwrap()
         .iter()
         .filter(|i| i.name == name)
         .cloned()
@@ -4333,7 +4323,7 @@ fn stored_g11_skips_unsafe_retrieval_and_stops_after_first_family_hit() {
         2,
         "one injection and retrieval, no later families"
     );
-    assert_eq!(shared.issues.lock().unwrap().len(), 1);
+    assert_eq!(shared.issues.lock().len(), 1);
     assert!(!cx.g11_allowed());
     let head = checks::PairCtx::new(shared, pair("HEAD"));
     assert!(head.g11_allowed(), "HEAD retrieval is a safe method");

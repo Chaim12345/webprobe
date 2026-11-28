@@ -12,7 +12,7 @@
 //! - Results flow back over `tokio::sync::mpsc` channels, drained per
 //!   frame by the egui side (see `intruder_run::RunState::drain_rows`).
 //!
-//! Constraints from the issue: `std::sync::Mutex` stays (the critical
+//! Constraints from the issue: `crate::sync::Mutex` stays (the critical
 //! sections are short and never held across an `.await`, so no
 //! `tokio::sync::Mutex` is needed), and extension hooks (BCheck /
 //! ext_host closures) run inside `tokio::task::spawn_blocking`, never on

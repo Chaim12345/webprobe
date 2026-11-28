@@ -83,7 +83,7 @@ fn pattern_matches_literal_regex_and_invalid_regex() {
 }
 
 fn scope(shared: &Shared, rules: Vec<ScopeRule>) {
-    *shared.scope.lock().unwrap() = rules;
+    *shared.scope.lock() = rules.into();
 }
 
 #[test]

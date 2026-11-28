@@ -1585,7 +1585,7 @@ fn run_save(path: &std::path::Path, data: &ProjectData, done: SaveDone) {
 /// `done` is dropped).
 pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: SaveDone) {
     let (lock, cv) = saver();
-    let mut s = lock.lock().unwrap();
+    let mut s = lock.lock();
     if let Some(slot) = s.pending.iter_mut().find(|(p, _, _)| *p == path) {
         *slot = (path, data, done);
     } else {
@@ -1605,7 +1605,7 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
             fn drop(&mut self) {
                 if std::thread::panicking() {
                     let (lock, cv) = saver();
-                    let mut s = lock.lock().unwrap();
+                    let mut s = lock.lock();
                     s.busy = false;
                     cv.notify_all();
                 }
@@ -1614,7 +1614,7 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
         let _guard = OnPanic;
         loop {
             let job = {
-                let mut s = lock.lock().unwrap();
+                let mut s = lock.lock();
                 match s.pending.pop_front() {
                     Some(job) => job,
                     None => {
@@ -1635,13 +1635,13 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
         // No thread: save on this one rather than lose the snapshot.
         tracing::warn!(target: "webprobe", event_code = "project.save.thread_failed", "Project-save worker unavailable; saving inline");
         loop {
-            let job = lock.lock().unwrap().pending.pop_front();
+            let job = lock.lock().pending.pop_front();
             match job {
                 Some((path, data, done)) => run_save(&path, &data, done),
                 None => break,
             }
         }
-        let mut s = lock.lock().unwrap();
+        let mut s = lock.lock();
         s.busy = false;
         cv.notify_all();
     }
@@ -1650,7 +1650,7 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
 /// Block until no save is queued or running.
 pub fn wait_for_saves() {
     let (lock, cv) = saver();
-    let mut s = lock.lock().unwrap();
+    let mut s = lock.lock();
     while s.busy {
         s = cv.wait(s).unwrap_or_else(|p| p.into_inner());
     }

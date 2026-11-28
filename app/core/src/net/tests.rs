@@ -1440,7 +1440,7 @@ Host: localhost
     );
     assert!(prime.resp.is_some(), "{:?}", prime.error);
     // The connection is pooled before the effectful POST.
-    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    assert_eq!(shared.h2_pool.lock().len(), 1, "pool not primed");
     let r = send_tls_raw(
         &shared,
         "localhost",
@@ -1581,7 +1581,7 @@ Host: localhost
 ",
     );
     assert!(ra.resp.is_some(), "{:?}", ra.error);
-    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    assert_eq!(shared.h2_pool.lock().len(), 1, "pool not primed");
     let rb = send_tls_raw(
         &shared,
         "localhost",
@@ -1683,7 +1683,7 @@ Host: localhost
 ",
     );
     assert!(ra.resp.is_some(), "{:?}", ra.error);
-    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    assert_eq!(shared.h2_pool.lock().len(), 1, "pool not primed");
     let rb = send_tls_raw(
         &shared,
         "localhost",
@@ -1751,7 +1751,7 @@ Host: localhost
 ",
     );
     assert!(ra.resp.is_some(), "{:?}", ra.error);
-    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    assert_eq!(shared.h2_pool.lock().len(), 1, "pool not primed");
     // With keep-alive now off, /b must not take the pooled connection.
     shared.keep_alive.store(false, Ordering::SeqCst);
     let rb = send_tls_raw(
@@ -1911,7 +1911,6 @@ fn h2_pool_key_covers_route_tls_and_protocol_choice() {
     shared
         .client_certs
         .lock()
-        .unwrap()
         .push(crate::net::tls_client::ClientCertRule {
             host_pattern: "localhost".into(),
             cert_pem: "not a pem".into(),
@@ -1921,7 +1920,7 @@ fn h2_pool_key_covers_route_tls_and_protocol_choice() {
     // A valid matching mTLS rule is a different identity than the fallback.
     let (cert_pem, key_pem) = shared.mitm.client_certificate("client").unwrap();
     {
-        let mut certs = shared.client_certs.lock().unwrap();
+        let mut certs = shared.client_certs.lock();
         certs.clear();
         certs.push(crate::net::tls_client::ClientCertRule {
             host_pattern: "localhost".into(),
@@ -1933,16 +1932,16 @@ fn h2_pool_key_covers_route_tls_and_protocol_choice() {
     assert_ne!(base, mtls);
     // Changing the rule's key is a different identity.
     let (_cert2, key_pem2) = shared.mitm.client_certificate("client2").unwrap();
-    shared.client_certs.lock().unwrap()[0].key_pem = key_pem2;
+    shared.client_certs.lock()[0].key_pem = key_pem2;
     assert_ne!(mtls, key(&shared, &config, None));
     // Valid back to invalid: the rule stops building and the shared
     // fallback identity returns, so the key matches the no-rule key again.
-    shared.client_certs.lock().unwrap()[0].cert_pem = "not a pem".into();
+    shared.client_certs.lock()[0].cert_pem = "not a pem".into();
     assert_eq!(base, key(&shared, &config, None));
-    shared.client_certs.lock().unwrap().clear();
+    shared.client_certs.lock().clear();
     // A constraints-only root change (same subject and SPKI, name
     // constraints added) is a different TLS policy.
-    let original_roots = shared.tls_roots.lock().unwrap().clone();
+    let original_roots = shared.tls_roots.lock().clone();
     let mut constrained = rustls::RootCertStore::empty();
     for anchor in original_roots.roots.iter() {
         let mut anchor = anchor.clone();
@@ -1950,12 +1949,12 @@ fn h2_pool_key_covers_route_tls_and_protocol_choice() {
         constrained.roots.push(anchor);
     }
     let before_constraints = key(&shared, &config, None);
-    *shared.tls_roots.lock().unwrap() = constrained;
+    *shared.tls_roots.lock() = constrained;
     assert_ne!(before_constraints, key(&shared, &config, None));
     // A different root store altogether is a different TLS policy.
-    *shared.tls_roots.lock().unwrap() = rustls::RootCertStore::empty();
+    *shared.tls_roots.lock() = rustls::RootCertStore::empty();
     assert_ne!(before_constraints, key(&shared, &config, None));
-    *shared.tls_roots.lock().unwrap() = original_roots;
+    *shared.tls_roots.lock() = original_roots;
     // A different shared upstream config is a different identity.
     let ca = shared.mitm.ca_der();
     let pre_swap = key(&shared, &config, None);
@@ -2081,7 +2080,7 @@ fn http2c_end_to_end_through_proxy_listener() {
     upstream_thread.join().unwrap();
     proxy_thread.join().unwrap();
     assert!(
-        shared.pool.lock().unwrap().is_empty(),
+        shared.pool.lock().is_empty(),
         "h2c connection must not enter the HTTP/1.x pool"
     );
 }
@@ -2090,7 +2089,7 @@ fn http2c_end_to_end_through_proxy_listener() {
 #[test]
 fn tls_bypass_relays_raw_bytes() {
     let shared = Shared::new();
-    shared.tls_bypass.lock().unwrap().push("localhost".into());
+    shared.tls_bypass.lock().push("localhost".into());
     let echo = TcpListener::bind("127.0.0.1:0").unwrap();
     let echo_port = echo.local_addr().unwrap().port();
     let t = std::thread::spawn(move || {
@@ -2140,8 +2139,8 @@ fn client_certificate_presented_to_mtls_server() {
     let (cert_pem, key_pem) = shared.mitm.client_certificate("client").unwrap();
     let mut roots = RootCertStore::empty();
     roots.add(shared.mitm.ca_der()).unwrap();
-    *shared.tls_roots.lock().unwrap() = roots.clone();
-    shared.client_certs.lock().unwrap().push(ClientCertRule {
+    *shared.tls_roots.lock() = roots.clone();
+    shared.client_certs.lock().push(ClientCertRule {
         host_pattern: "localhost".into(),
         cert_pem,
         key_pem,
@@ -2308,7 +2307,6 @@ fn listener_redirect_and_non_proxy_style_requests() {
     shared
         .listener_redirects
         .lock()
-        .unwrap()
         .insert(spec.port, ("127.0.0.1".to_string(), origin_port));
     let redirected = ask("GET http://no-such-host.invalid/y HTTP/1.1\r\nHost: no-such-host.invalid\r\nConnection: close\r\n\r\n".to_string());
     assert!(
@@ -2316,7 +2314,7 @@ fn listener_redirect_and_non_proxy_style_requests() {
         "{redirected}"
     );
     // Without the redirect the same request cannot be delivered.
-    shared.listener_redirects.lock().unwrap().clear();
+    shared.listener_redirects.lock().clear();
     let failed = ask("GET http://no-such-host.invalid/y HTTP/1.1\r\nHost: no-such-host.invalid\r\nConnection: close\r\n\r\n".to_string());
     assert!(failed.starts_with("HTTP/1.1 502"), "{failed}");
 
@@ -2412,13 +2410,14 @@ fn listener_validation() {
 /// P-10: the matrix runner sends one request per matrix row and records a row per request.
 #[test]
 fn intruder_runner_sends_the_matrix() {
-    use crate::intruder::AttackType;
+    use crate::intruder::{AttackType, SetSpec};
     let shared = Shared::new();
-    // Mock origin: answers one request per connection with a 200.
+    // Mock origin: answers one request per connection with a 200. The GET
+    // template also gets the automatic unmodified baseline (request 0).
     let origin = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = origin.local_addr().unwrap().port();
     let ot = std::thread::spawn(move || {
-        for _ in 0..4 {
+        for _ in 0..5 {
             let (mut s, _) = origin.accept().unwrap();
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let _ = read_request_head(&mut s);
@@ -2428,30 +2427,34 @@ fn intruder_runner_sends_the_matrix() {
     });
     // Cluster bomb over two positions: 2 x 2 = 4 requests.
     let template = format!("GET /p?a=§1§&b=§2§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
-    let sets = vec![
-        vec!["x".to_string(), "y".to_string()],
-        vec!["1".to_string(), "2".to_string()],
+    let specs = vec![
+        SetSpec::List(vec!["x".to_string(), "y".to_string()]),
+        SetSpec::List(vec!["1".to_string(), "2".to_string()]),
     ];
-    start_attack(
+    let mut settings = crate::intruder_run::AttackSettings::default();
+    settings.pool.max_concurrent = 1;
+    let run = crate::intruder_run::start(
         shared.clone(),
-        template,
+        &template,
         AttackType::ClusterBomb,
-        sets,
-        false,
+        specs,
+        ("127.0.0.1".into(), port, false),
+        settings,
     )
     .expect("attack starts");
-    let attack = shared.attack.lock().unwrap().clone();
-    for _ in 0..200 {
-        if attack.done.load(Ordering::SeqCst) >= 4 {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(25));
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while run.is_running() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Intruder did not finish"
+        );
+        std::thread::sleep(Duration::from_millis(5));
     }
-    let rows = attack.rows.lock().unwrap().clone();
-    assert_eq!(rows.len(), 4, "one row per matrix request");
-    assert!(rows.iter().all(|r| r.ok && r.status == "200"));
-    assert_eq!(attack.total.load(Ordering::SeqCst), 4);
     ot.join().unwrap();
+    let rows = run.snapshot_rows();
+    let matrix: Vec<_> = rows.iter().filter(|r| r.number > 0).collect();
+    assert_eq!(matrix.len(), 4, "one row per matrix request");
+    assert!(matrix.iter().all(|r| !r.error && r.status == "200"));
 }
 
 /// "Diff count" (burp.Zxwu.java:56): changed, added and removed response
@@ -2503,7 +2506,6 @@ fn resolve_ip_uses_cache_and_handles_empty_host() {
     shared
         .ip_cache
         .lock()
-        .unwrap()
         .insert("cached.example".into(), "203.0.113.7".into());
     assert_eq!(
         resolve_ip(&shared, "cached.example"),
@@ -2597,7 +2599,7 @@ fn ws_intercept_off_relays_raw_bytes_and_control_frames_pass() {
     let out = intercept_ws_stream(&shared, "example.com", &ping, &mut st, true);
     assert_eq!(out, ping, "control frames are never queued");
     assert!(st.buf.is_empty());
-    assert!(shared.queue.lock().unwrap().is_empty());
+    assert!(shared.queue.lock().is_empty());
     let h = shared.ws_history.with_rows(|r| r.to_vec());
     let rows: Vec<(String, String, usize)> = h
         .iter()
@@ -2636,7 +2638,7 @@ fn ws_intercept_queues_edits_and_drops() {
         for verdict in ["HELLO", ""] {
             loop {
                 let item = {
-                    let mut queue = q_shared.queue.lock().unwrap();
+                    let mut queue = q_shared.queue.lock();
                     if queue.is_empty() {
                         None
                     } else {
@@ -2673,7 +2675,7 @@ fn ws_intercept_queues_edits_and_drops() {
     let h = shared.ws_history.with_rows(|r| r.to_vec());
     assert_eq!(h.len(), 1, "the dropped frame is not recorded");
     assert_eq!(h[0].payload, "HELLO");
-    assert!(shared.ws_edited.lock().unwrap().contains(&h[0].id));
+    assert!(shared.ws_edited.lock().contains(&h[0].id));
 }
 
 /// B-09 loopback: browser -> proxy -> WebSocket server on 127.0.0.1.
@@ -2724,7 +2726,6 @@ fn ws_messages_are_held_edited_and_forwarded_end_to_end() {
             let head = ui_shared
                 .queue
                 .lock()
-                .unwrap()
                 .first()
                 .map(|i| (i.id, i.kind, i.edited.clone()));
             match head {
@@ -2797,7 +2798,7 @@ fn ws_messages_are_held_edited_and_forwarded_end_to_end() {
             ("server -> client".to_string(), "echo:HELLO".to_string())
         ]
     );
-    let edited = shared.ws_edited.lock().unwrap();
+    let edited = shared.ws_edited.lock();
     assert_eq!(
         h.iter().filter(|e| edited.contains(&e.id)).count(),
         1,
@@ -2858,7 +2859,6 @@ fn tls_ws_messages_are_held_edited_and_forwarded_end_to_end() {
             let head = ui_shared
                 .queue
                 .lock()
-                .unwrap()
                 .first()
                 .map(|i| (i.id, i.kind, i.edited.clone()));
             match head {
@@ -3157,14 +3157,14 @@ fn pipelined_requests_are_separate_exchanges() {
     let shared = Shared::new();
     let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
     let upstream_port = upstream.local_addr().unwrap().port();
-    let seen = Arc::new(std::sync::Mutex::new(Vec::<Vec<u8>>::new()));
+    let seen = Arc::new(crate::sync::Mutex::new(Vec::<Vec<u8>>::new()));
     let seen_t = seen.clone();
     let t = std::thread::spawn(move || {
         for body in [b"one".as_slice(), b"two".as_slice()] {
             let (mut s, _) = upstream.accept().unwrap();
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let req = read_request(&mut s).unwrap();
-            seen_t.lock().unwrap().push(req);
+            seen_t.lock().push(req);
             s.write_all(
                 format!(
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
@@ -3204,7 +3204,7 @@ fn pipelined_requests_are_separate_exchanges() {
     t.join().unwrap();
     pt.join().unwrap();
 
-    let seen = seen.lock().unwrap();
+    let seen = seen.lock();
     assert_eq!(
         seen.len(),
         2,
@@ -3242,14 +3242,14 @@ fn pipelined_post_body_does_not_swallow_next_request() {
     let shared = Shared::new();
     let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
     let upstream_port = upstream.local_addr().unwrap().port();
-    let seen = Arc::new(std::sync::Mutex::new(Vec::<Vec<u8>>::new()));
+    let seen = Arc::new(crate::sync::Mutex::new(Vec::<Vec<u8>>::new()));
     let seen_t = seen.clone();
     let t = std::thread::spawn(move || {
         for _ in 0..2 {
             let (mut s, _) = upstream.accept().unwrap();
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let req = read_request(&mut s).unwrap();
-            seen_t.lock().unwrap().push(req);
+            seen_t.lock().push(req);
             s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
                 .unwrap();
         }
@@ -3282,7 +3282,7 @@ fn pipelined_post_body_does_not_swallow_next_request() {
     t.join().unwrap();
     pt.join().unwrap();
 
-    let seen = seen.lock().unwrap();
+    let seen = seen.lock();
     assert_eq!(seen.len(), 2, "two exchanges: {seen:?}");
     assert!(
         seen[0].starts_with(b"POST /submit HTTP/1.1\r\n"),
@@ -4263,7 +4263,6 @@ fn connect_tunnel_inner_destination_follows_configured_listener_redirect() {
     shared
         .listener_redirects
         .lock()
-        .unwrap()
         .insert(proxy_port, ("127.0.0.1".to_string(), origin_port));
     let sh = shared.clone();
     let proxy_thread = std::thread::spawn(move || {

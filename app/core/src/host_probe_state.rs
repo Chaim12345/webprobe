@@ -79,8 +79,8 @@ pub(crate) struct HostClaim {
 impl AttemptScope {
     pub(crate) fn acquire(self: &Arc<Self>, key: String) -> Acquire {
         // Fixed order: session then scope. Neither lock is held during I/O.
-        let mut session = self.session.0.lock().unwrap();
-        let mut attempted = self.attempted.lock().unwrap();
+        let mut session = self.session.0.lock();
+        let mut attempted = self.attempted.lock();
         if matches!(session.get(&key), Some(Claim::Complete)) {
             return Acquire::Complete;
         }
@@ -108,7 +108,7 @@ impl AttemptScope {
 }
 impl HostClaim {
     pub(crate) fn complete(self) {
-        let mut session = self.scope.session.0.lock().unwrap();
+        let mut session = self.scope.session.0.lock();
         if matches!(session.get(&self.key), Some(Claim::Pending(w)) if w.ptr_eq(&Arc::downgrade(&self.scope)))
         {
             session.insert(self.key.clone(), Claim::Complete);
@@ -117,7 +117,7 @@ impl HostClaim {
 }
 impl Drop for HostClaim {
     fn drop(&mut self) {
-        let mut session = self.scope.session.0.lock().unwrap();
+        let mut session = self.scope.session.0.lock();
         if matches!(session.get(&self.key), Some(Claim::Pending(w)) if w.ptr_eq(&Arc::downgrade(&self.scope)))
         {
             session.remove(&self.key);
@@ -132,7 +132,7 @@ pub(crate) struct AuditOwner {
 }
 /// Admission and the scope/dedup pair are captured before the baseline.
 pub(crate) fn admit(shared: &Arc<Shared>) -> Option<(AuditOwner, Arc<AttemptScope>)> {
-    let mut admission = shared.host_admission.0.lock().unwrap();
+    let mut admission = shared.host_admission.0.lock();
     let guard = crate::scan_run::try_claim(&shared.scan)?;
     let scope = admission.batch.clone().unwrap_or_else(|| {
         AttemptScope::new(
@@ -154,7 +154,7 @@ pub(crate) struct BatchOwner {
     closed: std::sync::atomic::AtomicBool,
 }
 pub(crate) fn open_batch(shared: &Arc<Shared>, fresh_crawl: bool) -> BatchOwner {
-    let mut admission = shared.host_admission.0.lock().unwrap();
+    let mut admission = shared.host_admission.0.lock();
     if let Some(scope) = admission.batch.clone() {
         shared.log("Host probes incomplete/deferred: nested or overlapping batch shares the active attempt scope");
         if admission.batch_leases == usize::MAX {
@@ -176,7 +176,7 @@ pub(crate) fn open_batch(shared: &Arc<Shared>, fresh_crawl: bool) -> BatchOwner 
         active
     } else {
         if fresh_crawl {
-            *shared.scan_state.lock().unwrap() = Arc::new(ScanDedup::default());
+            *shared.scan_state.lock() = Arc::new(ScanDedup::default());
             // Completed session claims survive new crawls. Only run attempts reset.
         }
         AttemptScope::new(
@@ -195,7 +195,7 @@ pub(crate) fn close_batch(shared: &Shared, owner: &BatchOwner) {
     if owner.closed.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
     }
-    let mut admission = shared.host_admission.0.lock().unwrap();
+    let mut admission = shared.host_admission.0.lock();
     if admission
         .batch
         .as_ref()
@@ -279,7 +279,7 @@ mod tests {
             t.join().unwrap();
         }
         assert_eq!(wins.load(std::sync::atomic::Ordering::SeqCst), 1);
-        let mut set = scope.attempted.lock().unwrap();
+        let mut set = scope.attempted.lock();
         for n in 0..MAX_KEYS {
             set.insert(format!("limit{n}"));
         }
@@ -320,7 +320,6 @@ mod more_tests {
             shared
                 .events
                 .lock()
-                .unwrap()
                 .iter()
                 .any(|e| e.contains("incomplete/deferred"))
         );
@@ -346,11 +345,11 @@ mod more_tests {
     fn lease_overflow_pins_scope_instead_of_reopening() {
         let shared = Shared::new();
         let first = open_batch(&shared, false);
-        shared.host_admission.0.lock().unwrap().batch_leases = usize::MAX;
+        shared.host_admission.0.lock().batch_leases = usize::MAX;
         let overflow = open_batch(&shared, false);
         close_batch(&shared, &overflow);
         close_batch(&shared, &first);
-        let state = shared.host_admission.0.lock().unwrap();
+        let state = shared.host_admission.0.lock();
         assert!(state.lease_overflow);
         assert!(
             state
@@ -374,11 +373,10 @@ mod more_tests {
         old.session
             .0
             .lock()
-            .unwrap()
             .insert("key".into(), Claim::Pending(Arc::downgrade(&new)));
         drop(old_claim);
         assert!(
-            matches!(new.session.0.lock().unwrap().get("key"),Some(Claim::Pending(w)) if w.ptr_eq(&Arc::downgrade(&new)))
+            matches!(new.session.0.lock().get("key"),Some(Claim::Pending(w)) if w.ptr_eq(&Arc::downgrade(&new)))
         );
     }
 }
@@ -407,6 +405,6 @@ mod cancellation_identity_tests {
 
 #[cfg(test)]
 pub(crate) fn experimental_scope(shared: &Arc<Shared>) -> Arc<AttemptScope> {
-    let state = shared.host_admission.0.lock().unwrap();
+    let state = shared.host_admission.0.lock();
     AttemptScope::new(crate::scan::scan_dedup_of(shared), state.session.clone())
 }

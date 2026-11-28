@@ -4,12 +4,21 @@
 use super::*;
 
 pub(crate) fn mr_table(ui: &mut Ui, app: &mut App, request_side: bool) {
-    if request_side {
-        let mut rules = app.shared.mr_request.lock().unwrap();
-        crate::rules_ui::rules_editor(ui, &mut rules, request_side);
+    let saved = if request_side {
+        app.shared.mr_request.lock().rules().to_vec()
     } else {
-        let mut rules = app.shared.mr_response.lock().unwrap();
-        crate::rules_ui::rules_editor(ui, &mut rules, request_side);
+        app.shared.mr_response.lock().rules().to_vec()
+    };
+    let mut rules = saved.clone();
+    crate::rules_ui::rules_editor(ui, &mut rules, request_side);
+    // Recompile only on an actual edit: this runs every frame.
+    if rules != saved {
+        let compiled = std::sync::Arc::new(webprobe_core::rules::CompiledMrRules::new(rules));
+        if request_side {
+            *app.shared.mr_request.lock() = compiled;
+        } else {
+            *app.shared.mr_response.lock() = compiled;
+        }
     }
 }
 
@@ -240,7 +249,7 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
     ui.add_space(2.0);
 
     {
-        let records = app.shared.scan.dom_outcomes.lock().unwrap();
+        let records = app.shared.scan.dom_outcomes.lock();
         let incomplete: Vec<_> = records.iter().filter(|r| !r.complete).collect();
         if !incomplete.is_empty() {
             ui.collapsing(
@@ -313,7 +322,7 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("Clear issues").clicked() {
-                app.shared.issues.lock().unwrap().clear();
+                app.shared.issues.lock().clear();
             }
             if ui
                 .button("Report issues")
@@ -323,12 +332,9 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
                 report_all = true;
             }
             ui.label(
-                RichText::new(format!(
-                    "{} issues",
-                    app.shared.issues.lock().unwrap().len()
-                ))
-                .size(12.0)
-                .color(theme::ink_faint()),
+                RichText::new(format!("{} issues", app.shared.issues.lock().len()))
+                    .size(12.0)
+                    .color(theme::ink_faint()),
             );
         });
     });
@@ -340,7 +346,6 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
         .shared
         .issues
         .lock()
-        .unwrap()
         .iter()
         .filter(|i| app.issue_filter.matches(i))
         .cloned()
@@ -467,11 +472,9 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
                 ui.ctx().copy_text(url);
             }
         } else {
-            if let Some(ids) = crate::issue_view::apply_issue_action(
-                &mut app.shared.issues.lock().unwrap(),
-                id,
-                &action,
-            ) {
+            if let Some(ids) =
+                crate::issue_view::apply_issue_action(&mut app.shared.issues.lock(), id, &action)
+            {
                 report_ids = Some(ids);
             }
         }
@@ -498,13 +501,7 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
             scan_sev_color(&issue.sev)
         };
         if crate::issue_view::issue_detail(app, ui, &issue, label, colour)
-            && let Some(it) = app
-                .shared
-                .issues
-                .lock()
-                .unwrap()
-                .iter_mut()
-                .find(|i| i.id == id)
+            && let Some(it) = app.shared.issues.lock().iter_mut().find(|i| i.id == id)
         {
             it.false_positive = !it.false_positive;
         }

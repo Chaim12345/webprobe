@@ -4,5 +4,5 @@ fn hardening_support_reexport_is_the_same_mutex_type() {
     let support: webprobe_support::sync::Mutex<String> =
         webprobe_core::sync::Mutex::new("kept".into());
     let core: webprobe_core::sync::Mutex<String> = support;
-    assert_eq!(core.into_inner().unwrap(), "kept");
+    assert_eq!(core.into_inner(), "kept");
 }

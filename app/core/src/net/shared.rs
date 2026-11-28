@@ -8,7 +8,7 @@ pub struct Shared {
     pub tls_upstream: Arc<rustls::ClientConfig>,
     pub intercept_on: AtomicBool,
     /// Response interception rules (Proxy settings).
-    pub response_rules: Mutex<ResponseInterceptRules>,
+    pub response_rules: Mutex<CompiledResponseInterceptRules>,
     pub queue: Mutex<Vec<InterceptItem>>,
     pub history: crate::history::ProxyHistory,
     pub events: Mutex<Vec<String>>,
@@ -26,7 +26,6 @@ pub struct Shared {
     pub crawl_items: crate::history::ProxyHistory,
     /// Report WebProbe-only passive checks (names Burp's KB does not have).
     pub extra_checks: AtomicBool,
-    pub attack: Mutex<Arc<Attack>>,
     pub repeaters: Mutex<Vec<RepTab>>,
     pub next_id: AtomicU64,
     /// Scan issue numbers: their own sequence, so passive findings do not leave
@@ -116,10 +115,10 @@ pub struct Shared {
     /// unique locations already passively audited (CrawlDefaults.json max 1500)
     pub scan_locations: Mutex<std::collections::BTreeSet<String>>,
     /// Match and replace rule lists (Proxy options; separate request/response sets)
-    pub mr_request: Mutex<Vec<crate::rules::MrRule>>,
-    pub mr_response: Mutex<Vec<crate::rules::MrRule>>,
+    pub mr_request: Mutex<Arc<crate::rules::CompiledMrRules>>,
+    pub mr_response: Mutex<Arc<crate::rules::CompiledMrRules>>,
     /// Target scope entries; include/exclude patterns can be literal or regex.
-    pub scope: Mutex<Vec<ScopeRule>>,
+    pub scope: Mutex<ScopeRules>,
     /// Session handling rules and their reusable request macros.
     pub session_rules: Mutex<Vec<SessionRule>>,
     /// In-browser session recovery prompt ("check session" rules).
@@ -129,7 +128,7 @@ pub struct Shared {
     pub ws_history: crate::ws_history::WsHistory,
     /// WebSocket match and replace rules (Proxy settings) and their "Only
     /// apply to in-scope items" (proxy.ws_match_replace_disable_out_of_scope).
-    pub ws_rules: Mutex<Vec<crate::ws_rules::WsRule>>,
+    pub ws_rules: Mutex<crate::ws_rules::CompiledWsRules>,
     pub ws_rules_in_scope_only: AtomicBool,
     /// proxy.intercept_web_sockets_messages.intercept_in_scope_only (off).
     pub ws_intercept_in_scope: AtomicBool,
@@ -173,7 +172,7 @@ pub struct Shared {
     pub macro_last_response: Mutex<Vec<u8>>,
     /// Which requests the Intercept tab holds (Burp's request interception
     /// rules table).
-    pub intercept_rules: Mutex<Vec<crate::intercept_rules::InterceptRule>>,
+    pub intercept_rules: Mutex<crate::intercept_rules::CompiledInterceptRules>,
     /// Burp's listener "Redirect to host / port": requests arriving on the
     /// listener with this port all go to the given host and port, whatever
     /// host they name.
@@ -227,12 +226,18 @@ impl Shared {
         // them off the real user CA. Integration binaries and the app crate
         // compile it without cfg(test) and must inject a CA with
         // `with_ca_dir` instead of mutating the process environment.
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-ca"))]
         let mitm =
             crate::tls::MitmAuthority::in_memory().expect("failed to initialize in-memory test CA");
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "test-ca")))]
         let mitm = crate::tls::MitmAuthority::new().expect("failed to initialize local HTTPS CA");
         Self::with_authority(mitm)
+    }
+
+    /// A `Shared` whose CA exists only in memory: every test uses this (or
+    /// `with_ca_dir`) so no test reads or creates the user's CA.
+    pub fn in_memory() -> Arc<Self> {
+        Self::with_ca_dir(None).expect("failed to initialize in-memory test CA")
     }
 
     /// Build a `Shared` on an explicitly chosen CA: `Some(dir)` loads or
@@ -250,7 +255,7 @@ impl Shared {
             mitm,
             tls_upstream: crate::tls::upstream_config(),
             intercept_on: AtomicBool::new(false), // Burp default: never intercept at startup
-            response_rules: Mutex::new(ResponseInterceptRules::default()),
+            response_rules: Mutex::new(CompiledResponseInterceptRules::default()),
             queue: Mutex::new(Vec::new()),
             history: Default::default(),
             events: Mutex::new(Vec::new()),
@@ -263,13 +268,6 @@ impl Shared {
                     .map(|v| v == "1")
                     .unwrap_or(false),
             ),
-            attack: Mutex::new(Arc::new(Attack {
-                running: AtomicBool::new(false),
-                stop: AtomicBool::new(false),
-                done: AtomicUsize::new(0),
-                total: AtomicUsize::new(0),
-                rows: Mutex::new(Vec::new()),
-            })),
             repeaters: Mutex::new(vec![RepTab {
                 id: 1,
                 name: "1".into(),
@@ -335,14 +333,14 @@ impl Shared {
             api_config: Mutex::new(crate::burp_config::ApiConfig::default()),
             api_started: AtomicBool::new(false),
             scan_locations: Mutex::new(std::collections::BTreeSet::new()),
-            mr_request: Mutex::new(Vec::new()),
-            mr_response: Mutex::new(Vec::new()),
-            scope: Mutex::new(Vec::new()),
+            mr_request: Mutex::new(Arc::new(crate::rules::CompiledMrRules::default())),
+            mr_response: Mutex::new(Arc::new(crate::rules::CompiledMrRules::default())),
+            scope: Mutex::new(ScopeRules::default()),
             session_rules: Mutex::new(Vec::new()),
             browser_recovery: BrowserRecovery::default(),
             macros: Mutex::new(Vec::new()),
             ws_history: crate::ws_history::WsHistory::new(),
-            ws_rules: Mutex::new(Vec::new()),
+            ws_rules: Mutex::new(crate::ws_rules::CompiledWsRules::default()),
             ws_rules_in_scope_only: AtomicBool::new(false),
             ws_intercept_in_scope: AtomicBool::new(false),
             ws_strip_extensions: AtomicBool::new(true),
@@ -357,7 +355,9 @@ impl Shared {
             tool_log: Mutex::new(Vec::new()),
             cookie_jar: Mutex::new(crate::cookie_jar::CookieJar::default()),
             macro_last_response: Mutex::new(Vec::new()),
-            intercept_rules: Mutex::new(crate::intercept_rules::defaults()),
+            intercept_rules: Mutex::new(crate::intercept_rules::CompiledInterceptRules::new(
+                crate::intercept_rules::defaults(),
+            )),
             listener_redirects: Mutex::new(std::collections::HashMap::new()),
             upstream: Mutex::new(crate::upstream::UpstreamConfig::default()),
             upstream_rules: Mutex::new(Vec::new()),
@@ -396,7 +396,7 @@ impl Shared {
     pub fn log(&self, msg: &str) {
         let ts = util::now_secs();
         {
-            let mut ev = self.events.lock().unwrap();
+            let mut ev = self.events.lock();
             ev.push(format!("[{ts}] {msg}"));
             let n = ev.len();
             if n > 500 {
@@ -420,7 +420,7 @@ impl Shared {
 
     /// Install the front end's wake-up call (see `waker`).
     pub fn set_waker(&self, f: Arc<dyn Fn() + Send + Sync>) {
-        *self.waker.lock().unwrap() = Some(f);
+        *self.waker.lock() = Some(f);
     }
 
     /// The next id for a held intercept item. HTTP requests, responses and
@@ -446,12 +446,12 @@ impl Shared {
     /// [`Shared::wake`] with the clock reading supplied by the caller, so
     /// tests can pin the clock instead of sleeping.
     pub(crate) fn wake_at(&self, now: u64) {
-        let f = self.waker.lock().unwrap().clone();
+        let f = self.waker.lock().clone();
         let Some(f) = f else { return };
         {
             // Claim the window under the lock: when two threads race, the
             // loser's event is already visible to the winner's frame.
-            let mut last = self.last_wake_ms.lock().unwrap();
+            let mut last = self.last_wake_ms.lock();
             if let Some(prev) = *last
                 && now.saturating_sub(prev) < WAKE_COALESCE_MS
             {
@@ -464,17 +464,13 @@ impl Shared {
     }
 
     pub fn count_waiting(&self) -> usize {
-        self.queue.lock().map(|q| q.len()).unwrap_or(0)
+        self.queue.lock().len()
     }
 
     /// The upstream route for a destination host (Settings > Network >
     /// Upstream proxy servers, then the global setting).
     pub fn upstream_for(&self, host: &str) -> crate::upstream::UpstreamConfig {
-        crate::upstream::choose(
-            &self.upstream_rules.lock().unwrap(),
-            &self.upstream.lock().unwrap(),
-            host,
-        )
+        crate::upstream::choose(&self.upstream_rules.lock(), &self.upstream.lock(), host)
     }
 
     /// Extension request hooks (Montoya-shaped, Path A): run every enabled
@@ -490,7 +486,7 @@ impl Shared {
         req: &mut Vec<u8>,
         ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
-        let exts = self.ext_hooks.lock().unwrap().active_hooks();
+        let exts = self.ext_hooks.lock().active_hooks();
         if exts.is_empty() {
             return true;
         }
@@ -511,7 +507,7 @@ impl Shared {
         resp: &mut Vec<u8>,
         ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
-        let exts = self.ext_hooks.lock().unwrap().active_hooks();
+        let exts = self.ext_hooks.lock().active_hooks();
         if exts.is_empty() {
             return true;
         }
@@ -587,7 +583,7 @@ mod diagnostic_tests {
                 &[Field::Count("n", i)],
             );
         }
-        let events = shared.events.lock().unwrap();
+        let events = shared.events.lock();
         assert_eq!(events.len(), 500);
         assert!(
             events
@@ -622,7 +618,7 @@ mod diagnostic_tests {
             &[],
             &[],
         );
-        let events = shared.events.lock().unwrap().join("\n");
+        let events = shared.events.lock().join("\n");
         assert!(events.contains("scan.missing_host"));
         assert!(!events.contains("secret"));
         assert!(!events.contains("Cookie"));

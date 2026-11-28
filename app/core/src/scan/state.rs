@@ -14,5 +14,5 @@ pub use webprobe_support::dedup::ScanDedup;
 /// The run's current dedup sets: the ones swapped in when the latest scan
 /// run started (Shared::new's until then).
 pub fn scan_dedup_of(shared: &Shared) -> Arc<ScanDedup> {
-    Arc::clone(&shared.scan_state.lock().unwrap())
+    Arc::clone(&shared.scan_state.lock())
 }

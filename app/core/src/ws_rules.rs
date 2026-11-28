@@ -64,39 +64,112 @@ impl WsRule {
     }
 }
 
-/// Apply the enabled rules for this direction in order; the new payload
-/// when any rule changed it. An empty match adds the replacement at the
-/// end, as Burp's HTTP rules add a header.
-pub fn apply(rules: &[WsRule], to_server: bool, binary: bool, payload: &[u8]) -> Option<Vec<u8>> {
-    let mut cur = payload.to_vec();
-    for r in rules
-        .iter()
-        .filter(|r| r.enabled && r.applies_to(to_server))
-    {
-        cur = if r.string_match.is_empty() {
-            let mut v = cur;
-            v.extend_from_slice(r.string_replace.as_bytes());
-            v
-        } else if r.is_simple_match {
-            replace_bytes(&cur, r.string_match.as_bytes(), r.string_replace.as_bytes())
-        } else if binary {
-            match regex::bytes::Regex::new(&r.string_match) {
-                Ok(re) => re
-                    .replace_all(&cur, r.string_replace.as_bytes())
-                    .into_owned(),
-                Err(_) => cur,
-            }
-        } else {
-            match regex::Regex::new(&r.string_match) {
-                Ok(re) => re
-                    .replace_all(&String::from_utf8_lossy(&cur), r.string_replace.as_str())
-                    .into_owned()
-                    .into_bytes(),
-                Err(_) => cur,
-            }
-        };
+/// The rule list with each regex compiled once (once as text and once as
+/// bytes), when the table is edited. Messages never compile a pattern.
+#[derive(Clone, Default)]
+pub struct CompiledWsRules {
+    rules: Vec<WsRule>,
+    text: Vec<Option<regex::Regex>>,
+    binary: Vec<Option<regex::bytes::Regex>>,
+}
+
+impl CompiledWsRules {
+    pub fn new(rules: Vec<WsRule>) -> Self {
+        let compile = |r: &WsRule| !r.is_simple_match && !r.string_match.is_empty();
+        let text = rules
+            .iter()
+            .map(|r| {
+                compile(r)
+                    .then(|| regex::Regex::new(&r.string_match).ok())
+                    .flatten()
+            })
+            .collect();
+        let binary = rules
+            .iter()
+            .map(|r| {
+                compile(r)
+                    .then(|| regex::bytes::Regex::new(&r.string_match).ok())
+                    .flatten()
+            })
+            .collect();
+        Self {
+            rules,
+            text,
+            binary,
+        }
     }
-    (cur != payload).then_some(cur)
+
+    pub fn rules(&self) -> &[WsRule] {
+        &self.rules
+    }
+
+    pub fn into_rules(self) -> Vec<WsRule> {
+        self.rules
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
+    pub fn extend(&mut self, rules: impl IntoIterator<Item = WsRule>) {
+        self.rules.extend(rules);
+        *self = Self::new(std::mem::take(&mut self.rules));
+    }
+
+    /// Apply the enabled rules for this direction in order; the new payload
+    /// when any rule changed it. An empty match adds the replacement at the
+    /// end, as Burp's HTTP rules add a header.
+    pub fn apply(&self, to_server: bool, binary: bool, payload: &[u8]) -> Option<Vec<u8>> {
+        let mut cur = payload.to_vec();
+        for (i, r) in self.rules.iter().enumerate() {
+            if !r.enabled || !r.applies_to(to_server) {
+                continue;
+            }
+            cur = if r.string_match.is_empty() {
+                let mut v = cur;
+                v.extend_from_slice(r.string_replace.as_bytes());
+                v
+            } else if r.is_simple_match {
+                replace_bytes(&cur, r.string_match.as_bytes(), r.string_replace.as_bytes())
+            } else if binary {
+                match &self.binary[i] {
+                    Some(re) => re
+                        .replace_all(&cur, r.string_replace.as_bytes())
+                        .into_owned(),
+                    None => cur,
+                }
+            } else {
+                match &self.text[i] {
+                    Some(re) => re
+                        .replace_all(&String::from_utf8_lossy(&cur), r.string_replace.as_str())
+                        .into_owned()
+                        .into_bytes(),
+                    None => cur,
+                }
+            };
+        }
+        (cur != payload).then_some(cur)
+    }
+}
+
+impl std::ops::Deref for CompiledWsRules {
+    type Target = [WsRule];
+
+    fn deref(&self) -> &Self::Target {
+        &self.rules
+    }
+}
+
+impl From<Vec<WsRule>> for CompiledWsRules {
+    fn from(rules: Vec<WsRule>) -> Self {
+        Self::new(rules)
+    }
+}
+
+/// Apply a rule list (compiles it first; long-lived lists use
+/// [`CompiledWsRules`]).
+pub fn apply(rules: &[WsRule], to_server: bool, binary: bool, payload: &[u8]) -> Option<Vec<u8>> {
+    CompiledWsRules::new(rules.to_vec()).apply(to_server, binary, payload)
 }
 
 fn replace_bytes(hay: &[u8], needle: &[u8], with: &[u8]) -> Vec<u8> {
@@ -165,5 +238,46 @@ mod tests {
         ] {
             assert!(v.get(k).is_some(), "{k}");
         }
+    }
+
+    #[test]
+    fn compiled_rules_match_the_free_helper_and_freeze() {
+        let mut rx = WsRule::new(true, r"id=(\d+)", "id=9$1");
+        rx.is_simple_match = false;
+        let rules = vec![
+            WsRule::new(true, "hello", "HELLO"),
+            WsRule::new(false, "x", "y"),
+            rx,
+        ];
+        let compiled = CompiledWsRules::new(rules.clone());
+        for payload in [
+            b"hello id=1".as_slice(),
+            b"nothing".as_slice(),
+            b"x".as_slice(),
+        ] {
+            for to_server in [true, false] {
+                for binary in [true, false] {
+                    assert_eq!(
+                        compiled.apply(to_server, binary, payload),
+                        apply(&rules, to_server, binary, payload)
+                    );
+                }
+            }
+        }
+        let mut later = rules.clone();
+        later[0].string_replace = "BYE".into();
+        assert_eq!(
+            compiled.apply(true, false, b"hello"),
+            Some(b"HELLO".to_vec())
+        );
+        assert_ne!(
+            apply(&later, true, false, b"hello"),
+            Some(b"HELLO".to_vec())
+        );
+
+        let mut live = CompiledWsRules::default();
+        assert!(live.is_empty());
+        live.extend([WsRule::new(true, "", "-tail")]);
+        assert_eq!(live.apply(true, false, b"ab"), Some(b"ab-tail".to_vec()));
     }
 }

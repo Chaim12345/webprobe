@@ -656,8 +656,9 @@ fn recorder_picks_probe_and_control() {
 /// trace.axd with the tracecontent span, DEBUG with the 500 marker.
 #[test]
 fn r10_host_checks_against_a_live_lab() {
+    use crate::sync::Mutex;
     use std::io::{Read, Write};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     let files: Arc<Mutex<std::collections::HashMap<String, Vec<u8>>>> =
         Arc::new(Mutex::new(std::collections::HashMap::new()));
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -696,7 +697,7 @@ fn r10_host_checks_against_a_live_lab() {
                 let method = head.split_whitespace().next().unwrap_or("").to_string();
                 let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
                 let resp = if method == "PUT" {
-                    files.lock().unwrap().insert(path, body.as_bytes().to_vec());
+                    files.lock().insert(path, body.as_bytes().to_vec());
                     "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                         .to_string()
                 } else if method == "GET" && path == "/trace.axd" {
@@ -712,7 +713,7 @@ fn r10_host_checks_against_a_live_lab() {
                         b.len()
                     )
                 } else if method == "GET" {
-                    match files.lock().unwrap().get(&path) {
+                    match files.lock().get(&path) {
                         Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", b.len(), String::from_utf8_lossy(b)),
                         None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
                     }
@@ -738,7 +739,7 @@ fn r10_host_checks_against_a_live_lab() {
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let mut e = crate::net::HistEntry {
         method: "GET".into(),
         host: "127.0.0.1".into(),
@@ -755,7 +756,7 @@ fn r10_host_checks_against_a_live_lab() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(!shared.scan.is_busy(), "scan did not finish");
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     let got: Vec<(&str, &str, &str)> = issues
         .iter()
         .map(|i| (i.name.as_str(), i.sev.as_str(), i.confidence.as_str()))
@@ -842,7 +843,7 @@ fn jwk_set_disclosed_against_a_live_lab() {
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let mut e = crate::net::HistEntry {
         method: "GET".into(),
         host: "127.0.0.1".into(),
@@ -859,7 +860,7 @@ fn jwk_set_disclosed_against_a_live_lab() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(!shared.scan.is_busy(), "scan did not finish");
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     let mut got: Vec<(&str, &str, &str, &str)> = issues
         .iter()
         .filter(|i| i.name == "Json Web Key Set disclosed")
@@ -894,7 +895,7 @@ fn jwk_set_disclosed_against_a_live_lab() {
 
 /// What one connection to [`hidden_h2_lab`] was: whether ALPN selected
 /// `h2`, and how the lab answered.
-type H2LabLog = std::sync::Arc<std::sync::Mutex<Vec<(bool, &'static str)>>>;
+type H2LabLog = std::sync::Arc<crate::sync::Mutex<Vec<(bool, &'static str)>>>;
 
 /// Replays the bytes the lab already read before the rest of the stream.
 struct Replay<S> {
@@ -958,7 +959,7 @@ fn hidden_h2_lab_answering(
                 let conn = rustls::ServerConnection::new(config).unwrap();
                 let mut tls = rustls::StreamOwned::new(conn, s);
                 if tls.conn.complete_io(&mut tls.sock).is_err() {
-                    record.lock().unwrap().push((false, "handshake failed"));
+                    record.lock().push((false, "handshake failed"));
                     return;
                 }
                 let alpn_h2 = tls.conn.alpn_protocol() == Some(b"h2".as_slice());
@@ -968,14 +969,14 @@ fn hidden_h2_lab_answering(
                 }
                 if head == crate::h2::PREFACE {
                     if !speaks_h2 {
-                        record.lock().unwrap().push((alpn_h2, "refused h2"));
+                        record.lock().push((alpn_h2, "refused h2"));
                         let _ = tls.write_all(
                             b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                         );
                         let _ = tls.flush();
                         return;
                     }
-                    record.lock().unwrap().push((alpn_h2, "h2"));
+                    record.lock().push((alpn_h2, "h2"));
                     let _ = tls
                         .sock
                         .set_read_timeout(Some(std::time::Duration::from_millis(50)));
@@ -993,7 +994,7 @@ fn hidden_h2_lab_answering(
                     }
                     head.push(b[0]);
                 }
-                record.lock().unwrap().push((alpn_h2, "http/1.1"));
+                record.lock().push((alpn_h2, "http/1.1"));
                 let _ = tls.write_all(
                     b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello",
                 );
@@ -1024,7 +1025,7 @@ fn hidden_h2_scan_with_http2(
         }
     }
     cfg.http.http2_enabled = http2_enabled;
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let mut e = crate::net::HistEntry {
         method: "GET".into(),
         host: "127.0.0.1".into(),
@@ -1042,7 +1043,7 @@ fn hidden_h2_scan_with_http2(
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(!shared.scan.is_busy(), "scan did not finish");
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     issues
         .iter()
         .filter(|i| i.name == "Hidden HTTP 2")
@@ -1076,7 +1077,7 @@ fn hidden_http2_is_reported_when_h2_answers_without_alpn() {
             HIDDEN_H2_DETAIL.to_string()
         )]
     );
-    assert_eq!(*log.lock().unwrap(), [(false, "http/1.1"), (false, "h2")]);
+    assert_eq!(*log.lock(), [(false, "http/1.1"), (false, "h2")]);
 }
 
 /// Burp's project option http.http2.enable_http2 off (Zps6.ZUp, logging
@@ -1086,11 +1087,7 @@ fn hidden_http2_is_reported_when_h2_answers_without_alpn() {
 fn hidden_http2_is_skipped_when_the_project_http2_setting_is_off() {
     let (port, log) = hidden_h2_lab(vec![], true);
     assert_eq!(hidden_h2_scan_with_http2(port, true, false), []);
-    assert_eq!(
-        *log.lock().unwrap(),
-        [(false, "http/1.1")],
-        "no forced probe"
-    );
+    assert_eq!(*log.lock(), [(false, "http/1.1")], "no forced probe");
 }
 
 /// A server that advertises h2: the probe's handshake selects h2 (Burp
@@ -1099,7 +1096,7 @@ fn hidden_http2_is_skipped_when_the_project_http2_setting_is_off() {
 fn hidden_http2_is_not_reported_when_alpn_advertises_h2() {
     let (port, log) = hidden_h2_lab(vec![b"h2".to_vec(), b"http/1.1".to_vec()], true);
     assert_eq!(hidden_h2_scan(port, true), []);
-    let log = log.lock().unwrap();
+    let log = log.lock();
     assert!(log.contains(&(true, "h2")), "probe sent: {log:?}");
 }
 
@@ -1112,14 +1109,11 @@ fn hidden_http2_is_not_reported_when_alpn_advertises_h2() {
 fn hidden_http2_is_not_reported_for_http1_only_servers() {
     let (port, log) = hidden_h2_lab(vec![], false);
     assert_eq!(hidden_h2_scan(port, true), []);
-    assert_eq!(
-        *log.lock().unwrap(),
-        [(false, "http/1.1"), (false, "refused h2")]
-    );
+    assert_eq!(*log.lock(), [(false, "http/1.1"), (false, "refused h2")]);
     let (port, log) = hidden_h2_lab(vec![b"http/1.1".to_vec()], false);
     assert_eq!(hidden_h2_scan(port, true), []);
     assert_eq!(
-        *log.lock().unwrap(),
+        *log.lock(),
         [(false, "http/1.1"), (false, "handshake failed")]
     );
 }
@@ -1147,7 +1141,7 @@ fn hidden_http2_is_not_reported_for_status_zero() {
     assert_eq!(status_body(&resp).0, 0);
     let (port, log) = hidden_h2_lab_answering(vec![], true, zero);
     assert_eq!(hidden_h2_scan(port, true), []);
-    assert_eq!(*log.lock().unwrap(), [(false, "http/1.1"), (false, "h2")]);
+    assert_eq!(*log.lock(), [(false, "http/1.1"), (false, "h2")]);
 }
 
 /// burp.Zpfw.Zw returns unless the target is HTTPS (Zp42.ZLX): a plain
@@ -1191,8 +1185,8 @@ fn forced_http2_send_is_not_pooled() {
         "forced send: {:?}",
         up.error
     );
-    assert!(shared.h2_pool.lock().unwrap().is_empty());
-    assert!(shared.tls_pool.lock().unwrap().is_empty());
+    assert!(shared.h2_pool.lock().is_empty());
+    assert!(shared.tls_pool.lock().is_empty());
     let plain = crate::net::send_tls_raw(&shared, "127.0.0.1", port, req.as_bytes());
     assert!(plain.resp.is_some(), "ordinary send: {:?}", plain.error);
     assert_eq!(crate::net::last_protocol(), "HTTP/1.1");
@@ -1262,7 +1256,7 @@ fn lab_scan(
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let mut e = crate::net::HistEntry {
         method: method.into(),
         host: "127.0.0.1".into(),
@@ -1277,7 +1271,7 @@ fn lab_scan(
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(!shared.scan.is_busy(), "scan did not finish");
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     issues
         .iter()
         .map(|i| (i.name.clone(), i.sev.clone(), i.confidence.clone()))
@@ -2331,15 +2325,14 @@ fn bac_non_get_sends_no_requests_beyond_the_scanner_baseline() {
 
 #[test]
 fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
-    use std::sync::{Arc, Mutex};
+    use crate::sync::Mutex;
+    use std::sync::Arc;
     for positive in [true, false] {
         let captured = Arc::new(Mutex::new(Vec::<(String, String, String)>::new()));
         let seen = captured.clone();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = lab_serve(listener, move |method, path, raw| {
-            seen.lock()
-                .unwrap()
-                .push((method.into(), path.into(), raw.into()));
+            seen.lock().push((method.into(), path.into(), raw.into()));
             let (status, content_type, body) = if path == "/robots.txt" {
                 if positive {
                     ("200 OK", "text/plain", "User-agent: *\nDisallow: /admin")
@@ -2377,7 +2370,7 @@ fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
             req,
         );
         assert_eq!(issues.len(), if positive { 2 } else { 0 }, "{issues:?}");
-        let captured = captured.lock().unwrap();
+        let captured = captured.lock();
         assert_eq!(captured.len(), 3, "one baseline and two probes");
         assert_eq!(
             captured
@@ -2425,8 +2418,9 @@ fn react2shell_does_not_post_without_a_fingerprint() {
 /// both probes again and report both issues.
 #[test]
 fn host_probe_claim_is_released_when_the_probe_transport_fails() {
+    use crate::sync::Mutex;
     use std::io::{Read, Write};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     // (robots GET attempts, react2shell POST attempts), across both scans.
     let attempts = Arc::new(Mutex::new((0usize, 0usize)));
     let seen = attempts.clone();
@@ -2461,11 +2455,11 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
                 let method = head.split_whitespace().next().unwrap_or("").to_string();
                 let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
                 let probe = if path == "/robots.txt" {
-                    let mut a = seen.lock().unwrap();
+                    let mut a = seen.lock();
                     a.0 += 1;
                     Some((a.0, false))
                 } else if method == "POST" {
-                    let mut a = seen.lock().unwrap();
+                    let mut a = seen.lock();
                     a.1 += 1;
                     Some((a.1, true))
                 } else {
@@ -2531,7 +2525,7 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let run_scan = |shared: &Arc<crate::net::Shared>| {
         let mut e = crate::net::HistEntry {
             method: "GET".into(),
@@ -2553,20 +2547,16 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
     // First scan: both probes die on the wire, so nothing is reported and
     // both claims must be released.
     run_scan(&shared);
-    assert_eq!(*attempts.lock().unwrap(), (1, 1), "one attempt each");
+    assert_eq!(*attempts.lock(), (1, 1), "one attempt each");
     assert!(
-        shared.issues.lock().unwrap().is_empty(),
+        shared.issues.lock().is_empty(),
         "dropped probes report nothing"
     );
     // Second scan of the same host: a retained claim would skip the probe;
     // released claims mean both probes run again and both issues report.
     run_scan(&shared);
-    assert_eq!(
-        *attempts.lock().unwrap(),
-        (2, 2),
-        "released claims are retried"
-    );
-    let issues = shared.issues.lock().unwrap();
+    assert_eq!(*attempts.lock(), (2, 2), "released claims are retried");
+    let issues = shared.issues.lock();
     let names: Vec<&str> = issues.iter().map(|i| i.name.as_str()).collect();
     assert!(names.contains(&"Robots.txt file"), "{names:?}");
     assert!(
@@ -2580,13 +2570,13 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
 /// back. The lab reflects X-Forwarded-Host; with `cache` on it caches
 /// whole responses keyed on the full request target (path + query).
 fn cache_lab(cache: bool) -> u16 {
-    let store = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::<
+    let store = std::sync::Arc::new(crate::sync::Mutex::new(std::collections::HashMap::<
         String,
         String,
     >::new()));
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     lab_serve(l, move |_method, target, raw| {
-        if cache && let Some(hit) = store.lock().unwrap().get(target) {
+        if cache && let Some(hit) = store.lock().get(target) {
             return hit.clone();
         }
         let xfh = raw
@@ -2606,10 +2596,7 @@ fn cache_lab(cache: bool) -> u16 {
             body.len()
         );
         if cache {
-            store
-                .lock()
-                .unwrap()
-                .insert(target.to_string(), resp.clone());
+            store.lock().insert(target.to_string(), resp.clone());
         }
         resp
     })
@@ -2797,7 +2784,7 @@ fn collaborator_everywhere_sends_the_sni_probe_to_a_tls_lab() {
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let mut e = crate::net::HistEntry {
         method: "GET".into(),
         host: "localhost".into(),
@@ -2827,7 +2814,6 @@ fn collaborator_everywhere_sends_the_sni_probe_to_a_tls_lab() {
     assert!(!shared.scan.is_busy(), "scan did not finish");
     let seen: Vec<(Option<String>, Option<String>)> = log
         .lock()
-        .unwrap()
         .iter()
         .map(|(_, sni, head)| {
             (
@@ -3004,7 +2990,7 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
             config.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    *crate::scan_config::shared_config(&shared).lock() = config;
     let entry = || crate::net::HistEntry {
         method: "GET".into(),
         host: "127.0.0.1".into(),
@@ -3025,7 +3011,7 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     };
     run();
     assert_eq!(
-        shared.issues.lock().unwrap().len(),
+        shared.issues.lock().len(),
         8,
         "all families must share one browser result"
     );
@@ -3035,10 +3021,10 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
         "one baseline outside DOM budget and one shared DOM navigation (stored submissions are disabled)"
     );
     vulnerable.store(false, Ordering::SeqCst);
-    shared.issues.lock().unwrap().clear();
+    shared.issues.lock().clear();
     run();
     assert!(
-        shared.issues.lock().unwrap().is_empty(),
+        shared.issues.lock().is_empty(),
         "previous run's hits must not leak"
     );
     assert_eq!(
@@ -3089,9 +3075,9 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
             config.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    *crate::scan_config::shared_config(&shared).lock() = config;
     let scan = |path: &str| {
-        shared.issues.lock().unwrap().clear();
+        shared.issues.lock().clear();
         let entry = crate::net::HistEntry {
             method: "GET".into(),
             host: "127.0.0.1".into(),
@@ -3108,7 +3094,7 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(!shared.scan.is_busy());
-        shared.issues.lock().unwrap().clone()
+        shared.issues.lock().clone()
     };
     let names = |issues: &[webprobe_support::issues::ScanIssue]| {
         issues
@@ -3241,15 +3227,15 @@ fn dom_xss_stored_variant_against_a_live_lab() {
         return;
     }
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let stored = std::sync::Arc::new(crate::sync::Mutex::new(String::new()));
     let st = stored.clone();
     let port = lab_serve(l, move |_method, path, _raw| {
         // Render the value stored BEFORE this request, then store this
         // request's query payload: the stored token can only reach a page
         // through an earlier request.
-        let embed = st.lock().unwrap().clone();
+        let embed = st.lock().clone();
         if let Some(q) = path.split('?').nth(1) {
-            *st.lock().unwrap() = q.to_string();
+            *st.lock() = q.to_string();
         }
         let body = if path.starts_with("/storexss") {
             format!(
@@ -3294,18 +3280,18 @@ fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
     if crate::crawl::chromium_binary().is_none() {
         return;
     }
-    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let seen = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
     let captured = seen.clone();
-    let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let stored = std::sync::Arc::new(crate::sync::Mutex::new(String::new()));
     let st = stored.clone();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(listener, move |_, path, raw| {
-        let prior = st.lock().unwrap().clone();
+        let prior = st.lock().clone();
         if let Some(q) = path.split('?').nth(1) {
-            *st.lock().unwrap() = q.into();
+            *st.lock() = q.into();
         }
         if !raw.is_empty() {
-            captured.lock().unwrap().push(raw.into());
+            captured.lock().push(raw.into());
         }
         let body = format!(
             "<html><head><link rel='icon' href='data:,'></head><body><script>document.write('<p>'+location.hash+'</p>');document.write('<p>{prior}</p>');</script></body></html>"
@@ -3331,7 +3317,7 @@ fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
             .any(|(n, _, _)| n == "Cross-site scripting (DOM-based)"),
         "missing plain DOM XSS: {got:?}"
     );
-    let wire = seen.lock().unwrap();
+    let wire = seen.lock();
     assert_eq!(
         wire.len(),
         2,
@@ -3360,7 +3346,7 @@ fn dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     listener.set_nonblocking(true).unwrap();
-    let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let requests = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
     let capture = requests.clone();
     let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let end = done.clone();
@@ -3387,7 +3373,7 @@ fn dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab() {
                     if raw.is_empty() {
                         continue;
                     }
-                    capture.lock().unwrap().push(raw);
+                    capture.lock().push(raw);
                     if !is_submission {
                         let body = "<html><script>document.write(location.hash)</script></html>";
                         let _ = write!(
@@ -3414,7 +3400,7 @@ fn dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab() {
         got.is_empty(),
         "unknown outcome is not clean evidence: {got:?}"
     );
-    let wire = requests.lock().unwrap();
+    let wire = requests.lock();
     assert_eq!(
         wire.len(),
         2,
@@ -3675,7 +3661,7 @@ function parseqs(s) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(fu
                 config.disabled_checks.insert(id.into());
             }
         }
-        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+        *crate::scan_config::shared_config(&shared).lock() = config;
         let e = crate::net::HistEntry {
             method: "GET".into(),
             host: "127.0.0.1".into(),
@@ -3692,7 +3678,7 @@ function parseqs(s) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(fu
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(!shared.scan.is_busy(), "scan did not finish");
-        let issues = shared.issues.lock().unwrap();
+        let issues = shared.issues.lock();
         (issues
             .iter()
             .map(|i| {
@@ -3766,7 +3752,8 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
     if crate::crawl::chromium_binary().is_none() {
         return;
     }
-    use std::sync::{Arc, Mutex};
+    use crate::sync::Mutex;
+    use std::sync::Arc;
     let wire = Arc::new(Mutex::new(Vec::<String>::new()));
     let captured = wire.clone();
     let previous = Arc::new(Mutex::new(
@@ -3778,16 +3765,11 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
         if raw.is_empty() {
             return String::new();
         }
-        captured.lock().unwrap().push(path.to_string());
+        captured.lock().push(path.to_string());
         let (route, query) = path.split_once('?').unwrap_or((path, ""));
-        let prior = store
-            .lock()
-            .unwrap()
-            .get(route)
-            .cloned()
-            .unwrap_or_default();
+        let prior = store.lock().get(route).cloned().unwrap_or_default();
         if !query.is_empty() {
-            store.lock().unwrap().insert(route.into(), query.into());
+            store.lock().insert(route.into(), query.into());
         }
         let merge = r#"function merge(s) { s.replace(/^[?#]/,'').split('&').forEach(function(p) {var m=/^__proto__\[([^\]]+)\]=(.*)$/.exec(p);if(m) Object.prototype[m[1]]=decodeURIComponent(m[2]);}); }"#;
         let script = match route {
@@ -3824,7 +3806,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
         "/ppunchanged",
         "/ppcap",
     ] {
-        wire.lock().unwrap().clear();
+        wire.lock().clear();
         let shared = crate::net::Shared::new();
         let mut config = crate::scan_config::ScanConfig::default();
         for (id, ..) in crate::scan::check_catalogue() {
@@ -3832,7 +3814,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
                 config.disabled_checks.insert(id.into());
             }
         }
-        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+        *crate::scan_config::shared_config(&shared).lock() = config;
         let e = crate::net::HistEntry {
             method: "GET".into(),
             host: "127.0.0.1".into(),
@@ -3849,7 +3831,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(!shared.scan.is_busy(), "scan timeout: {route}");
-        let issues = shared.issues.lock().unwrap();
+        let issues = shared.issues.lock();
         let summary = issues
             .iter()
             .map(|i| (&i.name, &i.confidence, &i.detail))
@@ -3862,7 +3844,7 @@ fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
             .iter()
             .filter(|i| i.name == "Cross-site scripting (stored DOM-based)")
             .collect();
-        let requests = wire.lock().unwrap();
+        let requests = wire.lock();
         let expected = if route == "/ppcap" {
             1 + crate::crawl::DOM_MAX_REQUESTS_PER_PROBE
         } else {
@@ -3955,7 +3937,7 @@ fn lab_scan_full(
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let mut e = crate::net::HistEntry {
         method: method.into(),
         host: "127.0.0.1".into(),
@@ -3970,7 +3952,7 @@ fn lab_scan_full(
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(!shared.scan.is_busy(), "scan did not finish");
-    let issues = shared.issues.lock().unwrap();
+    let issues = shared.issues.lock();
     issues
         .iter()
         .map(|i| {
@@ -3984,7 +3966,7 @@ fn lab_scan_full(
         .collect()
 }
 
-fn file_param_lab(known_file: bool, seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> u16 {
+fn file_param_lab(known_file: bool, seen: std::sync::Arc<crate::sync::Mutex<Vec<String>>>) -> u16 {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     lab_serve(l, move |_method, target, _raw| {
         let q = target
@@ -3996,7 +3978,7 @@ fn file_param_lab(known_file: bool, seen: std::sync::Arc<std::sync::Mutex<Vec<St
             .find_map(|kv| kv.strip_prefix("file="))
             .unwrap_or("");
         let v = util::url_decode(&v.replace('+', " "));
-        seen.lock().unwrap().push(v.clone());
+        seen.lock().push(v.clone());
         let resolved: Vec<&str> = v
             .split(['/', '\\'])
             .filter(|s| !s.is_empty() && *s != ".")
@@ -4019,7 +4001,7 @@ fn file_param_lab(known_file: bool, seen: std::sync::Arc<std::sync::Mutex<Vec<St
 
 #[test]
 fn r10_file_path_manip_pulls_a_known_file() {
-    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let seen = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
     let port = file_param_lab(true, seen.clone());
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /view?file=img/logo.png HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -4041,7 +4023,7 @@ fn r10_file_path_manip_pulls_a_known_file() {
     assert!(detail.contains("<system.web"), "marker named: {detail}");
     // The follow-up stops at the first retrieved file: exactly one probe
     // and one control, and the later known files are never fetched.
-    let seen = seen.lock().unwrap();
+    let seen = seen.lock();
     assert_eq!(
         seen.iter()
             .filter(|v| v.as_str() == "img/Web.config")
@@ -4066,7 +4048,7 @@ fn r10_file_path_manip_pulls_a_known_file() {
     // Without the known file: the differential still reports, the detail
     // names no retrieval, and the follow-up spends exactly one probe per
     // known file (controls are only sent after a marker hit, so none here).
-    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let seen = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
     let port = file_param_lab(false, seen.clone());
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /view?file=img/logo.png HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -4081,7 +4063,7 @@ fn r10_file_path_manip_pulls_a_known_file() {
         panic!("differential must report: {got:?}");
     };
     assert!(!detail.contains("known file"), "no retrieval: {detail}");
-    let seen = seen.lock().unwrap();
+    let seen = seen.lock();
     for f in ["img/Web.config", "img/WEB-INF/web.xml", "img/.htaccess"] {
         assert_eq!(
             seen.iter().filter(|v| v.as_str() == f).count(),
@@ -4103,11 +4085,11 @@ fn r10_file_path_manip_pulls_a_known_file() {
 /// Silverlight policy 404s (silent).
 #[test]
 fn r10_crossdomain_policy_against_a_live_lab() {
-    let paths = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let paths = std::sync::Arc::new(crate::sync::Mutex::new(Vec::<String>::new()));
     let paths2 = paths.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, move |_method, path, _raw| {
-        paths2.lock().unwrap().push(path.to_string());
+        paths2.lock().push(path.to_string());
         let (status, ct, body) = match path {
             "/crossdomain.xml" => (
                 "200 OK",
@@ -4143,7 +4125,7 @@ fn r10_crossdomain_policy_against_a_live_lab() {
         "wildcard Flash policy only: {got:?}"
     );
     // The per-host budget: each policy file fetched exactly once.
-    let paths = paths.lock().unwrap();
+    let paths = paths.lock();
     assert_eq!(
         paths
             .iter()
@@ -4228,11 +4210,11 @@ fn r10_header_dependent_response_against_a_live_lab() {
             body.len()
         )
     };
-    let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    let count = std::sync::Arc::new(crate::sync::Mutex::new(0usize));
     let count2 = count.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, move |m, p, r| {
-        *count2.lock().unwrap() += 1;
+        *count2.lock() += 1;
         dependent(m, p, r)
     });
     let host = format!("127.0.0.1:{port}");
@@ -4263,7 +4245,7 @@ fn r10_header_dependent_response_against_a_live_lab() {
     );
     // The pinned budget: the baseline fetch plus two checks x two sends x
     // the accuracy's rounds (Normal = 6), no retries on top.
-    assert_eq!(*count.lock().unwrap(), 1 + 2 * 2 * 6);
+    assert_eq!(*count.lock(), 1 + 2 * 2 * 6);
 
     // A header-independent page: neither check reports.
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -4324,11 +4306,11 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
             body.len()
         )
     };
-    let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    let count = std::sync::Arc::new(crate::sync::Mutex::new(0usize));
     let count2 = count.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, move |m, p, r| {
-        *count2.lock().unwrap() += 1;
+        *count2.lock() += 1;
         expander(m, p, r)
     });
     let got = lab_scan(
@@ -4345,12 +4327,12 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
     );
     // The pinned budget: the baseline, the depth-2 probe and the depth-3
     // confirmation, exactly once each.
-    assert_eq!(*count.lock().unwrap(), 3);
-    let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    assert_eq!(*count.lock(), 3);
+    let count = std::sync::Arc::new(crate::sync::Mutex::new(0usize));
     let count2 = count.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, move |_m, _p, _r| {
-        *count2.lock().unwrap() += 1;
+        *count2.lock() += 1;
         "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnone".to_string()
     });
     let got = lab_scan(
@@ -4365,7 +4347,7 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
         "plain parser must stay quiet: {got:?}"
     );
     // No marker at depth 2: no confirmation send either (baseline + 1).
-    assert_eq!(*count.lock().unwrap(), 2);
+    assert_eq!(*count.lock(), 2);
 }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
@@ -4440,7 +4422,7 @@ fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
                     cfg.disabled_checks.insert(id.into());
                 }
             }
-            *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+            *crate::scan_config::shared_config(&shared).lock() = cfg;
             let run = || {
                 let e = crate::net::HistEntry {
                     method: "GET".into(),
@@ -4474,13 +4456,12 @@ fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
                 if complete { 1 } else { 2 },
                 "next explicit run {wire:?}"
             );
-            assert!(shared.issues.lock().unwrap().is_empty());
+            assert!(shared.issues.lock().is_empty());
             if !complete {
                 assert!(
                     shared
                         .events
                         .lock()
-                        .unwrap()
                         .iter()
                         .any(|e| e.contains("incomplete"))
                 );
@@ -4512,7 +4493,7 @@ fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
         },
     );
     let shared = crate::net::Shared::new();
-    *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+    *shared.upstream.lock() = crate::upstream::UpstreamConfig {
         kind: crate::upstream::UpstreamKind::Http,
         host: "127.0.0.1".into(),
         port: proxy_port.to_string(),
@@ -4524,7 +4505,7 @@ fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock() = cfg;
     let run = || {
         let e = crate::net::HistEntry {
             method: "GET".into(),

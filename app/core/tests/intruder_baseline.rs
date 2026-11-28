@@ -1,9 +1,10 @@
 //! Real loopback regression fixtures for the Burp request-0 contract in PR #112.
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex, atomic::Ordering};
+use std::sync::{Arc, atomic::Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+use webprobe_core::sync::Mutex;
 use webprobe_core::{intruder, intruder_run as run};
 
 mod test_support;
@@ -59,7 +60,7 @@ fn origin(count: usize, fail_first: usize) -> (u16, Capture, JoinHandle<()>) {
                     }
                 }
             }
-            copy.lock().unwrap().push(request);
+            copy.lock().push(request);
             if index == 0 {
                 // Keep the baseline in flight. No payload may start until its
                 // response completes, even with multiple available workers.
@@ -133,7 +134,7 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
         .unwrap();
         wait_finished(&state);
         server.join().unwrap();
-        let seen = seen.lock().unwrap();
+        let seen = seen.lock();
         let mut rows = state.snapshot_rows();
         assert_eq!(rows[0].number, 0);
         rows.sort_by_key(|r| r.number);
@@ -208,7 +209,7 @@ fn effectful_methods_skip_the_baseline_and_send_only_attack_rows() {
                     }
                 }
             }
-            copy.lock().unwrap().push(request);
+            copy.lock().push(request);
             stream
                 .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
                 .unwrap();
@@ -237,7 +238,7 @@ fn effectful_methods_skip_the_baseline_and_send_only_attack_rows() {
     .unwrap();
     wait_finished(&state);
     server.join().unwrap();
-    let seen = seen.lock().unwrap();
+    let seen = seen.lock();
     // Exactly the three attack requests reached the origin: no baseline POST.
     assert_eq!(seen.len(), 3);
     assert!(seen.iter().all(|r| r.starts_with(b"POST /submit")));

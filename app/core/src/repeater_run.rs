@@ -42,18 +42,18 @@ impl RepeaterRun {
     }
 
     pub fn is_busy(&self) -> bool {
-        self.state.lock().unwrap().busy
+        self.state.lock().busy
     }
 
     /// The status line under the editors.
     pub fn result(&self) -> String {
-        self.state.lock().unwrap().result.clone()
+        self.state.lock().result.clone()
     }
 
     /// Start a send for `tab`: busy, "sending...", and the generation the
     /// worker must still hold when it finishes.
     pub fn begin(&self, tab: u64) -> u64 {
-        let mut s = self.state.lock().unwrap();
+        let mut s = self.state.lock();
         s.busy = true;
         s.generation += 1;
         s.result = "sending...".into();
@@ -64,7 +64,7 @@ impl RepeaterRun {
     /// Whether `generation` is still the current send (not cancelled or
     /// superseded).
     pub fn is_current(&self, generation: u64) -> bool {
-        self.state.lock().unwrap().generation == generation
+        self.state.lock().generation == generation
     }
 
     /// Finish the send of `generation`: `write` (which puts the response into
@@ -73,7 +73,7 @@ impl RepeaterRun {
     /// check and the write. False when it was cancelled or superseded. Never
     /// call another `RepeaterRun` method from `write`.
     pub fn finish_with(&self, generation: u64, write: impl FnOnce() -> String) -> bool {
-        let mut s = self.state.lock().unwrap();
+        let mut s = self.state.lock();
         if s.generation != generation {
             return false;
         }
@@ -87,7 +87,7 @@ impl RepeaterRun {
     /// lock; the send stays busy. Never call another `RepeaterRun` method
     /// from `write`.
     pub fn finish_partial(&self, generation: u64, write: impl FnOnce()) -> bool {
-        let s = self.state.lock().unwrap();
+        let s = self.state.lock();
         if s.generation != generation {
             return false;
         }
@@ -99,7 +99,7 @@ impl RepeaterRun {
     /// response, if any, never lands. Returns the send's tab, None when
     /// nothing was in flight.
     pub fn cancel(&self) -> Option<u64> {
-        let mut s = self.state.lock().unwrap();
+        let mut s = self.state.lock();
         if !s.busy {
             return None;
         }

@@ -19,7 +19,7 @@ fn source_tls_proxy_tunnels_then_sends_origin_form() {
         tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
             .unwrap();
     });
-    *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+    *shared.upstream.lock() = crate::upstream::UpstreamConfig {
         kind: crate::upstream::UpstreamKind::Http,
         host: "127.0.0.1".into(),
         port: port.to_string(),
@@ -65,7 +65,7 @@ fn source_socks_route_preserves_remote_target_and_origin_form() {
         s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
             .unwrap();
     });
-    *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+    *shared.upstream.lock() = crate::upstream::UpstreamConfig {
         kind: crate::upstream::UpstreamKind::Socks5,
         host: "127.0.0.1".into(),
         port: port.to_string(),

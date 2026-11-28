@@ -615,7 +615,7 @@ pub(crate) const CH_JWT_PRIVATE_KEY: CheckDef = CheckDef {
 /// one token seen in many requests is brute-forced once.
 fn jwt_tried(raw: &str) -> bool {
     static TRIED: crate::sync::Mutex<Vec<String>> = crate::sync::Mutex::new(Vec::new());
-    let mut t = TRIED.lock().unwrap();
+    let mut t = TRIED.lock();
     if t.iter().any(|x| x == raw) {
         return true;
     }
@@ -1701,7 +1701,7 @@ mod tests {
         crate::scan::add_passive_issues(&shared, a);
         crate::scan::add_passive_issues(&shared, b);
         assert_eq!(
-            shared.issues.lock().unwrap().len(),
+            shared.issues.lock().len(),
             2,
             "two numbers; the second path repeats one (SSNs key by origin)"
         );
@@ -1728,7 +1728,6 @@ mod tests {
             shared
                 .issues
                 .lock()
-                .unwrap()
                 .iter()
                 .filter(|i| i.name == "Duplicate cookies set")
                 .count(),
@@ -1736,7 +1735,7 @@ mod tests {
             "path-scoped"
         );
         assert_eq!(
-            crate::scan::passive_merge_key(&shared.issues.lock().unwrap()[0]),
+            crate::scan::passive_merge_key(&shared.issues.lock()[0]),
             "Social security numbers disclosed|example.com||123-45-6789"
         );
     }
@@ -1897,7 +1896,7 @@ mod tests {
             ),
         ];
         for (c, e) in cases {
-            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
+            *crate::scan_config::shared_config(&shared).lock() = Default::default();
             assert!(
                 crate::scan::passive_check_for(&shared, &e)
                     .iter()
@@ -1907,7 +1906,6 @@ mod tests {
             );
             crate::scan_config::shared_config(&shared)
                 .lock()
-                .unwrap()
                 .disabled_checks
                 .insert(c.id.to_string());
             assert!(
@@ -1987,7 +1985,7 @@ mod tests {
         // Two cookies on one path stay two issues after merging.
         let shared = crate::net::Shared::new();
         crate::scan::add_passive_issues(&shared, ho);
-        assert_eq!(shared.issues.lock().unwrap().len(), 2);
+        assert_eq!(shared.issues.lock().len(), 2);
     }
 
     #[test]
@@ -2007,11 +2005,7 @@ mod tests {
                 ),
             );
         }
-        assert_eq!(
-            shared.issues.lock().unwrap().len(),
-            9,
-            "nine locations stay apart"
-        );
+        assert_eq!(shared.issues.lock().len(), 9, "nine locations stay apart");
         crate::scan::add_passive_issues(
             &shared,
             only(
@@ -2019,7 +2013,7 @@ mod tests {
                 pack::CH_DUPLICATE_COOKIES,
             ),
         );
-        let iss = shared.issues.lock().unwrap().clone();
+        let iss = shared.issues.lock().clone();
         assert_eq!(iss.len(), 1);
         assert_eq!(iss[0].path, "/shop");
         assert!(
@@ -2033,11 +2027,7 @@ mod tests {
             &shared,
             only(&ex("/other", true, &dup, "x"), pack::CH_DUPLICATE_COOKIES),
         );
-        assert_eq!(
-            shared.issues.lock().unwrap().len(),
-            1,
-            "later locations add nothing"
-        );
+        assert_eq!(shared.issues.lock().len(), 1, "later locations add nothing");
         // A different identifier is its own group.
         crate::scan::add_passive_issues(
             &shared,
@@ -2051,7 +2041,7 @@ mod tests {
                 pack::CH_DUPLICATE_COOKIES,
             ),
         );
-        assert_eq!(shared.issues.lock().unwrap().len(), 2);
+        assert_eq!(shared.issues.lock().len(), 2);
     }
 
     // ------------------------------------------------------------ R-04 second pass
@@ -3148,7 +3138,7 @@ mod tests {
             ),
         ];
         let check = |c: CheckDef, e: &HistEntry| {
-            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
+            *crate::scan_config::shared_config(&shared).lock() = Default::default();
             assert!(
                 crate::scan::passive_check_for(&shared, e)
                     .iter()
@@ -3158,7 +3148,6 @@ mod tests {
             );
             crate::scan_config::shared_config(&shared)
                 .lock()
-                .unwrap()
                 .disabled_checks
                 .insert(c.id.to_string());
             assert!(

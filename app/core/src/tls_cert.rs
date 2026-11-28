@@ -24,9 +24,10 @@
 //! The TLS verification name (and the hostname analysis) always use the
 //! target host, distinct from the transport endpoint the route dials.
 
+use crate::sync::Mutex;
 #[cfg(test)]
 use std::io::Read as _;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rustls::client::WebPkiServerVerifier;
@@ -140,7 +141,7 @@ impl ServerCertVerifier for RecordingVerifier {
         let result = self
             .inner
             .verify(end_entity, intermediates, server_name, ocsp_response, now);
-        let mut seen = self.seen.lock().unwrap();
+        let mut seen = self.seen.lock();
         seen.chain = chain;
         if let Err(e) = &result {
             seen.verify_error = Some(e.to_string());
@@ -241,7 +242,7 @@ pub fn capture(
         .map_err(|e| e.to_string())?;
     // Drive the handshake; the capture is recorded during it either way.
     let _ = conn.complete_io(&mut tcp);
-    let seen = seen.lock().unwrap().clone();
+    let seen = seen.lock().clone();
     if seen.chain.is_empty() {
         return Ok(None);
     }

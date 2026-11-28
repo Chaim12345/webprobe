@@ -391,7 +391,7 @@ impl Lookup {
         )
             .hash(&mut h);
         let out = dir.join(format!("classes-{:016x}", h.finish()));
-        let _one = COMPILING.lock().unwrap();
+        let _one = COMPILING.lock();
         if out.join("MontoyaBridge.class").is_file() {
             mark_used(&out);
             prune_bridge_classes(&dir, &out);

@@ -29,7 +29,6 @@ impl ToolState {
     pub fn get<T: Any + Send + Sync + Clone>(&self) -> Option<T> {
         self.map
             .lock()
-            .unwrap()
             .get(&TypeId::of::<T>())
             .and_then(|b| b.downcast_ref::<T>())
             .cloned()
@@ -39,7 +38,6 @@ impl ToolState {
     pub fn get_or_insert<T: Any + Send + Sync + Clone + Default>(&self) -> T {
         self.map
             .lock()
-            .unwrap()
             .entry(TypeId::of::<T>())
             .or_insert_with(|| Box::new(T::default()))
             .downcast_ref::<T>()
@@ -49,9 +47,6 @@ impl ToolState {
 
     /// Store (or replace) the tool state of type `T`.
     pub fn insert<T: Any + Send + Sync>(&self, v: T) {
-        self.map
-            .lock()
-            .unwrap()
-            .insert(TypeId::of::<T>(), Box::new(v));
+        self.map.lock().insert(TypeId::of::<T>(), Box::new(v));
     }
 }

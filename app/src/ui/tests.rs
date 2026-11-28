@@ -3,6 +3,16 @@
 
 use super::*;
 
+// test-ca-exempt: this test asserts the constructor itself never persists.
+#[test]
+fn app_tests_use_an_in_memory_ca() {
+    // The desktop crate compiles webprobe-core without cfg(test); its
+    // dev-dependency turns on test-ca, so no app test can reach the real user
+    // CA through Shared::new().
+    let shared = net::Shared::new();
+    assert!(shared.mitm.is_in_memory(), "app test CA must be in memory");
+}
+
 #[cfg(test)]
 mod repeater_fix_tests {
     use super::*;
@@ -23,12 +33,12 @@ mod repeater_fix_tests {
     /// is dropped (its generation is stale).
     #[test]
     fn cancel_abandons_the_in_flight_send() {
-        let sh = net::Shared::new();
-        let tab = sh.repeaters.lock().unwrap()[0].id;
+        let sh = net::Shared::in_memory();
+        let tab = sh.repeaters.lock()[0].id;
         let r#gen = sh.rep.begin(tab);
         cancel_repeater_send(&sh);
         assert_eq!(
-            sh.repeaters.lock().unwrap()[0].result_line,
+            sh.repeaters.lock()[0].result_line,
             "Request cancelled",
             "shown in the tab's status line"
         );
@@ -97,12 +107,12 @@ mod repeater_fix_tests {
             }
             requests
         });
-        let sh = net::Shared::new();
+        let sh = net::Shared::in_memory();
         install_probe_header(&sh);
         let request =
             format!("GET /repeat HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
         {
-            let mut tabs = sh.repeaters.lock().unwrap();
+            let mut tabs = sh.repeaters.lock();
             tabs[0].request = request.clone();
             tabs[0].host = "127.0.0.1".into();
             tabs[0].port = port;
@@ -117,7 +127,7 @@ mod repeater_fix_tests {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
             assert!(!sh.rep.is_busy(), "Repeater send timed out");
-            let tabs = sh.repeaters.lock().unwrap();
+            let tabs = sh.repeaters.lock();
             assert!(
                 tabs[0].result_line.starts_with("Done"),
                 "{}",
@@ -166,12 +176,12 @@ mod repeater_fix_tests {
             }
             requests
         });
-        let sh = net::Shared::new();
+        let sh = net::Shared::in_memory();
         install_probe_header(&sh);
         let request =
             format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
         {
-            let mut tabs = sh.repeaters.lock().unwrap();
+            let mut tabs = sh.repeaters.lock();
             tabs[0].request = request.clone();
             tabs[0].host = "127.0.0.1".into();
             tabs[0].port = port;
@@ -186,7 +196,7 @@ mod repeater_fix_tests {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
             assert!(!sh.rep.is_busy(), "Repeater send timed out");
-            let tabs = sh.repeaters.lock().unwrap();
+            let tabs = sh.repeaters.lock();
             assert!(
                 tabs[0]
                     .result_line
@@ -259,17 +269,16 @@ mod repeater_fix_tests {
                     .unwrap();
                 final_request
             });
-            let sh = net::Shared::new();
+            let sh = net::Shared::in_memory();
             install_probe_header(&sh);
             sh.scope
                 .lock()
-                .unwrap()
                 .push(net::ScopeRule::include("/b/step", false));
             let original = format!(
                 "GET /a/start HTTP/1.1\r\nHost: 127.0.0.1:{pa}\r\nConnection: close\r\n\r\n"
             );
             {
-                let mut tabs = sh.repeaters.lock().unwrap();
+                let mut tabs = sh.repeaters.lock();
                 tabs[0].host = "127.0.0.1".into();
                 tabs[0].port = pa;
                 tabs[0].request = original.clone();
@@ -284,7 +293,7 @@ mod repeater_fix_tests {
             }
             assert!(!sh.rep.is_busy());
             {
-                let tabs = sh.repeaters.lock().unwrap();
+                let tabs = sh.repeaters.lock();
                 assert_eq!(tabs[0].request, original);
                 assert_eq!(tabs[0].port, pa);
                 assert!(tabs[0].result_line.starts_with("Done"));
@@ -292,7 +301,7 @@ mod repeater_fix_tests {
             assert!(crate::repeater_ops::can_follow(&app));
             assert!(crate::repeater_ops::load_redirect(&mut app));
             {
-                let tabs = sh.repeaters.lock().unwrap();
+                let tabs = sh.repeaters.lock();
                 assert_eq!(tabs[0].port, pb, "manual Follow must use hop 1's origin");
                 let expected = if mode == crate::repeater_ops::FollowMode::OnSite {
                     "/b/step"
@@ -315,14 +324,14 @@ mod repeater_fix_tests {
                         .contains(&format!("Host: 127.0.0.1:{pb}\r\n"))
                 );
             }
-            let clicked_request = sh.repeaters.lock().unwrap()[0].request.clone();
+            let clicked_request = sh.repeaters.lock()[0].request.clone();
             repeater_send(&mut app);
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
             while sh.rep.is_busy() && std::time::Instant::now() < deadline {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
             assert!(!sh.rep.is_busy());
-            assert_eq!(sh.repeaters.lock().unwrap()[0].request, clicked_request);
+            assert_eq!(sh.repeaters.lock()[0].request, clicked_request);
             origin_a.join().unwrap();
             assert!(
                 origin_b
@@ -339,8 +348,8 @@ mod repeater_fix_tests {
     /// not hit a different tab after a close.
     #[test]
     fn repeater_tab_ids_are_never_reused() {
-        let sh = net::Shared::new();
-        let first = sh.repeaters.lock().unwrap()[0].id;
+        let sh = net::Shared::in_memory();
+        let first = sh.repeaters.lock()[0].id;
         let a = sh.rep.new_tab_id();
         let b = sh.rep.new_tab_id();
         assert!(a != first && b != a && b != first);
@@ -565,18 +574,18 @@ mod logger_menu_tests {
 
     #[test]
     fn logger_tool_row_sends_to_organizer_repeater_intruder() {
-        let mut app = App::new(net::Shared::new());
+        let mut app = App::new(net::Shared::in_memory());
         let row = tool_row();
         let e = log_row_entry(&app.shared, &row).expect("tool row keeps its message");
         assert!(e.https, "TLS on a non-443 port is kept");
         assert_eq!(e.port, 8443);
         assert_eq!(e.host, "example.test");
-        let before = app.shared.organizer.lock().unwrap().len();
+        let before = app.shared.organizer.lock().len();
         logger_command(&mut app, &e, "organizer");
-        assert_eq!(app.shared.organizer.lock().unwrap().len(), before + 1);
-        let reps_before = app.shared.repeaters.lock().unwrap().len();
+        assert_eq!(app.shared.organizer.lock().len(), before + 1);
+        let reps_before = app.shared.repeaters.lock().len();
         logger_command(&mut app, &e, "repeater");
-        assert_eq!(app.shared.repeaters.lock().unwrap().len(), reps_before + 1);
+        assert_eq!(app.shared.repeaters.lock().len(), reps_before + 1);
         assert!(app.tab == Tab::Repeater);
         logger_command(&mut app, &e, "intruder");
         assert!(app.intr_req.starts_with("GET /a?x=1"));
@@ -587,7 +596,7 @@ mod logger_menu_tests {
 
     #[test]
     fn logger_row_without_retained_message_has_no_entry() {
-        let shared = net::Shared::new();
+        let shared = net::Shared::in_memory();
         let mut row = crate::logger::LogEntry {
             hist_id: Some(999_999),
             ..Default::default()
@@ -601,7 +610,7 @@ mod logger_menu_tests {
     /// Burp's Send to Organizer / Repeater entries.
     #[test]
     fn right_click_on_logger_row_opens_the_menu() {
-        let mut app = App::new(net::Shared::new());
+        let mut app = App::new(net::Shared::in_memory());
         app.logger.push(tool_row());
         let ctx = egui::Context::default();
         let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1200.0, 800.0));

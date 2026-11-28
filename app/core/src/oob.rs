@@ -68,7 +68,7 @@ impl OobState {
         issue: ScanIssue,
         delivery: String,
     ) {
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock();
         pending.push(Pending {
             id,
             kind,
@@ -84,7 +84,6 @@ impl OobState {
         if let Some(p) = self
             .pending
             .lock()
-            .unwrap()
             .iter_mut()
             .find(|p| p.id == id && p.kind.is_none())
         {
@@ -96,14 +95,13 @@ impl OobState {
     pub fn pending(&self) -> Vec<(String, Option<&'static str>, ScanIssue)> {
         self.pending
             .lock()
-            .unwrap()
             .iter()
             .map(|p| (p.id.clone(), p.kind, p.issue.clone()))
             .collect()
     }
 
     pub fn is_pending_empty(&self) -> bool {
-        self.pending.lock().unwrap().is_empty()
+        self.pending.lock().is_empty()
     }
 
     /// This process has a front end that stocks the pool.
@@ -125,7 +123,7 @@ impl OobState {
     /// stocked up to the larger of `high` and that need.
     pub fn refill(&self, low: usize, high: usize, mut mint: impl FnMut() -> (String, String)) {
         let need = self.demand.load(Ordering::SeqCst);
-        let mut pool = self.pool.lock().unwrap();
+        let mut pool = self.pool.lock();
         if pool.len() < low || pool.len() < need {
             let target = high.max(need);
             while pool.len() < target {
@@ -136,11 +134,11 @@ impl OobState {
 
     /// Put payloads into the pool directly (tests, headless suppliers).
     pub fn stock(&self, items: impl IntoIterator<Item = (String, String)>) {
-        self.pool.lock().unwrap().extend(items);
+        self.pool.lock().extend(items);
     }
 
     pub fn pool_len(&self) -> usize {
-        self.pool.lock().unwrap().len()
+        self.pool.lock().len()
     }
 
     /// Take `n` payloads, waiting up to `wait` for a supplier that was asked
@@ -161,7 +159,7 @@ impl OobState {
             std::thread::sleep(Duration::from_millis(25));
         }
         self.demand.store(0, Ordering::SeqCst);
-        let mut pool = self.pool.lock().unwrap();
+        let mut pool = self.pool.lock();
         let k = n.min(pool.len());
         let at = pool.len() - k;
         pool.split_off(at).into_iter().rev().collect()
@@ -181,7 +179,7 @@ impl OobState {
 
     /// Keep interactions for extensions' Collaborator clients.
     pub fn observe(&self, fresh: &[Interaction]) {
-        let mut o = self.observed.lock().unwrap();
+        let mut o = self.observed.lock();
         o.extend(fresh.iter().cloned());
         let excess = o.len().saturating_sub(2000);
         o.drain(..excess);
@@ -191,7 +189,6 @@ impl OobState {
     pub fn observed_for(&self, ids: &[String]) -> Vec<Interaction> {
         self.observed
             .lock()
-            .unwrap()
             .iter()
             .filter(|i| i.token.as_ref().is_some_and(|t| ids.contains(t)))
             .cloned()
@@ -206,11 +203,11 @@ impl OobState {
     /// certain), so its id stays pending until both have been seen.
     pub fn match_interactions(&self, interactions: &[Interaction]) -> Vec<ScanIssue> {
         let mut issues = Vec::new();
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock();
         if pending.is_empty() {
             return issues;
         }
-        let mut reported = self.reported.lock().unwrap();
+        let mut reported = self.reported.lock();
         for it in interactions {
             let Some(token) = &it.token else { continue };
             let kind = it.kind().label();

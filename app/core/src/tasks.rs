@@ -52,7 +52,7 @@ pub fn enqueue(shared: &Arc<Shared>, name: impl Into<String>, kind: TaskKind) ->
         TaskKind::Single { .. } => Some(1),
         TaskKind::CrawlAudit { .. } => None,
     };
-    shared.tasks.lock().unwrap().push(ScanTask {
+    shared.tasks.lock().push(ScanTask {
         id,
         name: name.into(),
         kind,
@@ -69,7 +69,7 @@ pub fn enqueue(shared: &Arc<Shared>, name: impl Into<String>, kind: TaskKind) ->
 }
 
 fn set_state(shared: &Shared, id: u64, state: TaskState) {
-    if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
+    if let Some(t) = shared.tasks.lock().iter_mut().find(|t| t.id == id) {
         t.state = state;
         if !state.is_open() {
             t.finished = Some(crate::util::now_secs());
@@ -82,7 +82,6 @@ fn state_of(shared: &Shared, id: u64) -> Option<TaskState> {
     shared
         .tasks
         .lock()
-        .unwrap()
         .iter()
         .find(|t| t.id == id)
         .map(|t| t.state)
@@ -139,7 +138,6 @@ pub fn remove(shared: &Shared, id: u64) {
     shared
         .tasks
         .lock()
-        .unwrap()
         .retain(|t| t.id != id || t.state.is_open());
     shared.wake();
 }
@@ -162,7 +160,7 @@ pub fn ensure_runner(shared: &Arc<Shared>) {
         .spawn(move || {
             loop {
                 let next = {
-                    let tasks = shared.tasks.lock().unwrap();
+                    let tasks = shared.tasks.lock();
                     tasks
                         .iter()
                         .find(|t| t.state == TaskState::Queued)
@@ -182,7 +180,7 @@ fn wait_idle(shared: &Shared) {
 }
 
 fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
-    let issues_before = shared.issues.lock().unwrap().len();
+    let issues_before = shared.issues.lock().len();
     shared.scan.running_task.store(id, Ordering::SeqCst);
     shared.scan.stop.store(false, Ordering::SeqCst);
     shared.scan.paused.store(false, Ordering::SeqCst);
@@ -226,13 +224,8 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
             wait_idle(shared);
             // Read the issue count first: `tasks` is never held while
             // `issues` is locked (one lock order everywhere).
-            let found = shared
-                .issues
-                .lock()
-                .unwrap()
-                .len()
-                .saturating_sub(issues_before);
-            if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
+            let found = shared.issues.lock().len().saturating_sub(issues_before);
+            if let Some(t) = shared.tasks.lock().iter_mut().find(|t| t.id == id) {
                 // An item cut short by Cancel was not audited.
                 if t.state != TaskState::Cancelled {
                     t.done += 1;
@@ -246,13 +239,8 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
     drop(stored);
     shared.scan.running_task.store(0, Ordering::SeqCst);
     shared.scan.paused.store(false, Ordering::SeqCst);
-    let found = shared
-        .issues
-        .lock()
-        .unwrap()
-        .len()
-        .saturating_sub(issues_before);
-    if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
+    let found = shared.issues.lock().len().saturating_sub(issues_before);
+    if let Some(t) = shared.tasks.lock().iter_mut().find(|t| t.id == id) {
         t.issues_found = found;
         if t.state.is_open() {
             t.state = TaskState::Finished;
@@ -352,7 +340,6 @@ mod tests {
         let t = shared
             .tasks
             .lock()
-            .unwrap()
             .iter()
             .find(|t| t.id == a)
             .cloned()
@@ -376,14 +363,7 @@ mod tests {
                 // Let the interrupted item wind down: it does not count as audited.
                 std::thread::sleep(Duration::from_millis(800));
                 assert_eq!(
-                    shared
-                        .tasks
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .find(|t| t.id == b)
-                        .unwrap()
-                        .done,
+                    shared.tasks.lock().iter().find(|t| t.id == b).unwrap().done,
                     0
                 );
             }
@@ -392,14 +372,7 @@ mod tests {
             // a running task is covered by cancel_stops_a_running_task.
             Some(TaskState::Finished) => {
                 assert_eq!(
-                    shared
-                        .tasks
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .find(|t| t.id == b)
-                        .unwrap()
-                        .done,
+                    shared.tasks.lock().iter().find(|t| t.id == b).unwrap().done,
                     1
                 );
             }
@@ -410,7 +383,7 @@ mod tests {
         pause(&shared, c);
         remove(&shared, c);
         remove(&shared, a);
-        let ids: Vec<u64> = shared.tasks.lock().unwrap().iter().map(|t| t.id).collect();
+        let ids: Vec<u64> = shared.tasks.lock().iter().map(|t| t.id).collect();
         assert!(!ids.contains(&a) && ids.contains(&c) && ids.contains(&b));
     }
 
@@ -430,28 +403,14 @@ mod tests {
         assert_eq!(state_of(&shared, a), Some(TaskState::Cancelled));
         // Let the item in flight wind down; a cancelled item is not counted.
         std::thread::sleep(Duration::from_millis(2500));
-        let done = shared
-            .tasks
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|t| t.id == a)
-            .unwrap()
-            .done;
+        let done = shared.tasks.lock().iter().find(|t| t.id == a).unwrap().done;
         assert!(
             done < 20,
             "a cancelled task stops before its last item, done={done}"
         );
         std::thread::sleep(Duration::from_millis(1000));
         assert_eq!(
-            shared
-                .tasks
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|t| t.id == a)
-                .unwrap()
-                .done,
+            shared.tasks.lock().iter().find(|t| t.id == a).unwrap().done,
             done,
             "no further items run after a cancel"
         );
@@ -480,7 +439,7 @@ mod tests {
                 smtp: Vec::new(),
             },
         );
-        let saved = crate::project::ProjectScanTask::save_all(&shared.tasks.lock().unwrap());
+        let saved = crate::project::ProjectScanTask::save_all(&shared.tasks.lock());
         let single = saved
             .iter()
             .find(|t| t.name == "single")
@@ -494,7 +453,6 @@ mod tests {
         let t = shared
             .tasks
             .lock()
-            .unwrap()
             .iter()
             .find(|t| t.id == s)
             .cloned()

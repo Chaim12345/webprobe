@@ -24,10 +24,9 @@ use std::sync::Arc;
 fn configured_defs(shared: &Shared) -> Arc<Vec<Definition>> {
     let sources = crate::scan_config::shared_config(shared)
         .lock()
-        .unwrap()
         .bchecks
         .clone();
-    if let Some((srcs, defs)) = &*shared.bcheck_defs.lock().unwrap()
+    if let Some((srcs, defs)) = &*shared.bcheck_defs.lock()
         && *srcs == sources
     {
         return defs.clone();
@@ -49,7 +48,7 @@ fn configured_defs(shared: &Shared) -> Arc<Vec<Definition>> {
         }
     }
     let defs = Arc::new(defs);
-    *shared.bcheck_defs.lock().unwrap() = Some((sources, defs.clone()));
+    *shared.bcheck_defs.lock() = Some((sources, defs.clone()));
     defs
 }
 
@@ -486,19 +485,11 @@ fn run_active_def(
 /// (Burp's per-host / per-path semantics); the scan claim resets the set.
 /// Retract a claim after a failed run so a later request retries.
 fn unclaim(shared: &Shared, check: &str, key: &str) {
-    shared
-        .bcheck_ran
-        .lock()
-        .unwrap()
-        .remove(&format!("{check}|{key}"));
+    shared.bcheck_ran.lock().remove(&format!("{check}|{key}"));
 }
 
 fn claim_once(shared: &Shared, check: &str, key: &str) -> bool {
-    shared
-        .bcheck_ran
-        .lock()
-        .unwrap()
-        .insert(format!("{check}|{key}"))
+    shared.bcheck_ran.lock().insert(format!("{check}|{key}"))
 }
 
 /// Passive pass: `given response` definitions over the audited exchange.
@@ -548,8 +539,8 @@ pub type BcheckDefsCache =
 /// Reset the per-scan host/path claim set (called when a scan claims the
 /// scanner).
 pub(crate) fn reset_scan_state(shared: &Shared) {
-    shared.bcheck_ran.lock().unwrap().clear();
-    *shared.bcheck_defs.lock().unwrap() = None;
+    shared.bcheck_ran.lock().clear();
+    *shared.bcheck_defs.lock() = None;
 }
 
 #[cfg(test)]
@@ -699,10 +690,8 @@ mod tests {
     #[test]
     fn configured_defs_parse_and_log_once_per_scan() {
         let shared = Shared::new();
-        crate::scan_config::shared_config(&shared)
-            .lock()
-            .unwrap()
-            .bchecks = vec!["this is not a bcheck".to_string()];
+        crate::scan_config::shared_config(&shared).lock().bchecks =
+            vec!["this is not a bcheck".to_string()];
         let a = configured_defs(&shared);
         let b = configured_defs(&shared);
         assert!(a.is_empty() && b.is_empty());
@@ -710,21 +699,19 @@ mod tests {
             std::sync::Arc::ptr_eq(&a, &b),
             "second call must hit the cache"
         );
-        let logs = shared.events.lock().unwrap();
+        let logs = shared.events.lock();
         let n = logs.iter().filter(|l| l.contains("BCheck skipped")).count();
         drop(logs);
         assert_eq!(n, 1, "an invalid definition must log once, not per call");
         // A config change re-parses.
-        crate::scan_config::shared_config(&shared)
-            .lock()
-            .unwrap()
-            .bchecks = vec!["still not a bcheck".to_string()];
+        crate::scan_config::shared_config(&shared).lock().bchecks =
+            vec!["still not a bcheck".to_string()];
         let c = configured_defs(&shared);
         assert!(
             !std::sync::Arc::ptr_eq(&a, &c),
             "changed sources must re-parse"
         );
-        let logs = shared.events.lock().unwrap();
+        let logs = shared.events.lock();
         let n = logs.iter().filter(|l| l.contains("BCheck skipped")).count();
         drop(logs);
         assert_eq!(n, 2, "a config change logs again");
@@ -827,7 +814,7 @@ mod tests {
             cfg.disabled_checks.insert(id.into());
         }
         cfg.bchecks = bchecks.iter().map(|s| s.to_string()).collect();
-        *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+        *crate::scan_config::shared_config(&shared).lock() = cfg;
         let mut e = crate::net::HistEntry {
             method: "GET".into(),
             host: "127.0.0.1".into(),
@@ -842,7 +829,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(!shared.scan.is_busy(), "scan did not finish");
-        let issues = shared.issues.lock().unwrap();
+        let issues = shared.issues.lock();
         let names = issues
             .iter()
             .map(|i| (i.name.clone(), i.sev.clone(), i.confidence.clone()))
@@ -907,10 +894,7 @@ mod tests {
     fn burp_passive_example_flags_the_leaked_aws_key() {
         // Passive runs from the passive pass, not the active scan.
         let shared = crate::net::Shared::new();
-        crate::scan_config::shared_config(&shared)
-            .lock()
-            .unwrap()
-            .bchecks = vec![PASSIVE_BC.to_string()];
+        crate::scan_config::shared_config(&shared).lock().bchecks = vec![PASSIVE_BC.to_string()];
         let req = b"GET / HTTP/1.1\r\nHost: lab.local\r\n\r\n".to_vec();
         let resp =
             b"HTTP/1.1 200 OK\r\nContent-Length: 25\r\n\r\nkey: AKIAIOSFODNN7EXAMPLE".to_vec();
@@ -1029,7 +1013,7 @@ mod tests {
             cfg.disabled_checks.insert(id.into());
         }
         cfg.bchecks = vec![COLLAB_BC.to_string()];
-        *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+        *crate::scan_config::shared_config(&shared).lock() = cfg;
         stock_and_observe(&shared, &["http"]);
         let mut e = crate::net::HistEntry {
             method: "GET".into(),
@@ -1044,7 +1028,7 @@ mod tests {
         while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        let issues = shared.issues.lock().unwrap();
+        let issues = shared.issues.lock();
         assert!(
             issues
                 .iter()
@@ -1068,7 +1052,7 @@ mod tests {
             cfg.disabled_checks.insert(id.into());
         }
         cfg.bchecks = vec![LOG4SHELL_BC.to_string()];
-        *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+        *crate::scan_config::shared_config(&shared).lock() = cfg;
         stock_and_observe(&shared, &["dns"]);
         let req_t = format!(
             "POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3\r\n\r\nabc"
@@ -1087,7 +1071,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(!shared.scan.is_busy(), "scan did not finish");
-        let issues = shared.issues.lock().unwrap();
+        let issues = shared.issues.lock();
         assert!(
             issues
                 .iter()
@@ -1104,7 +1088,7 @@ mod tests {
             cfg2.disabled_checks.insert(id.into());
         }
         cfg2.bchecks = vec![LOG4SHELL_BC.to_string()];
-        *crate::scan_config::shared_config(&shared2).lock().unwrap() = cfg2;
+        *crate::scan_config::shared_config(&shared2).lock() = cfg2;
         stock_and_observe(&shared2, &[]);
         let req_t2 = format!(
             "POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3\r\n\r\nabc"
@@ -1122,7 +1106,7 @@ mod tests {
         while shared2.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        let issues2 = shared2.issues.lock().unwrap();
+        let issues2 = shared2.issues.lock();
         assert!(
             !issues2.iter().any(|i| i.name == "Log4Shell check"),
             "issues: {:?}",

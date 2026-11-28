@@ -54,12 +54,11 @@ pub fn tls_client_config_base(shared: &Shared, host: &str) -> std::sync::Arc<rus
     let rule = shared
         .client_certs
         .lock()
-        .unwrap()
         .iter()
         .find(|r| host_matches(&r.host_pattern, host))
         .cloned();
     if let Some(rule) = rule {
-        let roots = shared.tls_roots.lock().unwrap().clone();
+        let roots = shared.tls_roots.lock().clone();
         match crate::tls::client_auth_config(&rule.cert_pem, &rule.key_pem, roots) {
             Ok(config) => return config,
             Err(e) => shared.log(&format!("client certificate for {host} ignored: {e}")),
@@ -98,8 +97,8 @@ pub struct EffectiveTlsPolicy {
 
 impl EffectiveTlsPolicy {
     pub fn capture(shared: &Shared, host: &str) -> Self {
-        let certs = shared.client_certs.lock().unwrap();
-        let roots_guard = shared.tls_roots.lock().unwrap();
+        let certs = shared.client_certs.lock();
+        let roots_guard = shared.tls_roots.lock();
         let rule = certs
             .iter()
             .find(|r| host_matches(&r.host_pattern, host))

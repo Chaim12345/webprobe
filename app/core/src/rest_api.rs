@@ -10,10 +10,11 @@
 //! `insecure_mode` is set the base path carries the key, like Burp:
 //! `/{key}/v0.1/scan`. The key is never written to any log or response.
 
+use crate::sync::Mutex;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
@@ -290,7 +291,7 @@ fn start_scan(
         );
     }
     let id = {
-        let mut st = state.lock().unwrap();
+        let mut st = state.lock();
         match reserve_task(&mut st) {
             Ok(id) => {
                 // Only one API scan runs at a time, so one collection.
@@ -323,7 +324,7 @@ fn start_scan(
             shared2.scan.wait_idle(None);
         }));
         let events = shared2.scan.end_collect();
-        let mut st = state2.lock().unwrap();
+        let mut st = state2.lock();
         st.tasks[id].events = Some(events);
         st.tasks[id].status = if result.is_ok() {
             "succeeded".to_string()
@@ -350,7 +351,7 @@ fn scan_status(
     let Ok(n) = id.parse::<usize>() else {
         return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };
-    let st = state.lock().unwrap();
+    let st = state.lock();
     let Some(task) = st.tasks.get(n) else {
         return respond(stream, 404, "Not Found", json!({"error": "unknown task"}));
     };

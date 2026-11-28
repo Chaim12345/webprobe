@@ -327,7 +327,6 @@ fn add_window(app: &mut crate::App, ctx: &egui::Context) {
         .shared
         .issues
         .lock()
-        .unwrap()
         .iter()
         .filter(|i| scan::is_manual_issue(i))
         .cloned()
@@ -447,7 +446,6 @@ fn add_window(app: &mut crate::App, ctx: &egui::Context) {
                 .shared
                 .issues
                 .lock()
-                .unwrap()
                 .iter_mut()
                 .find(|i| i.id == id)
                 .is_some_and(|i| {

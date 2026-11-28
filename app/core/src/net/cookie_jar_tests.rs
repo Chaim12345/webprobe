@@ -45,7 +45,7 @@ fn proxied_responses_feed_the_jar_unless_proxy_monitoring_is_off() {
         &Default::default(),
     );
     {
-        let jar = shared.cookie_jar.lock().unwrap();
+        let jar = shared.cookie_jar.lock();
         let mut got: Vec<(String, String, String)> = jar
             .cookies
             .iter()
@@ -66,7 +66,7 @@ fn proxied_responses_feed_the_jar_unless_proxy_monitoring_is_off() {
     }
     // With Proxy unticked the jar is left alone.
     {
-        let mut jar = shared.cookie_jar.lock().unwrap();
+        let mut jar = shared.cookie_jar.lock();
         jar.cookies.clear();
         jar.update_from.clear();
     }
@@ -81,7 +81,7 @@ fn proxied_responses_feed_the_jar_unless_proxy_monitoring_is_off() {
         false,
         &Default::default(),
     );
-    assert!(shared.cookie_jar.lock().unwrap().cookies.is_empty());
+    assert!(shared.cookie_jar.lock().cookies.is_empty());
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn jar_is_applied_to_covered_tools_and_fed_by_monitored_ones() {
     let shared = Shared::new();
     let port = origin();
     let req = b"GET /a HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-    shared.cookie_jar.lock().unwrap().set_cookie(
+    shared.cookie_jar.lock().set_cookie(
         "127.0.0.1",
         "/",
         "sid=jar-value; Path=/",
@@ -112,26 +112,15 @@ fn jar_is_applied_to_covered_tools_and_fed_by_monitored_ones() {
     assert!(body(&send_raw(&shared, "127.0.0.1", port, req)).contains("got [Cookie: none]"));
     // Neither tool is monitored by default, so the origin's Set-Cookie did
     // not replace the jar's value.
-    assert_eq!(
-        shared.cookie_jar.lock().unwrap().cookies[0].value,
-        "jar-value"
-    );
+    assert_eq!(shared.cookie_jar.lock().cookies[0].value, "jar-value");
 
     // Monitor Repeater: its responses now update the jar.
-    shared
-        .cookie_jar
-        .lock()
-        .unwrap()
-        .update_from
-        .push("Repeater".into());
+    shared.cookie_jar.lock().update_from.push("Repeater".into());
     {
         let _t = tool_scope("Repeater");
         send_raw(&shared, "127.0.0.1", port, req);
     }
-    assert_eq!(
-        shared.cookie_jar.lock().unwrap().cookies[0].value,
-        "from-origin"
-    );
+    assert_eq!(shared.cookie_jar.lock().cookies[0].value, "from-origin");
     // ...and the Scanner sends the updated value; the logged request shows it.
     {
         let _t = tool_scope("Scanner");
@@ -140,7 +129,7 @@ fn jar_is_applied_to_covered_tools_and_fed_by_monitored_ones() {
                 .contains("got [Cookie: sid=from-origin]")
         );
     }
-    let log = shared.tool_log.lock().unwrap();
+    let log = shared.tool_log.lock();
     assert!(
         String::from_utf8_lossy(&log.last().unwrap().request).contains("Cookie: sid=from-origin")
     );

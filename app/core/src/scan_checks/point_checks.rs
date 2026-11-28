@@ -240,7 +240,6 @@ impl PointCheck for JwtAttacks {
             if !cx.runs(name)
                 || !crate::scan_config::shared_config(&cx.shared)
                     .lock()
-                    .unwrap()
                     .check_enabled(&jwt_issue_id(name))
             {
                 continue;
@@ -267,7 +266,6 @@ impl PointCheck for JwtAttacks {
                 || !cx.runs(name)
                 || !crate::scan_config::shared_config(&cx.shared)
                     .lock()
-                    .unwrap()
                     .check_enabled(&jwt_issue_id(name))
             {
                 continue;
@@ -671,7 +669,6 @@ impl RequestCheck for HttpPutEnabled {
                 .state()
                 .openapi_hosts
                 .lock()
-                .unwrap()
                 .insert(format!("put|{scheme}://{}:{}", cx.host, cx.port))
         {
             return;
@@ -805,7 +802,6 @@ impl RequestCheck for JwkSetDisclosed {
                 .state()
                 .openapi_hosts
                 .lock()
-                .unwrap()
                 .insert(format!("jwks|{scheme}://{}:{}", cx.host, cx.port))
         {
             return;
@@ -882,7 +878,6 @@ impl RequestCheck for HiddenHttp2 {
                 .state()
                 .openapi_hosts
                 .lock()
-                .unwrap()
                 .insert(format!("hidden-h2|https://{}:{}", cx.host, cx.port))
         {
             return;
@@ -937,7 +932,6 @@ impl RequestCheck for AspNetTracing {
                 .state()
                 .openapi_hosts
                 .lock()
-                .unwrap()
                 .insert(format!("trace.axd|{scheme}://{}:{}", cx.host, cx.port))
         {
             return;
@@ -1007,7 +1001,6 @@ impl RequestCheck for AspNetDebugging {
                 .state()
                 .openapi_hosts
                 .lock()
-                .unwrap()
                 .insert(format!("aspdebug|{scheme}://{}:{}", cx.host, cx.port))
         {
             return;

@@ -103,7 +103,7 @@ fn tool_log_ignores_untagged_threads_and_handles_missing_responses() {
         b"GET / HTTP/1.1\r\n\r\n",
         &up(None),
     );
-    assert!(shared.tool_log.lock().unwrap().is_empty());
+    assert!(shared.tool_log.lock().is_empty());
     let _t = tool_scope("Sequencer");
     log_tool_exchange(
         &shared,
@@ -113,7 +113,7 @@ fn tool_log_ignores_untagged_threads_and_handles_missing_responses() {
         b"POST /x?y HTTP/1.1\r\n\r\nbody",
         &up(None),
     );
-    let log = shared.tool_log.lock().unwrap();
+    let log = shared.tool_log.lock();
     let e = &log[0];
     assert_eq!(
         (e.tool, e.method.as_str(), e.path.as_str()),
@@ -138,7 +138,7 @@ fn tool_log_is_a_ring_and_truncates_stored_messages() {
     };
     log_tool_exchange(&shared, "h", 80, false, req, &up(Some(&big)));
     {
-        let log = shared.tool_log.lock().unwrap();
+        let log = shared.tool_log.lock();
         assert_eq!(log[0].resp_len, big.len(), "length is the real size");
         assert_eq!(
             log[0].response.as_ref().unwrap().len(),
@@ -152,7 +152,7 @@ fn tool_log_is_a_ring_and_truncates_stored_messages() {
         let path = format!("GET /{i} HTTP/1.1\r\n\r\n");
         log_tool_exchange(&shared, "h", 80, false, path.as_bytes(), &up(None));
     }
-    let log = shared.tool_log.lock().unwrap();
+    let log = shared.tool_log.lock();
     assert_eq!(log.len(), TOOL_LOG_MAX);
     assert_eq!(log.last().unwrap().path, format!("/{}", TOOL_LOG_MAX + 9));
     assert_eq!(
@@ -193,7 +193,7 @@ fn jar_and_session_hooks_pass_through_without_a_tool() {
         &up(Some(b"HTTP/1.1 200 OK\r\nSet-Cookie: a=1\r\n\r\n")),
     );
     assert!(
-        shared.cookie_jar.lock().unwrap().cookies.is_empty(),
+        shared.cookie_jar.lock().cookies.is_empty(),
         "no tool: nothing stored"
     );
     // With a tool but an empty jar the request is also untouched.
@@ -211,7 +211,7 @@ fn tool_sink_buffers_normal_responses_without_logging() {
     let mut sink = tool_sink(&shared, "h", 80, false, b"GET /s HTTP/1.1\r\n\r\n").unwrap();
     let normal = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 2\r\n\r\n";
     assert!(matches!(sink.head(normal), BodyMode::Buffer));
-    assert!(shared.tool_log.lock().unwrap().is_empty());
+    assert!(shared.tool_log.lock().is_empty());
     sink.wire(b"x").unwrap();
     sink.payload(b"x");
     sink.end(true);

@@ -269,7 +269,7 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
         app.rops.intercept_sel = rows.first().map(|r| r.id);
     }
     let head = {
-        let q = app.shared.queue.lock().unwrap();
+        let q = app.shared.queue.lock();
         app.rops
             .intercept_sel
             .and_then(|id| q.iter().find(|i| i.id == id))
@@ -459,13 +459,7 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
     if app.intercept_cur != Some(id) {
         // Switching rows keeps the edit made to the previous message.
         if let Some(prev) = app.intercept_cur
-            && let Some(item) = app
-                .shared
-                .queue
-                .lock()
-                .unwrap()
-                .iter_mut()
-                .find(|i| i.id == prev)
+            && let Some(item) = app.shared.queue.lock().iter_mut().find(|i| i.id == prev)
         {
             item.edited = app.intercept_text.clone();
         }
@@ -522,14 +516,7 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
             app.intercept_fwd_all
         };
         if all {
-            if let Some(item) = app
-                .shared
-                .queue
-                .lock()
-                .unwrap()
-                .iter_mut()
-                .find(|i| i.id == id)
-            {
+            if let Some(item) = app.shared.queue.lock().iter_mut().find(|i| i.id == id) {
                 item.edited = app.intercept_text.clone();
             }
             let n = net::intercept_release_all(&app.shared, drop);
@@ -559,13 +546,7 @@ pub(crate) fn proxy_intercept(app: &mut App, ui: &mut Ui) {
 pub(crate) fn set_intercept(app: &mut App, on: bool) {
     if !on
         && let Some(id) = app.intercept_cur.take()
-        && let Some(item) = app
-            .shared
-            .queue
-            .lock()
-            .unwrap()
-            .iter_mut()
-            .find(|i| i.id == id)
+        && let Some(item) = app.shared.queue.lock().iter_mut().find(|i| i.id == id)
     {
         item.edited = app.intercept_text.clone();
     }

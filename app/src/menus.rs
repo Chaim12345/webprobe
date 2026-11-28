@@ -158,7 +158,7 @@ pub fn intruder_menu(app: &mut App, ui: &mut Ui) {
 pub fn intruder_request_to_repeater(app: &mut App) {
     let request = app.intr_req.replace('\u{a7}', "");
     let (host, port, https) = target_parts(&app.intr_target, app.intr_https);
-    let mut reps = app.shared.repeaters.lock().unwrap();
+    let mut reps = app.shared.repeaters.lock();
     let id = app.shared.rep.new_tab_id();
     reps.push(net::RepTab {
         id,

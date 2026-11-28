@@ -48,11 +48,11 @@ fn always() -> Arc<AtomicBool> {
 
 fn wait_queue(shared: &Shared, n: usize) {
     let end = Instant::now() + DEADLINE;
-    while shared.queue.lock().unwrap().len() != n {
+    while shared.queue.lock().len() != n {
         assert!(
             Instant::now() < end,
             "queue never reached {n} items (has {})",
-            shared.queue.lock().unwrap().len()
+            shared.queue.lock().len()
         );
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -74,7 +74,7 @@ fn turning_interception_off_forwards_a_held_ws_message_unchanged() {
         let rx = relay(&shared, wire.clone(), to_server, always());
         wait_queue(&shared, 1);
         assert!(
-            matches!(shared.queue.lock().unwrap()[0].kind, InterceptKind::WebSocket { to_server: t } if t == to_server)
+            matches!(shared.queue.lock()[0].kind, InterceptKind::WebSocket { to_server: t } if t == to_server)
         );
         // Still held: nothing comes back while interception is on.
         assert!(matches!(
@@ -89,14 +89,11 @@ fn turning_interception_off_forwards_a_held_ws_message_unchanged() {
             "forwarded byte for byte (to_server {to_server})"
         );
         assert!(
-            shared.queue.lock().unwrap().is_empty(),
+            shared.queue.lock().is_empty(),
             "queue empty after the release"
         );
         assert!(!shared.intercept_on.load(Ordering::SeqCst));
-        assert!(
-            shared.ws_edited.lock().unwrap().is_empty(),
-            "not marked as edited"
-        );
+        assert!(shared.ws_edited.lock().is_empty(), "not marked as edited");
         assert_eq!(
             shared.ws_history.len(),
             1,
@@ -115,7 +112,7 @@ fn turning_interception_off_forwards_the_current_edited_text() {
         always(),
     );
     wait_queue(&shared, 1);
-    shared.queue.lock().unwrap()[0].edited = "changed in the editor".into();
+    shared.queue.lock()[0].edited = "changed in the editor".into();
     assert_eq!(net::set_intercept(&shared, false), 1);
     let out = out_of(&rx);
     let (op, masked, payload, used) = parse_ws_frame(&out.forward).unwrap();
@@ -128,7 +125,7 @@ fn turning_interception_off_forwards_the_current_edited_text() {
             out.forward.len()
         )
     );
-    assert!(shared.queue.lock().unwrap().is_empty());
+    assert!(shared.queue.lock().is_empty());
 }
 
 #[test]
@@ -138,7 +135,7 @@ fn turning_interception_on_releases_nothing() {
     wait_queue(&shared, 1);
     assert_eq!(net::set_intercept(&shared, true), 0);
     assert!(shared.intercept_on.load(Ordering::SeqCst));
-    assert_eq!(shared.queue.lock().unwrap().len(), 1, "still held");
+    assert_eq!(shared.queue.lock().len(), 1, "still held");
     assert!(matches!(
         rx.recv_timeout(Duration::from_millis(300)),
         Err(RecvTimeoutError::Timeout)
@@ -155,7 +152,7 @@ fn turning_interception_off_with_nothing_held_is_harmless() {
     let shared = held_shared();
     assert_eq!(net::set_intercept(&shared, false), 0);
     assert_eq!(net::set_intercept(&shared, false), 0);
-    assert!(shared.queue.lock().unwrap().is_empty());
+    assert!(shared.queue.lock().is_empty());
 }
 
 #[test]
@@ -174,7 +171,7 @@ fn several_held_messages_are_all_released_by_one_toggle() {
     for (rx, wire) in rxs.iter().zip(&wires) {
         assert_eq!(&out_of(rx).forward, wire);
     }
-    assert!(shared.queue.lock().unwrap().is_empty());
+    assert!(shared.queue.lock().is_empty());
 }
 
 #[test]
@@ -193,7 +190,7 @@ fn a_held_message_is_dropped_and_dequeued_when_the_connection_is_gone() {
         rx.recv_timeout(Duration::from_millis(500)),
         Err(RecvTimeoutError::Timeout)
     ));
-    assert_eq!(shared.queue.lock().unwrap().len(), 1);
+    assert_eq!(shared.queue.lock().len(), 1);
     alive.store(false, Ordering::SeqCst);
     let out = out_of(&rx);
     assert!(
@@ -201,10 +198,7 @@ fn a_held_message_is_dropped_and_dequeued_when_the_connection_is_gone() {
         "dropped, not forwarded to a dead peer"
     );
     assert!(!out.closed, "a gone peer is not a protocol error");
-    assert!(
-        shared.queue.lock().unwrap().is_empty(),
-        "the item left the queue"
-    );
+    assert!(shared.queue.lock().is_empty(), "the item left the queue");
     assert_eq!(
         shared.ws_history.len(),
         0,
@@ -228,8 +222,8 @@ fn only_the_item_of_the_dead_connection_leaves_the_queue() {
     wait_queue(&shared, 2);
     dead.store(false, Ordering::SeqCst);
     assert!(out_of(&rx_dead).forward.is_empty());
-    assert_eq!(shared.queue.lock().unwrap().len(), 1);
-    assert_eq!(shared.queue.lock().unwrap()[0].edited, "live");
+    assert_eq!(shared.queue.lock().len(), 1);
+    assert_eq!(shared.queue.lock()[0].edited, "live");
     assert_eq!(net::set_intercept(&shared, false), 1);
     // (The mask key is random per frame: compare the unmasked payload.)
     assert_eq!(
@@ -243,7 +237,7 @@ fn release_all_releases_held_http_and_websocket_items() {
     for drop in [false, true] {
         let shared = held_shared();
         let (tx, http_rx) = mpsc::channel();
-        shared.queue.lock().unwrap().push(InterceptItem::new(
+        shared.queue.lock().push(InterceptItem::new(
             900,
             "h",
             80,
@@ -252,7 +246,7 @@ fn release_all_releases_held_http_and_websocket_items() {
             InterceptKind::Request { https: false },
         ));
         let (tx, resp_rx) = mpsc::channel();
-        shared.queue.lock().unwrap().push(InterceptItem::new(
+        shared.queue.lock().push(InterceptItem::new(
             901,
             "h",
             80,
@@ -264,7 +258,7 @@ fn release_all_releases_held_http_and_websocket_items() {
         let ws_rx = relay(&shared, wire.clone(), false, always());
         wait_queue(&shared, 3);
         assert_eq!(net::intercept_release_all(&shared, drop), 3);
-        assert!(shared.queue.lock().unwrap().is_empty());
+        assert!(shared.queue.lock().is_empty());
         let http = http_rx.recv_timeout(DEADLINE).unwrap();
         let resp = resp_rx.recv_timeout(DEADLINE).unwrap();
         let ws = out_of(&ws_rx);
@@ -284,7 +278,7 @@ fn held_http_and_websocket_items_get_distinct_ids_and_release_the_right_one() {
     let shared = held_shared();
     let (tx, http_rx) = mpsc::channel();
     let http_id = shared.next_queue_item_id();
-    shared.queue.lock().unwrap().push(InterceptItem::new(
+    shared.queue.lock().push(InterceptItem::new(
         http_id,
         "h",
         80,
@@ -295,7 +289,7 @@ fn held_http_and_websocket_items_get_distinct_ids_and_release_the_right_one() {
     let wire = build_ws_frame(0x81, b"ws", false);
     let ws_rx = relay(&shared, wire, false, always());
     wait_queue(&shared, 2);
-    let ids: Vec<u64> = shared.queue.lock().unwrap().iter().map(|i| i.id).collect();
+    let ids: Vec<u64> = shared.queue.lock().iter().map(|i| i.id).collect();
     assert_eq!(ids.len(), 2);
     assert_ne!(ids[0], ids[1], "one queue, one id sequence: {ids:?}");
     let ws_id = *ids.iter().find(|&&i| i != http_id).unwrap();
@@ -303,7 +297,7 @@ fn held_http_and_websocket_items_get_distinct_ids_and_release_the_right_one() {
     assert!(net::intercept_release(&shared, ws_id, true, None));
     assert!(out_of(&ws_rx).forward.is_empty());
     assert!(http_rx.try_recv().is_err(), "HTTP item still held");
-    assert_eq!(shared.queue.lock().unwrap().len(), 1);
+    assert_eq!(shared.queue.lock().len(), 1);
     // Forwarding the HTTP request releases only that one.
     assert!(net::intercept_release(&shared, http_id, false, None));
     assert_eq!(
@@ -353,7 +347,7 @@ fn turning_interception_off_forwards_a_held_http_request_through_the_proxy() {
     });
     wait_queue(&shared, 1);
     assert!(matches!(
-        shared.queue.lock().unwrap()[0].kind,
+        shared.queue.lock()[0].kind,
         InterceptKind::Request { .. }
     ));
     assert!(
@@ -375,14 +369,14 @@ fn turning_interception_off_forwards_a_held_http_request_through_the_proxy() {
         .recv_timeout(DEADLINE)
         .expect("the origin never saw the request");
     assert!(seen.starts_with("GET /ping HTTP/1.1"), "{seen:?}");
-    assert!(shared.queue.lock().unwrap().is_empty());
+    assert!(shared.queue.lock().is_empty());
 }
 
 // ------------------------------------------------------------------ intercept_wait
 
 fn push_item(shared: &Shared, id: u64) -> Receiver<Option<String>> {
     let (tx, rx) = mpsc::channel();
-    shared.queue.lock().unwrap().push(InterceptItem::new(
+    shared.queue.lock().push(InterceptItem::new(
         id,
         "h",
         0,
@@ -397,7 +391,7 @@ fn push_item(shared: &Shared, id: u64) -> Receiver<Option<String>> {
 fn intercept_wait_returns_the_verdict() {
     let shared = Shared::new();
     let rx = push_item(&shared, 1);
-    let item = shared.queue.lock().unwrap().remove(0);
+    let item = shared.queue.lock().remove(0);
     item.tx.send(Some("edited".into())).unwrap();
     assert_eq!(
         net::intercept_wait(&shared, 1, &rx, &|| true),
@@ -415,7 +409,7 @@ fn intercept_wait_returns_the_verdict() {
 fn intercept_wait_gives_up_when_the_sender_is_gone() {
     let shared = Shared::new();
     let rx = push_item(&shared, 1);
-    shared.queue.lock().unwrap().clear(); // drops the item and its sender
+    shared.queue.lock().clear(); // drops the item and its sender
     assert_eq!(net::intercept_wait(&shared, 1, &rx, &|| true), None);
 }
 
@@ -425,7 +419,7 @@ fn intercept_wait_removes_its_item_when_the_connection_is_gone() {
     let rx = push_item(&shared, 1);
     let _other = push_item(&shared, 2);
     assert_eq!(net::intercept_wait(&shared, 1, &rx, &|| false), None);
-    let ids: Vec<u64> = shared.queue.lock().unwrap().iter().map(|i| i.id).collect();
+    let ids: Vec<u64> = shared.queue.lock().iter().map(|i| i.id).collect();
     assert_eq!(ids, [2], "only the waiting item is removed");
 }
 
@@ -434,7 +428,7 @@ fn intercept_wait_wakes_the_ui_when_it_removes_an_item() {
     let shared = Shared::new();
     let woken = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let w = woken.clone();
-    *shared.waker.lock().unwrap() = Some(Arc::new(move || {
+    *shared.waker.lock() = Some(Arc::new(move || {
         w.fetch_add(1, Ordering::SeqCst);
     }));
     let rx = push_item(&shared, 1);

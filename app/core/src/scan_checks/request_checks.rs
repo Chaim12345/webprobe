@@ -129,7 +129,7 @@ impl RequestCheck for TraceEnabled {
         use crate::burp_checks as bc;
         let (scheme, _) = origin_of(cx);
         let trace_key = format!("trace|{scheme}://{}:{}", cx.host, cx.port);
-        if cx.state().openapi_hosts.lock().unwrap().insert(trace_key) && !cx.stopped() {
+        if cx.state().openapi_hosts.lock().insert(trace_key) && !cx.stopped() {
             let token: String = {
                 use rand::Rng;
                 let mut g = rand::thread_rng();
@@ -182,7 +182,7 @@ impl RequestCheck for OpenApiDefinition {
         let (scheme, _) = origin_of(cx);
         let thorough = cx.settings.speed >= ScanSpeed::Thorough;
         let key = format!("{scheme}://{}:{}|{}", cx.host, cx.port, thorough);
-        if cx.state().openapi_hosts.lock().unwrap().insert(key) {
+        if cx.state().openapi_hosts.lock().insert(key) {
             let host_hdr = util::get_header(&util::parse_http(cx.req.as_bytes()).headers, "Host")
                 .unwrap_or_else(|| cx.host.to_string());
             let mut found = Vec::new();
@@ -287,14 +287,7 @@ impl RequestCheck for CrossDomainPolicy {
         // policy (found or clean) stays claimed; a failed fetch releases
         // the claim so a later item of the same host can retry.
         let key = format!("{scheme}://{}:{}|xdp|{}", cx.host, cx.port, self.path());
-        if !cx
-            .state()
-            .crossdomain_hosts
-            .lock()
-            .unwrap()
-            .insert(key.clone())
-            || cx.stopped()
-        {
+        if !cx.state().crossdomain_hosts.lock().insert(key.clone()) || cx.stopped() {
             return;
         }
         let probe = format!(
@@ -304,7 +297,7 @@ impl RequestCheck for CrossDomainPolicy {
         );
         // One send, no resend on a lost response.
         let Some(resp) = burp_send(cx, probe.as_bytes()) else {
-            cx.state().crossdomain_hosts.lock().unwrap().remove(&key);
+            cx.state().crossdomain_hosts.lock().remove(&key);
             return;
         };
         let found = crate::burp_checks::crossdomain_findings(&resp, &cx.host, self.kind);
@@ -993,12 +986,12 @@ fn claim_and_capture(
     key: String,
     capture: impl FnOnce() -> TlsAttempt,
 ) -> Option<TlsAttempt> {
-    if !seen.lock().unwrap().insert(key.clone()) {
+    if !seen.lock().insert(key.clone()) {
         return None;
     }
     let cap = capture();
     if matches!(cap, TlsAttempt::Retry) {
-        seen.lock().unwrap().remove(&key);
+        seen.lock().remove(&key);
     }
     Some(cap)
 }
@@ -1029,7 +1022,7 @@ impl RequestCheck for TlsCertificate {
         // capture follows it, and a failed route fails closed (logged, not
         // retried this run) rather than falling back to a direct connection.
         let route = cx.shared.upstream_for(&cx.host);
-        let roots = cx.shared.tls_roots.lock().unwrap().clone();
+        let roots = cx.shared.tls_roots.lock().clone();
         let Some(attempt) =
             claim_and_capture(
                 &cx.state().openapi_hosts,
@@ -1136,7 +1129,7 @@ mod tls_dedupe_tests {
             }),
             Some(TlsAttempt::Retry)
         ));
-        assert!(seen.lock().unwrap().is_empty(), "key released on failure");
+        assert!(seen.lock().is_empty(), "key released on failure");
         assert!(matches!(
             claim_and_capture(&seen, key.clone(), || {
                 attempts += 1;
@@ -1177,7 +1170,7 @@ mod tls_dedupe_tests {
             Some(TlsAttempt::RouteFailed(_))
         ));
         assert!(
-            seen.lock().unwrap().contains(&key),
+            seen.lock().contains(&key),
             "route failure is terminal for the run: key stays claimed"
         );
         let mut called = false;

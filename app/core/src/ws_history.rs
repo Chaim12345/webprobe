@@ -5,7 +5,7 @@
 //! one message (`get`), and the view checks a cheap `stamp` instead of
 //! cloning the history each frame.
 
-use std::sync::RwLock;
+use crate::sync::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::body::Body;
@@ -82,7 +82,7 @@ impl WsHistory {
         e.payload = crate::body::spill(&e.payload);
         self.inline_bytes
             .fetch_add(inline_len(&e.payload), Ordering::Relaxed);
-        let mut rows = self.rows.write().unwrap_or_else(|p| p.into_inner());
+        let mut rows = self.rows.write();
         rows.push(e);
         let released = bound_rows(&mut rows);
         drop(rows);
@@ -105,7 +105,7 @@ impl WsHistory {
             rows.iter().map(|e| inline_len(&e.payload)).sum(),
             Ordering::Relaxed,
         );
-        *self.rows.write().unwrap_or_else(|p| p.into_inner()) = rows;
+        *self.rows.write() = rows;
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -114,7 +114,7 @@ impl WsHistory {
     }
 
     pub fn len(&self) -> usize {
-        self.rows.read().unwrap_or_else(|p| p.into_inner()).len()
+        self.rows.read().len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -133,7 +133,7 @@ impl WsHistory {
 
     /// Borrow the rows (oldest first) without copying them.
     pub fn with_rows<R>(&self, f: impl FnOnce(&[WsEntry]) -> R) -> R {
-        f(&self.rows.read().unwrap_or_else(|p| p.into_inner()))
+        f(&self.rows.read())
     }
 
     /// One message by id (payload handles are cheap to copy).

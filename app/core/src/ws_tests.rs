@@ -232,7 +232,7 @@ fn permessage_deflate_is_inflated_for_history_and_forwarded_plain() {
 #[test]
 fn match_and_replace_changes_text_and_binary_messages() {
     let shared = Shared::new();
-    shared.ws_rules.lock().unwrap().extend([
+    shared.ws_rules.lock().extend([
         crate::ws_rules::WsRule::new(true, "secret", "XXXXXX"),
         crate::ws_rules::WsRule::new(false, "\u{00ff}", "!"),
     ]);
@@ -265,7 +265,7 @@ fn match_and_replace_changes_text_and_binary_messages() {
         (f[0].1.as_slice(), f[0].2),
         ([0x80, b'!', 0xfe].as_slice(), false)
     );
-    assert!(shared.ws_edited.lock().unwrap().len() == 2);
+    assert!(shared.ws_edited.lock().len() == 2);
 }
 
 #[test]
@@ -278,7 +278,7 @@ fn interception_edits_and_drops_in_both_directions() {
             let shared = shared.clone();
             std::thread::spawn(move || {
                 loop {
-                    if let Some(item) = shared.queue.lock().unwrap().pop() {
+                    if let Some(item) = shared.queue.lock().pop() {
                         let _ = item.tx.send(reply);
                         return;
                     }
@@ -312,7 +312,6 @@ fn interception_edits_and_drops_in_both_directions() {
     shared
         .scope
         .lock()
-        .unwrap()
         .push(crate::net::ScopeRule::include("in-scope.test", false));
     shared.ws_intercept_in_scope.store(true, Ordering::SeqCst);
     let mut st = WsStream::new(&None, 1, None);

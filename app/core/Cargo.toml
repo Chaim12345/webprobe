@@ -7,6 +7,11 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+# Test builds keep the CA in memory (forwarded by the desktop crate tests).
+test-ca = ["webprobe-support/test-ca"]
+
 [dependencies]
 tracing.workspace = true
 webprobe-support = { path = "../support" }

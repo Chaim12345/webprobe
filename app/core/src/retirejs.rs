@@ -6,8 +6,9 @@
 
 use super::passive_checks::PassiveCtx;
 use super::*;
+use crate::sync::RwLock;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 /// burp.Zujw.ZC (VULNERABLE_JAVASCRIPT_DEPENDENCY): Tentative, Low (Zrh
 /// bytes 1 / 2).
@@ -241,7 +242,7 @@ static REPOSITORY: RwLock<Option<Result<Arc<Repository>, String>>> = RwLock::new
 /// The repository, loaded once through the resource resolver. The error
 /// says what is missing (or what is wrong with the file).
 pub(crate) fn repository() -> Result<Arc<Repository>, String> {
-    if let Some(r) = REPOSITORY.read().unwrap().as_ref() {
+    if let Some(r) = REPOSITORY.read().as_ref() {
         return r.clone();
     }
     let loaded = crate::paths::retirejs_repository()
@@ -251,12 +252,12 @@ pub(crate) fn repository() -> Result<Arc<Repository>, String> {
     if loaded.is_err() {
         tracing::warn!(target: "webprobe", event_code = "retirejs.load_failed", "RetireJS repository unavailable");
     }
-    REPOSITORY.write().unwrap().get_or_insert(loaded).clone()
+    REPOSITORY.write().get_or_insert(loaded).clone()
 }
 
 #[cfg(test)]
 pub(crate) fn set_repository(r: Repository) {
-    *REPOSITORY.write().unwrap() = Some(Ok(Arc::new(r)));
+    *REPOSITORY.write() = Some(Ok(Arc::new(r)));
 }
 
 /// burp.Zp_1.Z_: `a` is below `b`, comparing the numeric parts of `b`

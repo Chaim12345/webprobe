@@ -49,17 +49,14 @@ pub fn intercept_request(
             has_parameters: parts.path.contains('?') || req.len() > head,
             url,
         };
-        if !crate::intercept_rules::should_intercept(
-            &shared.intercept_rules.lock().unwrap(),
-            &facts,
-        ) {
+        if !shared.intercept_rules.lock().should_intercept(&facts) {
             return (Some(req), ReqState::default());
         }
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
     let id = shared.next_queue_item_id();
     let shown = String::from_utf8_lossy(&req).into_owned();
-    shared.queue.lock().unwrap().push(InterceptItem::new(
+    shared.queue.lock().push(InterceptItem::new(
         id,
         &host,
         port,
@@ -117,14 +114,19 @@ pub fn intercept_response(
     let p = util::parse_http(&resp);
     let ct = util::get_header(&p.headers, "Content-Type").unwrap_or_default();
     let status = p.status.split_whitespace().next().unwrap_or("").to_string();
-    let rules = shared.response_rules.lock().unwrap().clone();
-    if !rules.matches(&ct, &status, st, rules.in_scope && in_scope(shared, url)) {
+    let rules = shared.response_rules.lock().clone();
+    if !rules.matches(
+        &ct,
+        &status,
+        st,
+        rules.rules().in_scope && in_scope(shared, url),
+    ) {
         return Some(resp);
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
     let id = shared.next_queue_item_id();
     let shown = String::from_utf8_lossy(&resp).into_owned();
-    shared.queue.lock().unwrap().push(InterceptItem::new(
+    shared.queue.lock().push(InterceptItem::new(
         id,
         host,
         port,
@@ -175,7 +177,7 @@ pub(crate) fn intercept_wait(
             Err(mpsc::RecvTimeoutError::Disconnected) => return None,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if !alive() {
-                    shared.queue.lock().unwrap().retain(|i| i.id != id);
+                    shared.queue.lock().retain(|i| i.id != id);
                     shared.wake();
                     return None;
                 }
@@ -187,7 +189,7 @@ pub(crate) fn intercept_wait(
 /// Burp's "Forward all" / "Drop all" (burp.Zub8 / Zubj): release every held
 /// message at once, each with its current (possibly edited) content.
 pub fn intercept_release_all(shared: &Shared, drop: bool) -> usize {
-    let items: Vec<_> = shared.queue.lock().unwrap().drain(..).collect();
+    let items: Vec<_> = shared.queue.lock().drain(..).collect();
     let n = items.len();
     for item in items {
         let payload = if drop {
@@ -202,7 +204,7 @@ pub fn intercept_release_all(shared: &Shared, drop: bool) -> usize {
 
 /// Forward (drop=false) or drop (drop=true) the first held intercepted request.
 pub fn intercept_forward(shared: &Arc<Shared>, drop: bool) {
-    let mut q = shared.queue.lock().unwrap();
+    let mut q = shared.queue.lock();
     if q.is_empty() {
         return;
     }
@@ -220,7 +222,7 @@ pub fn intercept_forward(shared: &Arc<Shared>, drop: bool) {
 /// False when the message is no longer held.
 pub fn intercept_release(shared: &Shared, id: u64, drop: bool, edited: Option<String>) -> bool {
     let item = {
-        let mut q = shared.queue.lock().unwrap();
+        let mut q = shared.queue.lock();
         match q.iter().position(|i| i.id == id) {
             Some(pos) => q.remove(pos),
             None => return false,

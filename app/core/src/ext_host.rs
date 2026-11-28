@@ -47,13 +47,13 @@ impl crate::net::ExtHookSource for ExtensionHost {
 pub fn active_hooks(
     shared: &crate::net::Shared,
 ) -> Vec<Arc<dyn webprobe_support::ext::ProxyHooks>> {
-    shared.ext_hooks.lock().unwrap().active_hooks()
+    shared.ext_hooks.lock().active_hooks()
 }
 
 /// Run `f` with the extension host a `Shared` carries, installing an empty
 /// host on first use (the host lived on `Shared` itself before L8).
 pub fn with_host<R>(shared: &crate::net::Shared, f: impl FnOnce(&mut ExtensionHost) -> R) -> R {
-    let mut g = shared.ext_hooks.lock().unwrap();
+    let mut g = shared.ext_hooks.lock();
     if g.as_any_mut().downcast_mut::<ExtensionHost>().is_none() {
         *g = Box::new(ExtensionHost::default());
     }
@@ -278,7 +278,7 @@ pub struct JavaSidecar {
 }
 
 fn push_line(errors: &Mutex<std::collections::VecDeque<String>>, line: String) {
-    let mut e = errors.lock().unwrap();
+    let mut e = errors.lock();
     if e.len() >= 200 {
         e.pop_front();
     }
@@ -418,7 +418,7 @@ impl JavaSidecar {
                                     .unwrap_or_default()
                             };
                             let n = |k: &str| msg[k].as_u64().unwrap_or(0) as usize;
-                            *ui.lock().unwrap() = ExtUi {
+                            *ui.lock() = ExtUi {
                                 tabs: names("tabs"),
                                 headless: msg["headless"].as_bool().unwrap_or(false),
                                 visible: msg["visible"].as_bool().unwrap_or(false),
@@ -433,7 +433,7 @@ impl JavaSidecar {
                                 session_actions: names("sessionActions"),
                             };
                         }
-                        Some("persist") => *data.lock().unwrap() = Some(msg["data"].clone()),
+                        Some("persist") => *data.lock() = Some(msg["data"].clone()),
                         Some("event") => {
                             let (level, text) = (
                                 msg["level"].as_str().unwrap_or("info"),
@@ -448,7 +448,7 @@ impl JavaSidecar {
                     }
                 }
                 // EOF: waiting callers see the channel close at once.
-                let mut r = router.lock().unwrap();
+                let mut r = router.lock();
                 r.closed = true;
                 r.pending.clear();
             });
@@ -476,7 +476,6 @@ impl JavaSidecar {
                 let tail: Vec<String> = sidecar
                     .errors
                     .lock()
-                    .unwrap()
                     .iter()
                     .rev()
                     .take(5)
@@ -515,7 +514,7 @@ impl JavaSidecar {
     /// Unload the extension: its unloading handlers run, then the JVM
     /// exits (killed after 5 s).
     pub fn unload(&self) {
-        if let Some(tx) = self.to_bridge.lock().unwrap().take() {
+        if let Some(tx) = self.to_bridge.lock().take() {
             let _ = tx.send(r#"{"type":"shutdown"}"#.into());
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -523,7 +522,6 @@ impl JavaSidecar {
             let exited = self
                 .child
                 .lock()
-                .unwrap()
                 .as_mut()
                 .is_none_or(|c| c.try_wait().map(|s| s.is_some()).unwrap_or(true));
             if exited {
@@ -570,7 +568,7 @@ impl JavaSidecar {
         // Registered before the line goes out, so a quick reply finds it.
         let (tx, rx) = std::sync::mpsc::channel();
         let closed = {
-            let mut r = self.router.lock().unwrap();
+            let mut r = self.router.lock();
             if !r.closed {
                 r.pending.insert(id, tx);
             }
@@ -583,11 +581,10 @@ impl JavaSidecar {
         let sent = self
             .to_bridge
             .lock()
-            .unwrap()
             .as_ref()
             .is_some_and(|tx| tx.send(msg.to_string()).is_ok());
         if !sent {
-            self.router.lock().unwrap().pending.remove(&id);
+            self.router.lock().pending.remove(&id);
             self.mark_dead("stdin closed");
             return Err("sidecar stdin closed".into());
         }
@@ -609,7 +606,7 @@ impl JavaSidecar {
         };
         // Gone already when the reply came; a timed-out caller leaves, so a
         // late reply is logged as unmatched (and a late call refused).
-        self.router.lock().unwrap().pending.remove(&id);
+        self.router.lock().pending.remove(&id);
         let strikes = &self.timeouts[lane as usize];
         match outcome {
             Ok(reply) => {
@@ -659,7 +656,7 @@ impl JavaSidecar {
     }
 
     fn kill(&self) {
-        if let Some(mut c) = self.child.lock().unwrap().take() {
+        if let Some(mut c) = self.child.lock().take() {
             let _ = c.kill();
             let _ = c.wait();
         }
@@ -720,7 +717,7 @@ impl JavaSidecar {
 impl JavaSidecar {
     /// A line the bridge does not answer.
     fn tell(&self, line: String) {
-        if let Some(tx) = self.to_bridge.lock().unwrap().as_ref() {
+        if let Some(tx) = self.to_bridge.lock().as_ref() {
             let _ = tx.send(line);
         }
     }
@@ -848,7 +845,7 @@ fn route_reply(
     } else {
         msg.get("id").and_then(|v| v.as_u64())
     };
-    let waiter = key.and_then(|k| router.lock().unwrap().pending.remove(&k));
+    let waiter = key.and_then(|k| router.lock().pending.remove(&k));
     if waiter.is_none_or(|tx| tx.send(msg).is_err()) {
         push_line(errors, format!("skipped unmatched reply: {line}"));
     }
@@ -866,7 +863,7 @@ fn route_scan_call(
     let waiter = msg
         .get("scan")
         .and_then(|v| v.as_u64())
-        .and_then(|s| router.lock().unwrap().pending.get(&s).cloned());
+        .and_then(|s| router.lock().pending.get(&s).cloned());
     if waiter.is_none_or(|tx| tx.send(msg).is_err()) {
         let _ = back.send(
             serde_json::json!({"type": "sent", "sid": sid, "error": "no scan is running"})
@@ -955,7 +952,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn errors(&self) -> Vec<String> {
-        self.errors.lock().unwrap().iter().cloned().collect()
+        self.errors.lock().iter().cloned().collect()
     }
 
     fn healthy(&self) -> bool {
@@ -973,7 +970,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn ui(&self) -> Option<ExtUi> {
-        Some(self.ui.lock().unwrap().clone())
+        Some(self.ui.lock().clone())
     }
 
     fn show_window(&self) {
@@ -981,7 +978,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn menu_items(&self, ctx: &MenuContext) -> Vec<MenuItem> {
-        if self.ui.lock().unwrap().menu_providers == 0 {
+        if self.ui.lock().menu_providers == 0 {
             return Vec::new();
         }
         let mut line = serde_json::json!({
@@ -1022,7 +1019,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn open_in_editors(&self, msg: &MenuMessage, tool: &str) -> Vec<EditorTab> {
-        let ui = self.ui.lock().unwrap().clone();
+        let ui = self.ui.lock().clone();
         if ui.request_editors + ui.response_editors == 0 {
             return Vec::new();
         }
@@ -1054,7 +1051,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn extension_data(&self) -> Option<serde_json::Value> {
-        self.data.lock().unwrap().clone()
+        self.data.lock().clone()
     }
 
     fn scan_active(
@@ -1062,7 +1059,7 @@ impl ProxyHooks for JavaSidecar {
         msg: &ScanMessage,
         helper: &dyn ScanHelper,
     ) -> Vec<webprobe_support::issues::ScanIssue> {
-        if self.ui.lock().unwrap().active_checks == 0 || self.dead.load(Ordering::Relaxed) {
+        if self.ui.lock().active_checks == 0 || self.dead.load(Ordering::Relaxed) {
             return Vec::new();
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
@@ -1111,7 +1108,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn scan_passive(&self, msg: &ScanMessage) -> Vec<webprobe_support::issues::ScanIssue> {
-        if self.ui.lock().unwrap().passive_checks == 0 {
+        if self.ui.lock().passive_checks == 0 {
             return Vec::new();
         }
         let mut line = message_json(&MenuMessage {
@@ -1172,7 +1169,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn ws_open(&self, socket: u64, svc: &HttpService, upgrade: &[u8]) -> bool {
-        if self.ui.lock().unwrap().ws_handlers == 0 {
+        if self.ui.lock().ws_handlers == 0 {
             return false;
         }
         let mut line = message_json(&MenuMessage {
@@ -1236,7 +1233,7 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn restore_data(&self, data: &serde_json::Value) {
-        *self.data.lock().unwrap() = Some(data.clone());
+        *self.data.lock() = Some(data.clone());
         self.tell(serde_json::json!({"type": "restore", "data": data}).to_string());
     }
 
@@ -1663,7 +1660,7 @@ mod tests {
         let seen = Arc::clone(&events);
         let link = Arc::new(HostLink {
             send: Box::new(|_, _| Err("unused".into())),
-            event: Box::new(move |l, m| seen.lock().unwrap().push(format!("{l}: {m}"))),
+            event: Box::new(move |l, m| seen.lock().push(format!("{l}: {m}"))),
             call: Box::new(|_, op, _| Err(format!("{op} unused"))),
         });
         let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(link)).expect("stage 1 loads");
@@ -1692,12 +1689,7 @@ mod tests {
             1,
             "reported once"
         );
-        assert!(
-            events
-                .lock()
-                .unwrap()
-                .contains(&"info: stage1 event".to_string())
-        );
+        assert!(events.lock().contains(&"info: stage1 event".to_string()));
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2121,7 +2113,6 @@ mod tests {
             shared
                 .issues
                 .lock()
-                .unwrap()
                 .iter()
                 .find(|i| i.name == "Stage4 reflection")
                 .cloned()
@@ -2252,7 +2243,6 @@ mod tests {
             shared
                 .repeaters
                 .lock()
-                .unwrap()
                 .iter()
                 .any(|t| t.name == "From Stage4" && t.request.starts_with("GET /added HTTP/1.1"))
         );
@@ -2260,13 +2250,12 @@ mod tests {
             shared
                 .issues
                 .lock()
-                .unwrap()
                 .iter()
                 .any(|i| i.name == "Stage4 sitemap issue" && i.sev == "low")
         );
         use webprobe_support::ext::ToolSend;
         assert_eq!(
-            *shared.tool_sends.lock().unwrap(),
+            *shared.tool_sends.lock(),
             vec![
                 ToolSend::Intruder {
                     request: "GET /?a=\u{a7}1\u{a7} HTTP/1.1\r\n\r\n".into(),
@@ -2351,7 +2340,7 @@ mod tests {
             "Stage4 session".into(),
             vec!["Proxy".into()],
         );
-        *shared.session_rules.lock().unwrap() = vec![rule];
+        *shared.session_rules.lock() = vec![rule];
         let out = crate::net::apply_session_rules(
             &shared,
             b"GET /sess HTTP/1.1\r\nHost: s.test\r\n\r\n",
@@ -2363,7 +2352,7 @@ mod tests {
             "{}",
             String::from_utf8_lossy(&out)
         );
-        shared.session_rules.lock().unwrap().clear();
+        shared.session_rules.lock().clear();
         // Proxy WebSocket handlers edit and drop messages; close is heard.
         let watch = crate::net::WsWatch::open(
             &shared,
@@ -2414,7 +2403,7 @@ mod tests {
                     true,
                 )
             });
-            let item = eventually(|| shared.queue.lock().unwrap().pop());
+            let item = eventually(|| shared.queue.lock().pop());
             assert_eq!(item.edited, "hi+ext");
             item.tx.send(Some("user edit".into())).unwrap();
             relay.join().unwrap()
@@ -2453,8 +2442,8 @@ mod tests {
         let (back, from_host) = std::sync::mpsc::channel::<String>();
         let (seven, seven_rx) = std::sync::mpsc::channel();
         let (ping, ping_rx) = std::sync::mpsc::channel();
-        router.lock().unwrap().pending.insert(7, seven);
-        router.lock().unwrap().pending.insert(0, ping);
+        router.lock().pending.insert(7, seven);
+        router.lock().pending.insert(0, ping);
         route_scan_call(
             &router,
             serde_json::json!({"type": "call", "sid": 3, "op": "scan-send", "scan": 7}),
@@ -2475,7 +2464,7 @@ mod tests {
         assert_eq!(seven_rx.recv().unwrap()["sid"], 3, "the call first");
         assert_eq!(seven_rx.recv().unwrap()["id"], 7, "then the reply");
         assert_eq!(ping_rx.recv().unwrap()["name"], "x");
-        assert!(router.lock().unwrap().pending.is_empty());
+        assert!(router.lock().pending.is_empty());
         // Nobody waits for 7 any more: a late call is refused, a late reply
         // logged, a line that is not JSON shown as output.
         route_scan_call(
@@ -2496,7 +2485,7 @@ mod tests {
         );
         route_reply(&router, &errors, serde_json::Value::Null, "hello".into());
         assert_eq!(
-            errors.lock().unwrap().iter().cloned().collect::<Vec<_>>(),
+            errors.lock().iter().cloned().collect::<Vec<_>>(),
             ["skipped unmatched reply: {\"id\":7}", "stdout: hello"]
         );
         assert_eq!(Lane::of("request"), Lane::of("response"));
@@ -2529,13 +2518,12 @@ mod tests {
         }
         impl ScanHelper for Held {
             fn send(&self, _: &[u8]) -> Option<Vec<u8>> {
-                if let Some(tx) = self.entered.lock().unwrap().take() {
+                if let Some(tx) = self.entered.lock().take() {
                     let _ = tx.send(());
                 }
                 let _ = self
                     .release
                     .lock()
-                    .unwrap()
                     .recv_timeout(std::time::Duration::from_secs(120));
                 Some(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nheld".to_vec())
             }
