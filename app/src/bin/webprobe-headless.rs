@@ -3,6 +3,10 @@
 //!
 //!     webprobe-headless proxy [--port N] [--project FILE] [--seconds N]
 //!                             [--bambda-filter FILE] [--bambda-column FILE]
+//!                             [--bambda-check FILE]
+//!         --bambda-check (proxy and scan) runs a Bambda passive scan check:
+//!         Java that returns an AuditResult for one exchange. What it raises
+//!         is reported as "Bambda generated issue".
 //!         Run the intercepting proxy (with the live passive scan) and print
 //!         one line per exchange. With --project, the history and issues are
 //!         saved to FILE when it stops (after N seconds, or on Ctrl+C /
@@ -12,7 +16,7 @@
 //!         (R-16). A script that fails to compile or throws prints its
 //!         error to stderr and the run continues unfiltered.
 //!
-//!     webprobe-headless scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--speed fast|normal|thorough]
+//!     webprobe-headless scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--bambda-check FILE] [--speed fast|normal|thorough]
 //!                           [--report FILE.html|FILE.xml]
 //!         Audit the given URLs (crawl first with --crawl) and print every
 //!         issue as one JSON object per line. --report also writes Burp's
@@ -37,7 +41,7 @@ use webprobe_core::bambda::{Cell, Kind, Program, Verdict};
 use webprobe_core::{burp_config, net, project, rest_api, scan, scan_config, scan_library};
 use webprobe_report::report;
 
-const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N] [--daemon] [--collaborator SERVER] [--bambda-filter FILE] [--bambda-column FILE]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
+const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N] [--daemon] [--collaborator SERVER] [--bambda-filter FILE] [--bambda-column FILE] [--bambda-check FILE]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--collaborator SERVER] [--collaborator-wait SECONDS] [--bambda-check FILE] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
 
 fn usage() -> ! {
     eprintln!("{USAGE}");
@@ -258,6 +262,28 @@ struct BambdaPrint {
 /// Per-batch deadline: the same bound the desktop tables use.
 const BAMBDA_BATCH: Duration = Duration::from_secs(10);
 
+/// S-03: run a passive-check Bambda over `rows` and report what it raises
+/// as "Bambda generated issue". A failed run is reported and skipped; it
+/// never stops the proxy or the scan.
+fn bambda_check(shared: &net::Shared, check: &(Program, String), rows: &[net::HistEntry]) {
+    if rows.is_empty() {
+        return;
+    }
+    let (program, name) = check;
+    match webprobe_core::bambda_scan::run_passive(program, rows, BAMBDA_BATCH) {
+        Ok(report) => {
+            if report.row_errors > 0 || report.skipped > 0 {
+                eprintln!(
+                    "bambda check {name}: {} exchange(s) threw or returned no AuditResult, {} too large to check",
+                    report.row_errors, report.skipped
+                );
+            }
+            scan::add_passive_issues(shared, report.issues);
+        }
+        Err(e) => eprintln!("bambda check {name} failed: {e}"),
+    }
+}
+
 fn cell_text(cell: Option<&Cell>) -> String {
     match cell {
         Some(Cell::Text(text)) => text.clone(),
@@ -415,6 +441,7 @@ fn proxy(mut args: Vec<String>) {
     let collaborator = take_opt(&mut args, "--collaborator");
     let bambda_filter = take_opt(&mut args, "--bambda-filter");
     let bambda_column = take_opt(&mut args, "--bambda-column");
+    let bambda_check_file = take_opt(&mut args, "--bambda-check");
     if !args.is_empty() {
         usage();
     }
@@ -468,6 +495,7 @@ fn proxy(mut args: Vec<String>) {
         });
     }
     let mut printer = BambdaPrint::new(bambda_filter.as_deref(), bambda_column.as_deref());
+    let check = BambdaPrint::load(bambda_check_file.as_deref(), Kind::PassiveCheck);
     let mut printed = 0usize;
     loop {
         // Copy the new rows out first: printing to a slow pipe must not hold
@@ -480,6 +508,9 @@ fn proxy(mut args: Vec<String>) {
         printed = total;
         for row in printer.render(&fresh) {
             println!("{row}");
+        }
+        if let Some(check) = &check {
+            bambda_check(&shared, check, &fresh);
         }
         let done = stdin_closed.load(Ordering::SeqCst)
             || seconds.is_some_and(|s| started.elapsed() >= Duration::from_secs(s));
@@ -580,6 +611,7 @@ fn scan_urls(mut args: Vec<String>) {
     let collaborator_wait: u64 = take_opt(&mut args, "--collaborator-wait")
         .map(|s| s.parse().unwrap_or_else(|_| usage()))
         .unwrap_or(10);
+    let bambda_check_file = take_opt(&mut args, "--bambda-check");
     let speed = match take_opt(&mut args, "--speed").as_deref() {
         None | Some("normal") => 1,
         Some("fast") => 0,
@@ -603,6 +635,12 @@ fn scan_urls(mut args: Vec<String>) {
     scan::crawl_and_audit(&shared, &args, !crawl);
     // crawl_and_audit returns once the last item's audit has finished.
     shared.scan.wait_idle(None);
+    // S-03: the custom passive check sees every exchange the scan recorded.
+    if let Some(check) = BambdaPrint::load(bambda_check_file.as_deref(), Kind::PassiveCheck) {
+        let mut seen = shared.history.snapshot();
+        seen.extend(shared.crawl_items.snapshot());
+        bambda_check(&shared, &check, &seen);
+    }
     if let Some((until, pump)) = pump {
         eprintln!("waiting {collaborator_wait} s for Collaborator interactions");
         let _ = until.send(Instant::now() + Duration::from_secs(collaborator_wait));

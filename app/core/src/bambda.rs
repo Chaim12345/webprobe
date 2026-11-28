@@ -30,6 +30,22 @@ pub const MAX_TABLE_ROWS: usize = 200;
 pub enum Kind {
     Filter,
     Column,
+    /// S-03: a passive scan check. The script returns an `AuditResult`;
+    /// each exchange yields the issues it holds.
+    PassiveCheck,
+}
+
+/// One issue a passive-check Bambda raised, as the script described it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct CheckIssue {
+    pub name: String,
+    pub detail: String,
+    pub remediation: String,
+    /// Montoya's `AuditIssueSeverity` name: HIGH, MEDIUM, LOW, INFORMATION.
+    pub severity: String,
+    /// Montoya's `AuditIssueConfidence` name: CERTAIN, FIRM, TENTATIVE.
+    pub confidence: String,
 }
 
 /// One filter's verdict for one row. `Failed` covers a row exception and a
@@ -55,6 +71,8 @@ pub struct Outcome {
     pub verdicts: Vec<(u64, Verdict)>,
     /// Columns: newest-first cell values. Filters leave this empty.
     pub cells: Vec<(u64, Cell)>,
+    /// Passive checks: the issues raised per exchange. Others leave this empty.
+    pub issues: Vec<(u64, Vec<CheckIssue>)>,
     /// Rows never handed to the script (too large for one batch).
     pub skipped: Vec<u64>,
     /// Rows whose script threw, or whose value had the wrong type.
@@ -98,6 +116,23 @@ impl Outcome {
                         out.row_errors += 1;
                     }
                     out.verdicts.push((row.id, verdict));
+                }
+                Kind::PassiveCheck => {
+                    // null (no AuditResult) is "nothing found"; any other
+                    // shape is a script defect, reported per row.
+                    let found = match (row.error, row.value) {
+                        (Some(_), _) => None,
+                        (None, None | Some(serde_json::Value::Null)) => Some(Vec::new()),
+                        (None, Some(mut value)) => value
+                            .get_mut("issues")
+                            .map(serde_json::Value::take)
+                            .and_then(|v| serde_json::from_value::<Vec<CheckIssue>>(v).ok()),
+                    };
+                    match found {
+                        Some(found) if found.is_empty() => {}
+                        Some(found) => out.issues.push((row.id, found)),
+                        None => out.row_errors += 1,
+                    }
                 }
                 Kind::Column => {
                     let cell = match (row.error, row.value) {
@@ -263,9 +298,18 @@ impl Program {
         let ty = match kind {
             Kind::Filter => "boolean",
             Kind::Column => "Object",
+            Kind::PassiveCheck => "burp.api.montoya.scanner.AuditResult",
+        };
+        // Names a scan check needs to build its result. Only this kind gets
+        // them, so existing filters and columns compile exactly as before.
+        let extra = match kind {
+            Kind::PassiveCheck => {
+                "import burp.api.montoya.scanner.AuditResult;\nimport burp.api.montoya.scanner.audit.issues.AuditIssue;\nimport burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;\nimport burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;\nimport java.util.List;\nimport java.util.ArrayList;\n"
+            }
+            Kind::Filter | Kind::Column => "",
         };
         let code = format!(
-            "import burp.api.montoya.proxy.ProxyHttpRequestResponse;\nimport burp.api.montoya.utilities.Utilities;\nimport burp.api.montoya.http.message.StatusCodeClass;\nimport burp.api.montoya.http.message.params.HttpParameterType;\npublic final class WebProbeUserBambda {{\npublic static {ty} evaluate(ProxyHttpRequestResponse requestResponse, Utilities utilities) throws Exception {{\n{source}\n}}\n}}\n"
+            "{extra}import burp.api.montoya.proxy.ProxyHttpRequestResponse;\nimport burp.api.montoya.utilities.Utilities;\nimport burp.api.montoya.http.message.StatusCodeClass;\nimport burp.api.montoya.http.message.params.HttpParameterType;\npublic final class WebProbeUserBambda {{\npublic static {ty} evaluate(ProxyHttpRequestResponse requestResponse, Utilities utilities) throws Exception {{\n{source}\n}}\n}}\n"
         );
         let source_path = classes.0.join("WebProbeUserBambda.java");
         std::fs::write(&source_path, code)?;

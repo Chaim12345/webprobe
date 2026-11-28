@@ -7,6 +7,7 @@ pub mod ai;
 pub mod bambda;
 pub mod bambda_library;
 pub mod bambda_rows;
+pub mod bambda_scan;
 pub mod bcheck;
 pub mod burp_checks;
 pub mod burp_config;

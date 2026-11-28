@@ -58,3 +58,25 @@ Official PortSwigger pages, both read November 22, 2026; pages last updated Nove
 - https://portswigger.net/burp/documentation/desktop/tools/proxy/http-history/custom-columns
 
 API method signatures were checked against the Maven Central Montoya API 2026.7 jar and its source archive. No claim of complete Montoya or Bambda API coverage is made.
+
+## S-03: passive scan checks (2026-11-28)
+
+A Bambda with function `SCAN_CHECK_PASSIVE_PER_REQUEST` is a passive scan
+check. Its body sees `requestResponse` and `utilities` and returns an
+`AuditResult` (or `null` for nothing found). `AuditResult`, `AuditIssue`,
+`AuditIssueSeverity`, `AuditIssueConfidence`, `List` and `ArrayList` are
+imported. Each issue is reported as Burp's type "Bambda generated issue"
+(`0x09008000`) on the exchange it was raised for; the script's own issue name
+heads the detail and keeps two findings on one location apart.
+
+Where it runs:
+
+- Desktop: Bambda library, "New passive scan check", then "Run check on HTTP
+  history and report issues" (newest 200 exchanges).
+- `webprobe-headless proxy --bambda-check FILE`: every recorded exchange.
+- `webprobe-headless scan URL --bambda-check FILE`: every exchange the scan
+  recorded, after the audit ends.
+
+Not done: active (per insertion point) checks, running a saved check
+automatically during a desktop scan or live audit, and the `api` variable Burp
+gives a scan-check Bambda.

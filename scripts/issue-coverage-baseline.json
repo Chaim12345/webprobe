@@ -1,10 +1,6 @@
 {
-  "covered": 168,
+  "covered": 169,
   "not_covered": {
-    "Bambda generated issue": {
-      "note": "type 0x09008000, for issues raised by a Bambda scan check; WebProbe runs Bambdas as filters and columns only",
-      "status": "todo"
-    },
     "Browser cross-site scripting filter disabled": {
       "note": "Burp build 52685 defines the type (text class Zwja) but no class raises it: nothing references Zcot.BROWSER_XSS_FILTER_DISABLED",
       "status": "excluded"
