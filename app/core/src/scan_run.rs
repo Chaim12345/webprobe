@@ -34,9 +34,40 @@ pub struct ScanRun {
     pub direct: AtomicBool,
     /// Id of the task being run, 0 when none.
     pub running_task: AtomicU64,
+    /// While a caller collects (the REST API's scan task), every issue the
+    /// scanner itself raises is copied here: the process-wide issue list is
+    /// shared with the live proxy audit and manual findings, so a position
+    /// in it does not say who raised an issue.
+    collected: Mutex<Option<Vec<webprobe_support::issues::ScanIssue>>>,
 }
 
+/// Bound on one task's collected issues.
+const MAX_COLLECTED: usize = 10_000;
+
 impl ScanRun {
+    /// Start collecting the scanner's own issues (drops an earlier set).
+    pub fn begin_collect(&self) {
+        *self.collected.lock().unwrap() = Some(Vec::new());
+    }
+
+    /// Copy issues the scanner raised into the active collection, if any.
+    pub fn collect(&self, issues: &[webprobe_support::issues::ScanIssue]) {
+        if let Some(set) = self.collected.lock().unwrap().as_mut() {
+            let room = MAX_COLLECTED.saturating_sub(set.len());
+            set.extend(issues.iter().take(room).cloned());
+        }
+    }
+
+    /// What has been collected so far.
+    pub fn collected(&self) -> Vec<webprobe_support::issues::ScanIssue> {
+        self.collected.lock().unwrap().clone().unwrap_or_default()
+    }
+
+    /// Stop collecting and hand over the set.
+    pub fn end_collect(&self) -> Vec<webprobe_support::issues::ScanIssue> {
+        self.collected.lock().unwrap().take().unwrap_or_default()
+    }
+
     pub fn record_dom(&self, mut record: DomScanRecord) {
         record.url = record.url.chars().take(500).collect();
         record.diagnostic = record.diagnostic.chars().take(500).collect();

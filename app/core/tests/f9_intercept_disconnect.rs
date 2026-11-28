@@ -171,7 +171,7 @@ impl Isolation {
             );
             let name = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
             assert!(
-                name == "ca.json" || name.starts_with("ca.json.retired-"),
+                name == "ca.json" || name == ".ca.lock" || name.starts_with("ca.json.retired-"),
                 "unexpected CA artifact: {file:?}",
             );
         }

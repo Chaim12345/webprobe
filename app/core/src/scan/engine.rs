@@ -1119,7 +1119,13 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
             if shared.scan.stop.load(Ordering::SeqCst) {
                 return;
             }
-            add_passive_issues(shared, passive_check_for(shared, &e));
+            let mut passive = passive_check_for(shared, &e);
+            // The same visibility rule add_passive_issues applies.
+            if !shared.extra_checks.load(Ordering::SeqCst) {
+                passive.retain(|i| is_burp_issue(&i.name));
+            }
+            shared.scan.collect(&passive);
+            add_passive_issues(shared, passive);
             let oob = pooled_oob(shared, &e.req_raw);
             start_active_scan(shared.clone(), e, &oob, &[]);
             // start_active_scan claims the scanner before it returns.

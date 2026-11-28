@@ -527,6 +527,7 @@ impl PairCtx {
             let config = cfg_slot.lock().unwrap();
             issues.retain(|i| config.issue_allowed(&i.name, true));
         }
+        self.shared.scan.collect(&issues);
         #[cfg(test)]
         if self.partial.get() {
             for issue in &mut issues {
