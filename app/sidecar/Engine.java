@@ -151,7 +151,104 @@ final class Engine {
     static burp.api.montoya.websocket.WebSockets websockets() {
         return Api.obj()
                 .on("registerWebSocketCreatedHandler", a -> reg(WS_CREATED, (burp.api.montoya.websocket.WebSocketCreatedHandler) a[0]))
+                .on("createWebSocket", a -> createWebSocket(a))
                 .as(burp.api.montoya.websocket.WebSockets.class);
+    }
+
+    private static Object wsCreation(burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus status, Object socket) {
+        return Api.obj()
+                .on("status", a -> status)
+                .on("webSocket", a -> java.util.Optional.ofNullable(socket))
+                // The JDK client does not hand over the 101 response.
+                .on("upgradeResponse", a -> java.util.Optional.empty())
+                .as(burp.api.montoya.websocket.extension.ExtensionWebSocketCreation.class);
+    }
+
+    /** WebSockets.createWebSocket: a WebSocket the extension owns. The
+     *  sidecar connects by itself with the JDK client, so the connection
+     *  does not go through WebProbe's upstream proxy settings and is not
+     *  listed in WebSockets history. With a request, its headers are sent
+     *  except the ones the JDK client sets itself. */
+    static Object createWebSocket(Object[] a) {
+        var Status = burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.class;
+        HttpService svc;
+        String path;
+        HttpRequest upgrade = null;
+        if (a.length == 2) { svc = (HttpService) a[0]; path = String.valueOf(a[1]); }
+        else if (a.length == 1 && a[0] instanceof HttpRequest q) { upgrade = q; svc = q.httpService(); path = q.path(); }
+        else return wsCreation(burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.INVALID_REQUEST, null);
+        if (svc == null || svc.host() == null || svc.host().isEmpty())
+            return wsCreation(burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.INVALID_HOST, null);
+        if (svc.port() < 1 || svc.port() > 65535)
+            return wsCreation(burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.INVALID_PORT, null);
+        java.net.URI uri;
+        try { uri = new java.net.URI((svc.secure() ? "wss" : "ws") + "://" + svc.host() + ":" + svc.port() + (path == null || path.isEmpty() ? "/" : path)); }
+        catch (java.net.URISyntaxException e) { return wsCreation(burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.INVALID_REQUEST, null); }
+        List<burp.api.montoya.websocket.extension.ExtensionWebSocketMessageHandler> handlers = new CopyOnWriteArrayList<>();
+        var incoming = burp.api.montoya.websocket.Direction.SERVER_TO_CLIENT;
+        java.net.http.WebSocket.Listener listener = new java.net.http.WebSocket.Listener() {
+            final StringBuilder text = new StringBuilder();
+            final java.io.ByteArrayOutputStream binary = new java.io.ByteArrayOutputStream();
+            @Override public java.util.concurrent.CompletionStage<?> onText(java.net.http.WebSocket ws, CharSequence data, boolean last) {
+                text.append(data);
+                if (last) {
+                    String whole = text.toString();
+                    text.setLength(0);
+                    Object msg = Api.obj().on("payload", x -> whole).on("direction", x -> incoming).text(whole).as(burp.api.montoya.websocket.TextMessage.class);
+                    for (var h : handlers) {
+                        try { h.textMessageReceived((burp.api.montoya.websocket.TextMessage) msg); }
+                        catch (Throwable t) { Logs.error("WebSocket message handler failed: " + Logs.trace(t)); }
+                    }
+                }
+                ws.request(1);
+                return null;
+            }
+            @Override public java.util.concurrent.CompletionStage<?> onBinary(java.net.http.WebSocket ws, java.nio.ByteBuffer data, boolean last) {
+                byte[] part = new byte[data.remaining()];
+                data.get(part);
+                binary.write(part, 0, part.length);
+                if (last) {
+                    byte[] whole = binary.toByteArray();
+                    binary.reset();
+                    Object msg = Api.obj().on("payload", x -> Messages.bytes(whole)).on("direction", x -> incoming).as(burp.api.montoya.websocket.BinaryMessage.class);
+                    for (var h : handlers) {
+                        try { h.binaryMessageReceived((burp.api.montoya.websocket.BinaryMessage) msg); }
+                        catch (Throwable t) { Logs.error("WebSocket message handler failed: " + Logs.trace(t)); }
+                    }
+                }
+                ws.request(1);
+                return null;
+            }
+            @Override public java.util.concurrent.CompletionStage<?> onClose(java.net.http.WebSocket ws, int code, String reason) {
+                for (var h : handlers) { try { h.onClose(); } catch (Throwable t) { Logs.error("WebSocket close handler failed: " + Logs.trace(t)); } }
+                return null;
+            }
+        };
+        var builder = java.net.http.HttpClient.newHttpClient().newWebSocketBuilder().connectTimeout(java.time.Duration.ofSeconds(10));
+        if (upgrade != null) {
+            for (var h : upgrade.headers()) {
+                // The JDK refuses the handshake headers it owns; those are skipped.
+                try { builder.header(h.name(), h.value()); } catch (IllegalArgumentException restricted) { }
+            }
+        }
+        java.net.http.WebSocket ws;
+        try { ws = builder.buildAsync(uri, listener).get(15, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (Exception e) {
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            var status = burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.CONNECTION_FAILED;
+            if (cause instanceof java.net.http.WebSocketHandshakeException) status = burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.NON_UPGRADE_RESPONSE;
+            for (Throwable t = cause; t != null; t = t.getCause())
+                if (t instanceof java.net.UnknownHostException || t instanceof java.nio.channels.UnresolvedAddressException) status = burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.UNKNOWN_HOST;
+            return wsCreation(status, null);
+        }
+        Object socket = Api.obj()
+                .on("sendTextMessage", x -> { ws.sendText(String.valueOf(x[0]), true).join(); return null; })
+                .on("sendBinaryMessage", x -> { ws.sendBinary(java.nio.ByteBuffer.wrap(((ByteArray) x[0]).getBytes()), true).join(); return null; })
+                .on("close", x -> { ws.sendClose(java.net.http.WebSocket.NORMAL_CLOSURE, "").exceptionally(t -> null); return null; })
+                .on("registerMessageHandler", x -> Bridge.register(handlers, (burp.api.montoya.websocket.extension.ExtensionWebSocketMessageHandler) x[0]))
+                .text("WebSocket " + uri)
+                .as(burp.api.montoya.websocket.extension.ExtensionWebSocket.class);
+        return wsCreation(burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.SUCCESS, socket);
     }
 
     /** "ws-open": WebProbe's proxy upgraded a WebSocket; the creation
