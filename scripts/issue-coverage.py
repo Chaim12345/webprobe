@@ -118,4 +118,12 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # TEMPORARY: publish test failures as annotations while the CI log
+    # archive endpoint is unavailable from the development sandbox.
+    if os.getenv("GITHUB_ACTIONS") == "true" and not sys.argv[1:]:
+        import subprocess
+        result = subprocess.run(["cargo", "test", "--workspace", "--locked"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if result.returncode:
+            text = result.stdout[-26000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title=Temporary test diagnostics::{text}")
     sys.exit(main(sys.argv[1:]))
