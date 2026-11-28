@@ -160,6 +160,32 @@ issue name and dedicated URL-part token evidence on new own keys. It does not
 use a stored token. This is addition-only coverage, not an overwrite detector
 or stored-pollution detector. Those remain follow-ups.
 
+## Decisions (2026-11-28)
+
+The owner delegated these; they close the open questions on the R-13
+follow-up issue.
+
+- **Stored DOM variants stay off.** Detecting them means submitting a token
+  to the target in one request so a later page can re-embed it. That writes
+  to the application under test, which a DOM probe otherwise never does, so
+  it is not sent and no setting turns it on. The stored issue names stay
+  reportable from the reporting code and its fixture tests; the two live
+  tests that need the submission stay `#[ignore]`d with that reason. To
+  revisit, it needs an explicit opt-in setting that works from the desktop,
+  `webprobe-headless proxy` and `webprobe-headless scan`.
+- **`jQuery.parseXML` stays under Client-side XPath injection**, as in the
+  reference mapping this table follows. A reviewer is right that parsing XML
+  does not evaluate an XPath expression; the finding is therefore always
+  Tentative and its detail names `jQuery.parseXML` as the sink, so a reader
+  can judge it. Moving it would make WebProbe differ from Burp on the same
+  page.
+- **Storage reads as sources are not planned** (see the sources table).
+
+Still open, with no decision needed: custom setters as sinks, an
+assignment-time hook for jQuery `fn` methods attached late (they are picked up
+on the next poll tick), and the prototype-pollution gaps listed in its row
+(overwrites of existing properties, additions missed between polls).
+
 ## Current inconsistency (2026-11-24)
 
 The stored-token submission is disabled in production
