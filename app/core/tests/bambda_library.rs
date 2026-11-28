@@ -115,3 +115,45 @@ fn fifo_paths_are_rejected_before_any_blocking_open() {
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// S-03: a check is enabled for the source it had when the user enabled it.
+/// Editing the source, or saving a filter under the tick, withdraws it.
+#[test]
+fn enabling_a_scan_check_is_tied_to_its_source() {
+    use webprobe_core::bambda_library::{Function, Script, Store};
+    let dir = std::env::temp_dir().join(format!("wp-bambda-trust-{:016x}", rand_id()));
+    let store = Store::new(dir.clone());
+    let mut check = Script::new(
+        "Debug header".into(),
+        Function::ScanCheckPassive,
+        "return null;".into(),
+    );
+    store.save(&check, false).unwrap();
+    assert!(!store.is_enabled(&check));
+    assert!(store.enabled_passive_checks().is_empty());
+    store.set_enabled(&check, true).unwrap();
+    assert!(store.is_enabled(&check));
+    assert_eq!(store.enabled_passive_checks().len(), 1);
+    // The saved source changes: the tick no longer covers it.
+    check.source = "return AuditResult.auditResult();".into();
+    store.save(&check, true).unwrap();
+    assert!(!store.is_enabled(&check));
+    assert!(store.enabled_passive_checks().is_empty());
+    store.set_enabled(&check, true).unwrap();
+    assert_eq!(store.enabled_passive_checks().len(), 1);
+    store.set_enabled(&check, false).unwrap();
+    assert!(store.enabled_passive_checks().is_empty());
+    // Only scan checks run automatically, whatever the trust file says.
+    let filter = Script::new("f".into(), Function::ViewFilter, "return true;".into());
+    store.save(&filter, false).unwrap();
+    store.set_enabled(&filter, true).unwrap();
+    assert!(store.enabled_passive_checks().is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn rand_id() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish()
+}

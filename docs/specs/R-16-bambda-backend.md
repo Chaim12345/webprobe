@@ -81,5 +81,20 @@ Where it runs:
 given). The check runs in its own JVM with no engine behind it, so any other
 `api` call throws and counts as that exchange's error.
 
-Not done: active (per insertion point) checks, and running a saved check
-automatically during a desktop scan or live audit.
+### Running a saved check automatically
+
+A saved passive check runs after every scan (desktop, `webprobe-headless
+scan`, and scans started over the REST API) once it is enabled in the Bambda
+library: "Run this check automatically after every scan". It runs on the
+items of that scan.
+
+Running a check runs its Java with the user's file and network access, so the
+tick needs the trust box, and it is recorded against the saved source:
+`enabled-checks.json` in the library directory maps the script id to the
+SHA-256 of that source. A check whose saved source differs is not run, so
+editing a check turns it off until it is enabled again. Anyone who can write
+that directory can enable a check; it has the same protection as the scripts
+themselves.
+
+Not done: active (per insertion point) checks, and running enabled checks on
+live proxied traffic (they run per scan, not per proxied response).

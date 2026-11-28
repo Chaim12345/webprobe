@@ -337,6 +337,29 @@ pub fn show(app: &mut crate::App, ui: &mut Ui) {
                 if state.editor.as_ref().is_some_and(|s| s.function == Function::ScanCheckPassive)
                     && ui.add_enabled(state.trusted, egui::Button::new("Run check on HTTP history and report issues")).on_hover_text("Runs the check on the newest 200 exchanges and adds what it raises to the issue list as \"Bambda generated issue\".").clicked()
                 { state.preview(shared.clone(), ui.ctx().clone(), true); }
+                // S-03: run this saved check after every scan. The tick is
+                // stored against the saved source, so an edit withdraws it.
+                if let Some(script) = state.editor.clone().filter(|s| s.function == Function::ScanCheckPassive) {
+                    let saved = state.scripts.contains(&script);
+                    let key = egui::Id::unique(("bambda_enabled", script.id.clone(), webprobe_core::bambda_library::fingerprint(&script.source)));
+                    let mut on = ui.data_mut(|d| d.get_temp::<bool>(key)).unwrap_or_else(|| {
+                        let on = store().is_enabled(&script);
+                        ui.data_mut(|d| d.insert_temp(key, on));
+                        on
+                    });
+                    let was = on;
+                    ui.add_enabled(saved && (state.trusted || was), egui::Checkbox::new(&mut on, "Run this check automatically after every scan"))
+                        .on_hover_text("Runs on the items of each scan, from the desktop and from webprobe-headless. Needs the check saved and the trust box ticked. Editing the check turns this off.");
+                    if on != was {
+                        match store().set_enabled(&script, on) {
+                            Ok(()) => {
+                                ui.data_mut(|d| d.insert_temp(key, on));
+                                state.status = if on { "This check now runs after every scan.".into() } else { "This check no longer runs automatically.".into() };
+                            }
+                            Err(e) => state.status = e.to_string(),
+                        }
+                    }
+                }
             }
         });
         if busy { if ui.button("Cancel preview").clicked() { state.cancelled.store(true, std::sync::atomic::Ordering::Relaxed); } ui.horizontal(|ui| { ui.spinner(); ui.label("Compiling/evaluating in a worker. At most 20 recent exchanges, 5 rows / 1 MiB per batch; 15s compile + 10s per batch."); }); }

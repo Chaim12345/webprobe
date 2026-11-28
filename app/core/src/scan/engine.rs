@@ -1105,6 +1105,9 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
             &[Field::Count("items", items.len() as u64)],
         );
         shared.add_crawl_items(items.iter().cloned());
+        if let Some(step) = post_scan() {
+            step(shared, &items);
+        }
         let static_refs = crate::crawl::static_reference_corpus(&items);
         for e in items.into_iter().filter(|e| {
             crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)

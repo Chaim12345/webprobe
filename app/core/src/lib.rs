@@ -115,4 +115,5 @@ pub fn register_runtime() {
     scan::register_task_ops();
     scan::register_type_checks();
     headless::register_browser_crawl();
+    bambda_scan::register_post_scan();
 }
