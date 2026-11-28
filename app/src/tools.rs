@@ -2255,6 +2255,13 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
                     .collect()
             });
         let mut st = app.ext_table.clone();
+        let mut rows = rows;
+        crate::table::sort_rows(&mut rows, &st, |r, col| match col {
+            0 => r.1.to_string(),
+            1 => r.2.clone(),
+            2 => r.3.clone(),
+            _ => r.4.clone(),
+        });
         let mut pick = None;
         let mut toggle = None;
         let sel = app.ext_sel;

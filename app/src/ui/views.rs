@@ -518,7 +518,7 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
     // Burp's Logger (live 52685): a capture-filter bar with the "Logging on"
     // switch, then the log table and the message panes.
     ui.horizontal(|ui| {
-        let w = (ui.available_width() - 395.0).max(200.0);
+        let w = (ui.available_width() - 670.0).max(120.0);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::hover());
         ui.painter().rect(rect, 2.0, theme::header_bg(), egui::Stroke::new(1.0, theme::line()), egui::StrokeKind::Outside);
         ui.painter().with_clip_rect(rect.shrink(2.0)).text(
@@ -530,6 +530,30 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         );
         ui.add_space(8.0);
         ui.add(egui::TextEdit::singleline(&mut app.log_filter.text).hint_text("Search").desired_width(180.0));
+        ui.add_space(6.0);
+        // View filters the engine already has (#270): tool, status class, MIME.
+        let mut tools: Vec<String> = app.logger.filter(&crate::logger::LogQuery::default()).into_iter().map(|e| e.tool.clone()).collect();
+        tools.sort();
+        tools.dedup();
+        egui::ComboBox::from_id_salt("log_tool")
+            .width(90.0)
+            .selected_text(app.log_filter.tool.clone().unwrap_or_else(|| "All tools".into()))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut app.log_filter.tool, None, "All tools");
+                for t in tools {
+                    ui.selectable_value(&mut app.log_filter.tool, Some(t.clone()), t);
+                }
+            });
+        egui::ComboBox::from_id_salt("log_status")
+            .width(70.0)
+            .selected_text(app.log_filter.status_class.map_or("Any status".to_string(), |c| format!("{c}xx")))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut app.log_filter.status_class, None, "Any status");
+                for c in 1..=5u8 {
+                    ui.selectable_value(&mut app.log_filter.status_class, Some(c), format!("{c}xx"));
+                }
+            });
+        ui.add(egui::TextEdit::singleline(&mut app.log_filter.mime).hint_text("MIME").desired_width(70.0));
         ui.add_space(6.0);
         ui.add(crate::history_filter::toggle(&mut app.log_on));
         ui.label(RichText::new("Logging on").size(12.5).color(theme::ink_dim()));
@@ -1084,6 +1108,13 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     .vertical(|mut col| {
                         col.cell(|ui| {
                             let mut st = app.org_table.clone();
+                            let mut items = items.clone();
+                            table::sort_rows(&mut items, &st, |it, col| match col {
+                                0 => format!("{:020}", it.id),
+                                1 => format!("{:020}", it.created),
+                                2 => it.name.clone(),
+                                _ => it.note.clone(),
+                            });
                             let mut pick = None;
                             let mut act: Option<(u64, u8, u64)> = None;
                             let sel = app.org_sel;
