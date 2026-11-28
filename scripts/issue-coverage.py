@@ -121,9 +121,14 @@ if __name__ == "__main__":
     # TEMPORARY: publish test failures as annotations while the CI log
     # archive endpoint is unavailable from the development sandbox.
     if os.getenv("GITHUB_ACTIONS") == "true" and not sys.argv[1:]:
-        import subprocess
-        result = subprocess.run(["cargo", "test", "--workspace", "--locked"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        import re, subprocess
+        result = subprocess.run(["cargo", "test", "--workspace", "--locked", "--no-fail-fast"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         if result.returncode:
-            text = result.stdout[-26000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-            print(f"::error title=Temporary test diagnostics::{text}")
+            failures = re.findall(r"(?ms)^---- .*? stdout ----\n.*?(?=^---- |^failures:|^test result:|\Z)", result.stdout)
+            names = "\n".join(line for line in result.stdout.splitlines() if "... FAILED" in line or "test result: FAILED" in line)
+            diagnostic = names + "\n" + "\n".join(failures)
+            if not diagnostic.strip(): diagnostic = result.stdout[-4000:]
+            for i in range(0, len(diagnostic), 3000):
+                text = diagnostic[i:i+3000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                print(f"::error title=Temporary test diagnostics {i//3000}::{text}")
     sys.exit(main(sys.argv[1:]))
