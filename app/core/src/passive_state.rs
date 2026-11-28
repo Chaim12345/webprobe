@@ -25,17 +25,7 @@ type Forms = BTreeMap<String, BTreeMap<String, BTreeMap<String, Option<Submitted
 #[derive(Default)]
 pub struct PassiveState {
     forms: Mutex<Forms>,
-    /// AR-05: the live-audit queue. Present once a worker is running
-    /// (`net::start_passive_worker`); without one, audits run where they
-    /// are requested.
-    queue: Mutex<Option<std::sync::mpsc::SyncSender<crate::net::HistEntry>>>,
-    /// Entries queued or being audited, with the signal for `wait_idle`.
-    pending: (std::sync::Mutex<usize>, std::sync::Condvar),
 }
-
-/// Entries the live-audit queue holds before the proxy thread audits its
-/// own exchange instead (backpressure, never a dropped audit).
-pub const LIVE_AUDIT_QUEUE: usize = 256;
 
 /// burp.Zcn0.storePasswordFieldName(String): a value that is likely a real
 /// password: 6 characters or more and not one of Burp's placeholders.
@@ -44,71 +34,6 @@ fn password_like(v: &str) -> bool {
 }
 
 impl PassiveState {
-    /// Install the queue a worker will drain. False when one is already
-    /// installed (the receiver is then dropped by the caller).
-    pub(crate) fn install_queue(
-        &self,
-        sender: std::sync::mpsc::SyncSender<crate::net::HistEntry>,
-    ) -> bool {
-        let mut slot = self.queue.lock();
-        if slot.is_some() {
-            return false;
-        }
-        *slot = Some(sender);
-        true
-    }
-
-    fn pending(&self) -> std::sync::MutexGuard<'_, usize> {
-        self.pending
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    /// Hand `entry` to the worker. False when there is no worker or its
-    /// queue is full: the caller audits the entry itself.
-    pub(crate) fn enqueue(&self, entry: &crate::net::HistEntry) -> bool {
-        let Some(sender) = self.queue.lock().clone() else {
-            return false;
-        };
-        *self.pending() += 1;
-        if sender.try_send(entry.clone()).is_ok() {
-            return true;
-        }
-        self.finished_one();
-        false
-    }
-
-    /// The worker finished (or gave up on) one queued entry.
-    pub(crate) fn finished_one(&self) {
-        let mut n = self.pending();
-        *n = n.saturating_sub(1);
-        if *n == 0 {
-            self.pending.1.notify_all();
-        }
-    }
-
-    /// Wait until every queued live audit has finished, at most `timeout`.
-    /// True when the queue is idle. Anything that reads the issue list
-    /// right after traffic (a report, a save, a test) calls this first.
-    pub fn wait_idle(&self, timeout: std::time::Duration) -> bool {
-        let deadline = std::time::Instant::now() + timeout;
-        let mut n = self.pending();
-        while *n > 0 {
-            let left = deadline.saturating_duration_since(std::time::Instant::now());
-            if left.is_zero() {
-                return false;
-            }
-            n = self
-                .pending
-                .1
-                .wait_timeout(n, left)
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .0;
-        }
-        true
-    }
-
     pub fn clear(&self) {
         self.forms.lock().clear();
     }
@@ -181,29 +106,6 @@ impl PassiveState {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// AR-05: with no worker an audit is not queued; with one, entries
-    /// queue up to the cap, the next one is handed back to the caller, and
-    /// `wait_idle` returns once the worker has finished them.
-    #[test]
-    fn live_audit_queue_hands_back_when_absent_or_full_and_reports_idle() {
-        let state = PassiveState::default();
-        let entry = crate::net::HistEntry::default();
-        assert!(!state.enqueue(&entry), "no worker: the caller audits");
-        assert!(state.wait_idle(std::time::Duration::from_millis(1)));
-        let (tx, rx) = std::sync::mpsc::sync_channel(2);
-        assert!(state.install_queue(tx));
-        let (again, _keep) = std::sync::mpsc::sync_channel(1);
-        assert!(!state.install_queue(again), "one queue only");
-        assert!(state.enqueue(&entry));
-        assert!(state.enqueue(&entry));
-        assert!(!state.enqueue(&entry), "full: the caller audits");
-        assert!(!state.wait_idle(std::time::Duration::from_millis(20)));
-        assert_eq!(rx.try_iter().count(), 2);
-        state.finished_one();
-        state.finished_one();
-        assert!(state.wait_idle(std::time::Duration::from_millis(1)));
-    }
 
     #[test]
     fn remembers_submitted_passwords_per_host_and_path() {
