@@ -299,6 +299,21 @@ impl CaptureShared {
 
 /// Loopback HTTP capture server. It is stopped by default and starts only when
 /// the user explicitly calls [`CollaboratorState::start_http`].
+/// Why a local Collaborator capture listener (HTTP or DNS) did not start.
+/// The text is what the Collaborator tab shows.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ListenerError {
+    /// The port could not be bound (in use, or not permitted).
+    #[error("{0}")]
+    Bind(String),
+    /// The socket was bound but could not be configured or inspected.
+    #[error("{0}")]
+    Setup(String),
+    /// The capture thread could not be started.
+    #[error("{0}")]
+    Thread(String),
+}
+
 pub struct HttpCapture {
     pub port: u16,
     shared: Arc<CaptureShared>,
@@ -332,7 +347,7 @@ impl HttpCapture {
         self.shared.set_error(message);
     }
 
-    fn start(&mut self, log: Arc<InteractionLog>) -> Result<u16, String> {
+    fn start(&mut self, log: Arc<InteractionLog>) -> Result<u16, ListenerError> {
         self.stop();
         self.shared = Arc::new(CaptureShared::new(log));
 
@@ -342,20 +357,20 @@ impl HttpCapture {
             Err(error) => {
                 let message = format!("HTTP bind 127.0.0.1:{} failed: {error}", self.port);
                 self.set_error(message.clone());
-                return Err(message);
+                return Err(ListenerError::Bind(message));
             }
         };
         if let Err(error) = listener.set_nonblocking(true) {
             let message = format!("HTTP listener could not become non-blocking: {error}");
             self.set_error(message.clone());
-            return Err(message);
+            return Err(ListenerError::Setup(message));
         }
         let local = match listener.local_addr() {
             Ok(address) => address,
             Err(error) => {
                 let message = format!("HTTP listener local address unavailable: {error}");
                 self.set_error(message.clone());
-                return Err(message);
+                return Err(ListenerError::Setup(message));
             }
         };
 
@@ -377,7 +392,7 @@ impl HttpCapture {
                 self.bound = None;
                 let message = format!("HTTP worker could not start: {error}");
                 self.set_error(message.clone());
-                Err(message)
+                Err(ListenerError::Thread(message))
             }
         }
     }
@@ -438,7 +453,7 @@ impl DnsCapture {
         self.shared.set_error(message);
     }
 
-    fn start(&mut self, log: Arc<InteractionLog>) -> Result<u16, String> {
+    fn start(&mut self, log: Arc<InteractionLog>) -> Result<u16, ListenerError> {
         self.stop();
         self.shared = Arc::new(CaptureShared::new(log));
 
@@ -448,20 +463,20 @@ impl DnsCapture {
             Err(error) => {
                 let message = format!("DNS bind 127.0.0.1:{} failed: {error}", self.port);
                 self.set_error(message.clone());
-                return Err(message);
+                return Err(ListenerError::Bind(message));
             }
         };
         if let Err(error) = socket.set_read_timeout(Some(DNS_READ_TIMEOUT)) {
             let message = format!("DNS listener could not set a read timeout: {error}");
             self.set_error(message.clone());
-            return Err(message);
+            return Err(ListenerError::Setup(message));
         }
         let local = match socket.local_addr() {
             Ok(address) => address,
             Err(error) => {
                 let message = format!("DNS listener local address unavailable: {error}");
                 self.set_error(message.clone());
-                return Err(message);
+                return Err(ListenerError::Setup(message));
             }
         };
 
@@ -483,7 +498,7 @@ impl DnsCapture {
                 self.bound = None;
                 let message = format!("DNS worker could not start: {error}");
                 self.set_error(message.clone());
-                Err(message)
+                Err(ListenerError::Thread(message))
             }
         }
     }
@@ -640,11 +655,11 @@ impl CollaboratorState {
         }
     }
 
-    pub fn start_http(&mut self) -> Result<u16, String> {
+    pub fn start_http(&mut self) -> Result<u16, ListenerError> {
         self.start_http_on(self.http.port)
     }
 
-    pub fn start_http_on(&mut self, port: u16) -> Result<u16, String> {
+    pub fn start_http_on(&mut self, port: u16) -> Result<u16, ListenerError> {
         self.http.port = port;
         let log = Arc::clone(&self.log);
         let result = self.http.start(log);
@@ -658,11 +673,11 @@ impl CollaboratorState {
         self.http.stop();
     }
 
-    pub fn start_dns(&mut self) -> Result<u16, String> {
+    pub fn start_dns(&mut self) -> Result<u16, ListenerError> {
         self.start_dns_on(self.dns.port)
     }
 
-    pub fn start_dns_on(&mut self, port: u16) -> Result<u16, String> {
+    pub fn start_dns_on(&mut self, port: u16) -> Result<u16, ListenerError> {
         self.dns.port = port;
         let log = Arc::clone(&self.log);
         self.dns.start(log)
