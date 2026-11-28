@@ -1432,7 +1432,7 @@
       "acceptance": "Visual and behavioural re-score of all 13 tabs against live Burp after the rewrites, incl. Logger, Organizer and WebSocket intercept driven over the egui MCP; parity-scores replaced with dated results.",
       "effort": "S",
       "status": "todo",
-      "evidence": "qa/parity-scores-2026-11-15.md never redone; no record of Logger/Organizer/WS intercept GUI checks."
+      "evidence": "Re-scored 2026-11-28 by OpenHands (qa/parity-scores-2026-11-28.md), but against the master snapshot 010fdfa, not parity/2026-11-17, and by reading code, not by driving the GUI against live Burp. It filed #268-#273; #268, #272 and #273 are closed. Still owed: a re-score on the parity branch with the GUI driven over the egui MCP."
     },
     {
       "id": "R-20",
@@ -1534,7 +1534,7 @@
       "acceptance": "F10: Repeater, Intruder and intercept keep requests as bytes; editing a binary body does not corrupt it.",
       "effort": "M",
       "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
+      "evidence": "Partly done 2026-11-28 (#285): a captured non-UTF-8 body is remembered when a request becomes editor text and put back on send, so Repeater and Intruder send an unedited binary body byte-for-byte with a correct Content-Length (app/support/src/util.rs remember_binary_body/restore_binary_body). Still open (#240): the bytes are in memory only (lost on restart), no hex editing, text-only Intruder payloads, Comparer and copy actions use the lossy text."
     },
     {
       "id": "AR-10",
