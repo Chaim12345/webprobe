@@ -204,10 +204,43 @@ fn url_host_port(url: &str) -> (String, String) {
     }
 }
 
+/// Why a BCheck could not send a request or get a Collaborator address.
+/// The text is what the check's error shows.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum IoError {
+    /// The scan was stopped; the check should end, not report a failure.
+    #[error("scan stopped")]
+    Stopped,
+    /// The request was refused before sending (out-of-scope destination).
+    #[error("{0}")]
+    Refused(String),
+    /// Nothing usable came back.
+    #[error("{0}")]
+    NoResponse(String),
+    /// No Collaborator address could be produced.
+    #[error("{0}")]
+    NoCollaborator(String),
+    /// Any other failure a transport reports.
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<String> for IoError {
+    fn from(text: String) -> Self {
+        IoError::Other(text)
+    }
+}
+
+impl From<&str> for IoError {
+    fn from(text: &str) -> Self {
+        IoError::Other(text.to_string())
+    }
+}
+
 /// Collaborator handles the interpreter needs: address generation and the
 /// set of interaction kinds observed so far.
 pub trait Collaborator {
-    fn generate_address(&mut self) -> Result<String, String>;
+    fn generate_address(&mut self) -> Result<String, IoError>;
     /// True when an interaction of the kind has arrived. Implementations
     /// may consume observations (a later condition does not re-see them),
     /// which Burp's Log4Shell worked example relies on.
@@ -493,14 +526,14 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
         "generate_collaborator_address" => {
             argc(0)?;
             match cx.collaborator.as_deref_mut() {
-                Some(c) => c.generate_address().map_err(ExecError),
+                Some(c) => c.generate_address().map_err(|e| ExecError(e.to_string())),
                 None => err("generate_collaborator_address needs a Collaborator"),
             }
         }
         "sha1" => {
             argc(1)?;
             crate::decoder_ops::apply(crate::decoder_ops::Op::Sha1, &eval_expr(cx, &args[0])?)
-                .map_err(ExecError)
+                .map_err(|e| ExecError(e.to_string()))
         }
         "sha256" => {
             argc(1)?;
@@ -511,7 +544,7 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
         "md5" => {
             argc(1)?;
             crate::decoder_ops::apply(crate::decoder_ops::Op::Md5, &eval_expr(cx, &args[0])?)
-                .map_err(ExecError)
+                .map_err(|e| ExecError(e.to_string()))
         }
         other => err(format!("unknown function `{other}`")),
     }
@@ -714,7 +747,7 @@ mod tests {
         kinds: std::collections::HashSet<InteractionKind>,
     }
     impl Collaborator for FakeCollaborator {
-        fn generate_address(&mut self) -> Result<String, String> {
+        fn generate_address(&mut self) -> Result<String, IoError> {
             self.next += 1;
             Ok(format!("{}.oast.test", self.next))
         }

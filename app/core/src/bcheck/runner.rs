@@ -2,6 +2,7 @@
 //! producing issues. Given-mode iteration over audited traffic and scan
 //! pipeline wiring land in the next slice.
 
+use super::exec::IoError;
 use super::exec::{
     Collaborator, Context, Exchange, ExecError, RequestData, ResponseData, apply_mod,
     eval_condition, resolve_value,
@@ -28,14 +29,14 @@ pub struct InsertionPoint {
 
 /// Sends a built request and returns the response.
 pub trait Transport {
-    fn send(&self, req: &RequestData) -> Result<ResponseData, String>;
+    fn send(&self, req: &RequestData) -> Result<ResponseData, IoError>;
 }
 
 impl<F> Transport for F
 where
-    F: Fn(&RequestData) -> Result<ResponseData, String>,
+    F: Fn(&RequestData) -> Result<ResponseData, IoError>,
 {
-    fn send(&self, req: &RequestData) -> Result<ResponseData, String> {
+    fn send(&self, req: &RequestData) -> Result<ResponseData, IoError> {
         self(req)
     }
 }
@@ -142,7 +143,7 @@ fn exec_block(
                         super::exec::MAX_REQUESTS_PER_RUN
                     )));
                 }
-                let resp = transport.send(&req).map_err(ExecError)?;
+                let resp = transport.send(&req).map_err(|e| ExecError(e.to_string()))?;
                 cx.record(
                     name.as_deref(),
                     Exchange {
@@ -180,7 +181,7 @@ fn exec_block(
                         super::exec::MAX_REQUESTS_PER_RUN
                     )));
                 }
-                let resp = transport.send(&req).map_err(ExecError)?;
+                let resp = transport.send(&req).map_err(|e| ExecError(e.to_string()))?;
                 cx.record(
                     name.as_deref(),
                     Exchange {
@@ -512,7 +513,7 @@ mod tests {
         responder: Box<dyn Fn(&RequestData) -> ResponseData + Send>,
     }
     impl Transport for Lab {
-        fn send(&self, req: &RequestData) -> Result<ResponseData, String> {
+        fn send(&self, req: &RequestData) -> Result<ResponseData, IoError> {
             self.sent.lock().push(req.clone());
             Ok((self.responder)(req))
         }
@@ -601,7 +602,7 @@ mod tests {
         kinds: std::collections::HashSet<InteractionKind>,
     }
     impl Collaborator for Collab {
-        fn generate_address(&mut self) -> Result<String, String> {
+        fn generate_address(&mut self) -> Result<String, IoError> {
             Ok("xyz.oast.test".into())
         }
         fn has_interaction(&mut self, kind: InteractionKind) -> bool {
