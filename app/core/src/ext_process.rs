@@ -41,6 +41,35 @@ const MAX_FAILURES: usize = 3;
 /// largest message the proxy carries).
 const MAX_LINE: usize = 96 * 1024 * 1024;
 
+/// Why a process extension could not be started or did not answer. The
+/// text is what the Extensions tab shows.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ProcessError {
+    /// The program could not be started or its pipes set up.
+    #[error("{0}")]
+    Start(String),
+    /// The extension spoke, but not the protocol.
+    #[error("{0}")]
+    Protocol(String),
+    /// No reply within the time allowed.
+    #[error("{0}")]
+    Timeout(String),
+    /// The extension has stopped or closed its input.
+    #[error("{0}")]
+    Exited(String),
+    /// The extension's output closed while a reply was awaited: the
+    /// process is gone, so its hooks are switched off at once.
+    #[error("extension exited")]
+    Disconnected,
+}
+
+/// Callers that still carry errors as text keep working with `?`.
+impl From<ProcessError> for String {
+    fn from(e: ProcessError) -> String {
+        e.to_string()
+    }
+}
+
 pub struct ProcessExtension {
     name: String,
     path: String,
@@ -99,7 +128,7 @@ impl ProcessExtension {
     /// register. The process gets a cleared environment apart from PATH,
     /// HOME, LANG and WEBPROBE_EXT_API, and the system temp directory as its
     /// working directory.
-    pub fn spawn(program: &str, args: &[String], timeout: Duration) -> Result<Self, String> {
+    pub fn spawn(program: &str, args: &[String], timeout: Duration) -> Result<Self, ProcessError> {
         let mut cmd = Command::new(program);
         cmd.args(args)
             .env_clear()
@@ -115,8 +144,11 @@ impl ProcessExtension {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("cannot start {program}: {e}"))?;
-        let mut pipe = child.stdin.take().ok_or("extension stdin unavailable")?;
+            .map_err(|e| ProcessError::Start(format!("cannot start {program}: {e}")))?;
+        let mut pipe = child
+            .stdin
+            .take()
+            .ok_or_else(|| ProcessError::Start("extension stdin unavailable".into()))?;
         let (stdin, to_write) = mpsc::channel::<String>();
         std::thread::Builder::new()
             .name("ext-stdin".into())
@@ -127,9 +159,15 @@ impl ProcessExtension {
                     }
                 }
             })
-            .map_err(|e| e.to_string())?;
-        let stdout = child.stdout.take().ok_or("extension stdout unavailable")?;
-        let stderr = child.stderr.take().ok_or("extension stderr unavailable")?;
+            .map_err(|e| ProcessError::Start(e.to_string()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| ProcessError::Start("extension stdout unavailable".into()))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| ProcessError::Start("extension stderr unavailable".into()))?;
         // Bounded: a chatty extension waits for us instead of filling memory,
         // and one line is at most MAX_LINE bytes.
         let (tx, rx) = mpsc::sync_channel(64);
@@ -158,7 +196,7 @@ impl ProcessExtension {
                     }
                 }
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ProcessError::Start(e.to_string()))?;
         let errors = std::sync::Arc::new(Mutex::new(VecDeque::new()));
         let err2 = std::sync::Arc::clone(&errors);
         std::thread::Builder::new()
@@ -169,7 +207,7 @@ impl ProcessExtension {
                     push_error(&err2, format!("stderr: {line}"));
                 }
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ProcessError::Start(e.to_string()))?;
         let mut ext = ProcessExtension {
             name: String::new(),
             path: program.to_string(),
@@ -194,16 +232,18 @@ impl ProcessExtension {
             REGISTER_TIMEOUT.max(timeout),
         )?;
         if reg.get("type").and_then(|t| t.as_str()) != Some("register") {
-            return Err(format!("expected a register message, got {reg}"));
+            return Err(ProcessError::Protocol(format!(
+                "expected a register message, got {reg}"
+            )));
         }
         let api = reg
             .get("api")
             .and_then(|a| a.as_u64())
             .unwrap_or(API_VERSION);
         if api != API_VERSION {
-            return Err(format!(
+            return Err(ProcessError::Protocol(format!(
                 "extension wants API {api}; this WebProbe speaks {API_VERSION}"
-            ));
+            )));
         }
         let fallback = std::path::Path::new(program)
             .file_name()
@@ -267,7 +307,11 @@ impl ProcessExtension {
     /// One round trip. `id` is the request id the reply must carry (the
     /// hello reply has none). Failures are recorded; after MAX_FAILURES in a
     /// row the extension is marked dead and the process stopped.
-    fn call(&self, msg: serde_json::Value, id: Option<u64>) -> Result<serde_json::Value, String> {
+    fn call(
+        &self,
+        msg: serde_json::Value,
+        id: Option<u64>,
+    ) -> Result<serde_json::Value, ProcessError> {
         self.call_within(msg, id, self.timeout)
     }
 
@@ -276,17 +320,20 @@ impl ProcessExtension {
         msg: serde_json::Value,
         id: Option<u64>,
         timeout: Duration,
-    ) -> Result<serde_json::Value, String> {
+    ) -> Result<serde_json::Value, ProcessError> {
         let _io = self.io.lock();
         if self.dead.load(Ordering::SeqCst) {
-            return Err("extension stopped".into());
+            return Err(ProcessError::Exited("extension stopped".into()));
         }
         let result = (|| {
             {
                 let stdin = self.stdin.lock();
-                let w = stdin.as_ref().ok_or("stdin closed")?;
-                w.send(msg.to_string())
-                    .map_err(|_| "write failed: extension input closed".to_string())?;
+                let w = stdin
+                    .as_ref()
+                    .ok_or_else(|| ProcessError::Exited("stdin closed".into()))?;
+                w.send(msg.to_string()).map_err(|_| {
+                    ProcessError::Exited("write failed: extension input closed".into())
+                })?;
             }
             let deadline = std::time::Instant::now() + timeout;
             let rx = self.lines.lock();
@@ -295,17 +342,20 @@ impl ProcessExtension {
                 let line = match rx.recv_timeout(left) {
                     Ok(l) => l,
                     Err(RecvTimeoutError::Timeout) => {
-                        return Err(format!("no reply within {} ms", timeout.as_millis()));
+                        return Err(ProcessError::Timeout(format!(
+                            "no reply within {} ms",
+                            timeout.as_millis()
+                        )));
                     }
                     Err(RecvTimeoutError::Disconnected) => {
-                        return Err("extension exited".to_string());
+                        return Err(ProcessError::Disconnected);
                     }
                 };
                 if line.trim().is_empty() {
                     continue;
                 }
-                let v: serde_json::Value =
-                    serde_json::from_str(&line).map_err(|e| format!("bad reply {line:?}: {e}"))?;
+                let v: serde_json::Value = serde_json::from_str(&line)
+                    .map_err(|e| ProcessError::Protocol(format!("bad reply {line:?}: {e}")))?;
                 // A late reply to an earlier (timed-out) call is skipped.
                 match (id, v.get("id").and_then(|x| x.as_u64())) {
                     (Some(want), Some(got)) if got != want => continue,
@@ -323,7 +373,7 @@ impl ProcessExtension {
                         msg.get("type").and_then(|t| t.as_str()).unwrap_or("call")
                     ),
                 );
-                let exited = e == "extension exited"
+                let exited = *e == ProcessError::Disconnected
                     || self
                         .child
                         .lock()
@@ -609,6 +659,7 @@ mod tests {
             ProcessExtension::spawn("/nonexistent/ext", &[], Duration::from_secs(1))
                 .err()
                 .unwrap()
+                .to_string()
                 .contains("cannot start")
         );
         let Some(py) = python() else { return };
@@ -620,6 +671,9 @@ mod tests {
         )
         .err()
         .unwrap();
-        assert!(err.contains("wants API 2"), "{err}");
+        assert!(
+            matches!(&err, ProcessError::Protocol(text) if text.contains("wants API 2")),
+            "{err}"
+        );
     }
 }
