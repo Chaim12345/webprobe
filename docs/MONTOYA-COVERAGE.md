@@ -24,7 +24,7 @@ so WebProbe does not ship it.
 | organizer | full | |
 | persistence | full | |
 | project | partial | `name` is fixed and `id` is new for each session: the sidecar is not told which project is open |
-| proxy | full | WebSocket `send*` / `close` |
+| proxy | full | a message an extension sends over a proxied WebSocket is written as given: it is not shown to message handlers, the intercept or WebSockets history |
 | repeater | full | |
 | scanner | partial | `startAudit`, `startCrawl`, `bChecks`; `generateReport` writes the issues it is given without their requests and responses; an audit issue handler hears of a new issue within about a second (the issue list is polled) |
 | scope | full | the change handler fires only for changes made through the API |

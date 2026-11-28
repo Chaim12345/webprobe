@@ -251,6 +251,13 @@ final class Engine {
         return wsCreation(burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus.SUCCESS, socket);
     }
 
+    /** Send one message over a proxied WebSocket. The message is written
+     *  as given: it is not shown to message handlers or the intercept. */
+    static Object wsSend(long socket, byte[] payload, boolean binary, boolean toServer) {
+        return Wire.call("ws.send", "{\"socket\":" + socket + ",\"toServer\":" + toServer + ",\"binary\":" + binary
+                + ",\"payload\":" + Wire.Json.esc(java.util.Base64.getEncoder().encodeToString(payload)) + "}");
+    }
+
     /** "ws-open": WebProbe's proxy upgraded a WebSocket; the creation
      *  handlers may register message handlers on it. */
     static String wsOpen(int id, Map<String, Object> m) {
@@ -259,9 +266,16 @@ final class Engine {
         List<burp.api.montoya.proxy.websocket.ProxyMessageHandler> ph = new CopyOnWriteArrayList<>();
         List<burp.api.montoya.websocket.MessageHandler> mh = new CopyOnWriteArrayList<>();
         burp.api.montoya.proxy.websocket.ProxyWebSocket pws = Api.obj()
+                .on("sendTextMessage", a -> wsSend(socket, String.valueOf(a[0]).getBytes(java.nio.charset.StandardCharsets.UTF_8), false, a[1] != burp.api.montoya.websocket.Direction.SERVER_TO_CLIENT))
+                .on("sendBinaryMessage", a -> wsSend(socket, ((ByteArray) a[0]).getBytes(), true, a[1] != burp.api.montoya.websocket.Direction.SERVER_TO_CLIENT))
+                .on("close", a -> Wire.call("ws.close", "{\"socket\":" + socket + "}"))
                 .on("registerProxyMessageHandler", a -> Bridge.register(ph, (burp.api.montoya.proxy.websocket.ProxyMessageHandler) a[0]))
                 .as(burp.api.montoya.proxy.websocket.ProxyWebSocket.class);
         burp.api.montoya.websocket.WebSocket ws = Api.obj()
+                // websockets() sockets send towards the server.
+                .on("sendTextMessage", a -> wsSend(socket, String.valueOf(a[0]).getBytes(java.nio.charset.StandardCharsets.UTF_8), false, true))
+                .on("sendBinaryMessage", a -> wsSend(socket, ((ByteArray) a[0]).getBytes(), true, true))
+                .on("close", a -> Wire.call("ws.close", "{\"socket\":" + socket + "}"))
                 .on("registerMessageHandler", a -> Bridge.register(mh, (burp.api.montoya.websocket.MessageHandler) a[0]))
                 .as(burp.api.montoya.websocket.WebSocket.class);
         for (var h : WS_PROXY_CREATION) {
