@@ -1611,6 +1611,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// R-20: burpSuite().exportProjectOptionsAsJson answers from the engine,
+    /// whole and filtered by path.
+    #[test]
+    fn montoya_export_project_options() {
+        let Some(dir) = stage_extension("ProjectOptionsExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let shared = crate::net::Shared::new();
+        let sc = JavaSidecar::spawn_with(
+            dir.to_str().unwrap(),
+            Some(crate::ext_calls::host_link(&shared)),
+        )
+        .expect("project options extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("project options regression passed")),
+            "project options checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-20: websockets().createWebSocket connects, sends text and binary
     /// frames, delivers the replies and the close to the handler, and
     /// reports a failed connection.
