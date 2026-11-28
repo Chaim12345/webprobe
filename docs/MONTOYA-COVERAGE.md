@@ -13,7 +13,7 @@ so WebProbe does not ship it.
 |---|---|---|
 | ai | partial | `isEnabled` returns false; `prompt` unsupported |
 | bambda | unsupported | |
-| burpSuite | partial | export / import of project and user options, `shutdown`; setting the task engine state is recorded only |
+| burpSuite | partial | `exportProjectOptionsAsJson` returns only the proxy listener and the HTTP/2 switch (other paths come back empty); import of project options, user options and `shutdown` are unsupported; setting the task engine state is recorded only |
 | collaborator | full | custom-data payloads |
 | comparer | full | |
 | decoder | full | |

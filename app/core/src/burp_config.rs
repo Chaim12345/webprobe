@@ -135,6 +135,44 @@ pub fn export_project_options(listener: &ProxyListener, http: &HttpOptions) -> V
     ])
 }
 
+/// The sub-trees of `options` named by dotted `paths` (Burp's
+/// `exportProjectOptionsAsJson("proxy.request_listeners")`), nested as in
+/// the source. No paths means everything; a path that names nothing is
+/// left out.
+pub fn select_paths(options: &Value, paths: &[String]) -> Value {
+    if paths.is_empty() {
+        return options.clone();
+    }
+    let mut out = Value::Object(serde_json::Map::new());
+    for path in paths {
+        let keys: Vec<&str> = path.split('.').filter(|k| !k.is_empty()).collect();
+        let mut found = options;
+        if keys.is_empty()
+            || !keys
+                .iter()
+                .all(|k| found.get(k).map(|v| found = v).is_some())
+        {
+            continue;
+        }
+        let mut slot = &mut out;
+        for (i, key) in keys.iter().enumerate() {
+            let map = slot.as_object_mut().expect("built as objects");
+            if i + 1 == keys.len() {
+                map.insert((*key).to_string(), found.clone());
+                break;
+            }
+            slot = map
+                .entry((*key).to_string())
+                .or_insert_with(|| Value::Object(serde_json::Map::new()));
+            if !slot.is_object() {
+                // A longer path under a value already copied whole.
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// Read a project options JSON into `listener` and `http`. Unknown sections
 /// and keys are ignored with a note in `notes` (like Burp's "not all
 /// settings could be restored" note). Scan-configuration sections
@@ -284,6 +322,25 @@ pub fn apply_user_options(json: &Value, api: &mut ApiConfig, notes: &mut Vec<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn select_paths_keeps_named_sub_trees_nested() {
+        let all = export_project_options(&ProxyListener::default(), &HttpOptions::default());
+        assert_eq!(select_paths(&all, &[]), all);
+        let one = select_paths(&all, &["http.http2.enable_http2".to_string()]);
+        assert_eq!(one, json!({"http": {"http2": {"enable_http2": true}}}));
+        let two = select_paths(
+            &all,
+            &[
+                "proxy".to_string(),
+                "http.http2".to_string(),
+                "no.such".to_string(),
+            ],
+        );
+        assert_eq!(two["proxy"], all["proxy"]);
+        assert_eq!(two["http"]["http2"], all["http"]["http2"]);
+        assert!(two.get("no").is_none());
+    }
 
     /// The API defaults are Burp's: loopback only, port 1337, API key
     /// required (insecure_mode false).

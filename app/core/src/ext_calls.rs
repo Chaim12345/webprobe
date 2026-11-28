@@ -314,6 +314,26 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
                 v
             }).collect(),
         )),
+        // burpSuite().exportProjectOptionsAsJson(paths...): the options
+        // WebProbe models in Burp's shape (the proxy listener and the
+        // HTTP/2 switch), filtered to the named paths.
+        "suite.project-options" => {
+            let listener = crate::burp_config::ProxyListener {
+                port: shared.proxy_port.load(Ordering::SeqCst),
+                running: shared.listener_running.load(Ordering::SeqCst),
+                ..Default::default()
+            };
+            let http = crate::burp_config::HttpOptions {
+                http2_enabled: crate::scan_config::shared_config(shared).lock().http.http2_enabled,
+            };
+            let all = crate::burp_config::export_project_options(&listener, &http);
+            let paths: Vec<String> = args["paths"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|p| p.as_str().map(str::to_string)).collect())
+                .unwrap_or_default();
+            let chosen = crate::burp_config::select_paths(&all, &paths);
+            Ok(Value::String(serde_json::to_string_pretty(&chosen).map_err(|e| e.to_string())?))
+        }
         // A frame the extension sends over a proxied WebSocket, through the
         // channel WebSocket Repeater uses. A frame to the server is masked,
         // as a client's must be.
@@ -464,6 +484,26 @@ mod tests {
             .is_err()
         );
         dispatch(&shared, "x", "ws.close", &json!({"socket": 9})).unwrap();
+    }
+
+    #[test]
+    fn project_options_export_is_burp_shaped_json_filtered_by_path() {
+        let shared = crate::net::Shared::new();
+        shared.proxy_port.store(8089, Ordering::SeqCst);
+        let all = dispatch(&shared, "x", "suite.project-options", &json!({})).unwrap();
+        let all: Value = serde_json::from_str(all.as_str().unwrap()).unwrap();
+        assert_eq!(all["proxy"]["request_listeners"][0]["listener_port"], 8089);
+        assert!(all["http"]["http2"]["enable_http2"].is_boolean());
+        let part = dispatch(
+            &shared,
+            "x",
+            "suite.project-options",
+            &json!({"paths": ["proxy.request_listeners"]}),
+        )
+        .unwrap();
+        let part: Value = serde_json::from_str(part.as_str().unwrap()).unwrap();
+        assert!(part.get("http").is_none());
+        assert_eq!(part["proxy"]["request_listeners"][0]["listener_port"], 8089);
     }
 
     #[test]

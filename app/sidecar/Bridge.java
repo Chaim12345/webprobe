@@ -140,6 +140,14 @@ final class Bridge {
         return Api.obj()
                 .on("version", a -> version)
                 .on("commandLineArguments", a -> List.of())
+                // Only what WebProbe models in Burp's shape: the proxy
+                // listener and the HTTP/2 switch. Other paths come back empty.
+                .on("exportProjectOptionsAsJson", a -> {
+                    StringBuilder paths = new StringBuilder("{\"paths\":[");
+                    Object[] given = a.length == 1 && a[0] instanceof String[] s ? s : a;
+                    for (int i = 0; i < given.length; i++) paths.append(i > 0 ? "," : "").append(Wire.Json.esc(String.valueOf(given[i])));
+                    return String.valueOf(Wire.call("suite.project-options", paths.append("]}").toString()));
+                })
                 .on("taskExecutionEngine", a -> engine)
                 .as(BurpSuite.class);
     }
